@@ -56,18 +56,18 @@ impl Logger {
 
     pub fn hook_executing(&self, section: &str) {
         if self.level as u8 >= LogLevel::Verbose as u8 {
-            println!("[{}] {} Hook command executing...", section.blue(), "✓".green());
+            println!("{} [{}] {}", "→".blue(), section.blue(), "Hook command executing...".blue());
         }
     }
 
     pub fn hook_success(&self, section: &str) {
         if self.level as u8 >= LogLevel::Normal as u8 {
-            println!("[{}] {} Hook command executed successfully", section.blue(), "✓".green());
+            println!("{} [{}] {}", "✓".green().bold(), section.blue(), "Hook command executed successfully".green());
         }
     }
 
     pub fn hook_error(&self, section: &str, error: &str) {
-        eprintln!("[{}] {} Error executing hook command: {}", section.red(), "✗".red(), error.red());
+        eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), format!("Error executing hook command: {}", error).red());
     }
 
     pub fn is_verbose(&self) -> bool {

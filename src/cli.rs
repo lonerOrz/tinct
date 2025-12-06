@@ -265,10 +265,15 @@ pub fn process_section(
     match theme::process_theme(theme_file, input_path, output_path, mode) {
         Ok(()) => {
             // Run post hook if specified
-            if !post_hook.is_empty() {
-                run_post_hook(post_hook, output_path, Some(section_name), _log_level);
-            }
-            true
+            let hook_result = if !post_hook.is_empty() {
+                run_post_hook(post_hook, output_path, Some(section_name), _log_level)
+            } else {
+                true  // No hook to run, so consider it successful
+            };
+
+            // The section is considered successful if theme processing was successful,
+            // regardless of hook success/failure
+            hook_result || true
         }
         Err(e) => {
             log::error(section_name, &format!("Error processing theme: {}", e));
