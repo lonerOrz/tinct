@@ -95,7 +95,9 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
 
 /// Load theme JSON file
 pub fn load_theme(theme_path: &str) -> Result<Value, String> {
-    println!("Loading theme from {}", theme_path);
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Loading theme from {}", theme_path);
+    }
 
     let content = fs::read_to_string(theme_path)
         .map_err(|e| format!("Could not read theme file '{}': {}", theme_path, e))?;
@@ -103,7 +105,9 @@ pub fn load_theme(theme_path: &str) -> Result<Value, String> {
     let theme_data: Value = serde_json::from_str(&content)
         .map_err(|e| format!("Invalid JSON format in '{}': {}", theme_path, e))?;
 
-    println!("Theme loaded successfully from {}", theme_path);
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Theme loaded successfully from {}", theme_path);
+    }
     Ok(theme_data)
 }
 
@@ -126,18 +130,24 @@ pub fn select_theme_mode(theme_all: &Value, mode: &str) -> Result<(Value, String
 
 /// Load template file
 pub fn load_template(template_path: &str) -> Result<String, String> {
-    println!("Loading template from {}", template_path);
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Loading template from {}", template_path);
+    }
 
     let template_content = fs::read_to_string(template_path)
         .map_err(|e| format!("Could not read template file '{}': {}", template_path, e))?;
 
-    println!("Template loaded successfully from {}", template_path);
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Template loaded successfully from {}", template_path);
+    }
     Ok(template_content)
 }
 
 /// Process template by replacing color placeholders and mode placeholders
 pub fn process_template(template_content: &str, palette: &Palette, effective_mode: &str) -> String {
-    println!("Processing template...");
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Processing template...");
+    }
 
     let mut content = template_content.replace("{{mode}}", effective_mode);
     content = content.replace(
@@ -277,13 +287,17 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
             .to_string();
     }
 
-    println!("Template processed successfully");
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Template processed successfully");
+    }
     content
 }
 
 /// Save processed content to output file
 pub fn save_output(content: &str, output_path: &str) -> Result<(), String> {
-    println!("Saving output to {}", output_path);
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Saving output to {}", output_path);
+    }
 
     let output_path = Path::new(output_path);
 
@@ -301,7 +315,9 @@ pub fn save_output(content: &str, output_path: &str) -> Result<(), String> {
         )
     })?;
 
-    println!("Output saved successfully to {}", output_path.display());
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Output saved successfully to {}", output_path.display());
+    }
     Ok(())
 }
 
@@ -311,7 +327,9 @@ pub fn generate_palette(
     is_dark_mode: bool,
     _is_strict: bool,
 ) -> Result<Palette, String> {
-    println!("Generating color palette...");
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Generating color palette...");
+    }
 
     // Get primary color from theme - try both "primary" and "mPrimary" keys
     let primary_hex = theme
@@ -494,7 +512,9 @@ pub fn generate_palette(
         shadow: ColorEntry { default: shadow },
     };
 
-    println!("Color palette generated successfully");
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Color palette generated successfully");
+    }
     Ok(palette)
 }
 
@@ -505,7 +525,10 @@ pub fn process_theme(
     output_path: &str,
     mode: &str,
 ) -> Result<(), String> {
-    println!("Starting theme generation: mode={}", mode);
+    // Don't output detailed info in normal mode, only for debugging
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Starting theme generation: mode={}", mode);
+    }
 
     // Validate input files
     if !Path::new(theme_path).exists() {
@@ -520,9 +543,13 @@ pub fn process_theme(
     let (theme, effective_mode) = select_theme_mode(&theme_all, mode)?;
 
     // Generate palette
-    println!("Generating color palette...");
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Generating color palette...");
+    }
     let palette = generate_palette(&theme, effective_mode == "dark", false)?;
-    println!("Color palette generated successfully");
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!("Color palette generated successfully");
+    }
 
     // Read template
     let template_content = load_template(template_path)?;
@@ -533,9 +560,11 @@ pub fn process_theme(
     // Save output
     save_output(&result_content, output_path)?;
 
-    println!(
-        "Theme generated successfully! Mode: {}, output: {}",
-        effective_mode, output_path
-    );
+    if std::env::var("TINCT_VERBOSE").unwrap_or_default() == "1" {
+        eprintln!(
+            "Theme generated successfully! Mode: {}, output: {}",
+            effective_mode, output_path
+        );
+    }
     Ok(())
 }

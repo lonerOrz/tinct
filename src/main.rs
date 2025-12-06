@@ -9,10 +9,27 @@ mod theme;
 mod cli;
 
 use clap::Parser;
+use colored::*;
 use config::{Config, ConfigSection};
 
 fn main() {
     let args = cli::CliArgs::parse();
+
+    // Set environment variable for theme module logging based on CLI log level
+    match args.log_level {
+        cli::LogLevel::Quiet => std::env::set_var("TINCT_VERBOSE", "0"),
+        cli::LogLevel::Normal => std::env::set_var("TINCT_VERBOSE", "0"),
+        cli::LogLevel::Verbose => std::env::set_var("TINCT_VERBOSE", "1"),
+    }
+
+    // Print basic info in a clean format
+    if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
+        println!("{}", "tinct - Theme Injector".bold());
+        println!("{}: {}", "Config".blue(), args.config);
+        println!("{}: {}", "Theme".blue(), args.theme);
+        println!("{}: {}", "Mode".blue(), args.mode.to_string().yellow());
+        println!();
+    }
 
     // Resolve config path
     let config_path = cli::resolve_path(Some(&args.config), Some("config.toml"), None)
@@ -39,17 +56,11 @@ fn main() {
         process::exit(1);
     };
 
-    println!("Config: {}", config_path);
-    println!("Theme: {}", theme_file);
-    println!("Mode: {}", args.mode);
-
     // Read TOML config
     let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
 
     let config: Config =
         toml::from_str(&config_content).expect("Invalid TOML format in config file");
-
-    println!("Configuration loaded from {}", config_path);
 
     // Convert relative paths in config to absolute paths
     // Paths should be resolved relative to the config file location, not the project root
@@ -82,17 +93,46 @@ fn main() {
     }
 
     // Process each section in the config
+    let mut success_count = 0;
+    let mut total_count = 0;
+
     let mode_str = args.mode.to_string();
     for (group_name, group) in processed_config.iter() {
-        println!("Processing group: {}", group_name);
+        if matches!(args.log_level, cli::LogLevel::Verbose) {
+            println!("Processing group: {}", group_name);
+        }
         for (section_name, section) in group.iter() {
-            println!("Processing section: {}", section_name);
+            total_count += 1;
 
             if !cli::validate_config_section(section, section_name) {
                 continue;
             }
 
-            cli::process_section(section_name, section, &theme_file, &mode_str);
+            let result = cli::process_section(section_name, section, &theme_file, &mode_str, args.log_level.clone());
+
+            if result {
+                success_count += 1;
+            }
+
+            if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
+                if result {
+                    println!("{} [{}] {}", "✓".green().bold(), section_name.blue(), "processed successfully".green());
+                } else {
+                    println!("{} [{}] {}", "✗".red().bold(), section_name.blue(), "failed to process".red());
+                }
+            }
         }
+    }
+
+    if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
+        println!();
+        println!(
+            "{}: {} {} {} {}",
+            "Summary".bold(),
+            success_count.to_string().green().bold(),
+            "of".white(),
+            total_count.to_string().white().bold(),
+            "sections processed successfully".green()
+        );
     }
 }

@@ -20,6 +20,10 @@ pub struct CliArgs {
     /// Theme mode override
     #[arg(long, value_enum, default_value = "dark")]
     pub mode: ThemeMode,
+
+    /// Logging level: quiet, normal, verbose
+    #[arg(long, value_enum, default_value = "normal")]
+    pub log_level: LogLevel,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -35,6 +39,13 @@ impl std::fmt::Display for ThemeMode {
             ThemeMode::Light => write!(f, "light"),
         }
     }
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
+pub enum LogLevel {
+    Quiet,
+    Normal,
+    Verbose,
 }
 
 // Functions to resolve paths
@@ -102,7 +113,7 @@ pub fn resolve_path(
 }
 
 // Hook execution functions
-pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>) -> bool {
+pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>, log_level: LogLevel) -> bool {
     if post_hook.is_empty() {
         return true;
     }
@@ -117,14 +128,18 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
 
         if post_hook_path.exists() && is_executable(&post_hook_path) {
             if let Some(name) = section_name {
-                println!("[{}] ✓ Hook script executing...", name);
+                if log_level == LogLevel::Verbose {
+                    println!("[{}] ✓ Hook script executing...", name);
+                }
             }
 
             match std::process::Command::new(&post_hook_path).output() {
                 Ok(result) => {
                     if result.status.success() {
                         if let Some(name) = section_name {
-                            println!("[{}] ✓ Hook script executed successfully", name);
+                            if log_level != LogLevel::Quiet {
+                                println!("[{}] ✓ Hook script executed successfully", name);
+                            }
                         }
                         true
                     } else {
@@ -154,7 +169,9 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
     } else {
         // Handle command execution
         if let Some(name) = section_name {
-            println!("[{}] ✓ Hook command executing...", name);
+            if log_level == LogLevel::Verbose {
+                println!("[{}] ✓ Hook command executing...", name);
+            }
         }
 
         match std::process::Command::new("sh")
@@ -165,7 +182,9 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
             Ok(result) => {
                 if result.status.success() {
                     if let Some(name) = section_name {
-                        println!("[{}] ✓ Hook command executed successfully", name);
+                        if log_level != LogLevel::Quiet {
+                            println!("[{}] ✓ Hook command executed successfully", name);
+                        }
                     }
                     true
                 } else {
@@ -228,6 +247,7 @@ pub fn process_section(
     section: &ConfigSection,
     theme_file: &str,
     mode: &str,
+    log_level: LogLevel,
 ) -> bool {
     let input_path = &section.input_path;
     let output_path = &section.output_path;
@@ -235,20 +255,24 @@ pub fn process_section(
 
     // Validate input file exists
     if !Path::new(input_path).exists() {
-        eprintln!(
-            "[{}] Input file '{}' does not exist. Skipping.",
-            section_name, input_path
-        );
+        if log_level != LogLevel::Quiet {
+            eprintln!(
+                "[{}] Input file '{}' does not exist. Skipping.",
+                section_name, input_path
+            );
+        }
         return false;
     }
 
     // Ensure output directory exists
     if let Some(parent) = Path::new(output_path).parent() {
         if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!(
-                "[{}] Error creating output directory: {}. Skipping.",
-                section_name, e
-            );
+            if log_level != LogLevel::Quiet {
+                eprintln!(
+                    "[{}] Error creating output directory: {}. Skipping.",
+                    section_name, e
+                );
+            }
             return false;
         }
     }
@@ -258,12 +282,14 @@ pub fn process_section(
         Ok(()) => {
             // Run post hook if specified
             if !post_hook.is_empty() {
-                run_post_hook(post_hook, output_path, Some(section_name));
+                run_post_hook(post_hook, output_path, Some(section_name), log_level);
             }
             true
         }
         Err(e) => {
-            eprintln!("[{}] Error processing theme: {}", section_name, e);
+            if log_level != LogLevel::Quiet {
+                eprintln!("[{}] Error processing theme: {}", section_name, e);
+            }
             false
         }
     }
