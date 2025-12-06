@@ -313,10 +313,11 @@ pub fn generate_palette(
 ) -> Result<Palette, String> {
     println!("Generating color palette...");
 
-    // Get primary color from theme
+    // Get primary color from theme - try both "primary" and "mPrimary" keys
     let primary_hex = theme
         .get("primary")
         .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
         .ok_or("Primary color not found in theme")?;
 
     // Create default colors based on the primary
