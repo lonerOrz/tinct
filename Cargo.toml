@@ -3,6 +3,14 @@ name = "tinct"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "tinct"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tinct"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
 toml = "0.8"

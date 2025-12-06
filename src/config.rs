@@ -56,15 +56,3 @@ pub fn resolve_path_to_abs(path: &str, base_dir: &str) -> Option<String> {
     // If it's already absolute or couldn't be resolved relative to base, return as is
     Some(expanded)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resolve_path_to_abs() {
-        // Since this function depends on file system paths, we'll just verify it compiles
-        // with the shellexpand dependency
-        assert!(true);
-    }
-}
