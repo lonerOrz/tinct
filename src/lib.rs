@@ -1,11 +1,13 @@
 pub mod color;
 pub mod config;
 pub mod theme;
+pub mod log;
 
 /// Public API for tinct
 pub use color::*;
 pub use config::*;
 pub use theme::*;
+pub use log::*;
 
 /// Process a theme using a theme file, input template, and output path
 /// This is the main entry point for the library functionality

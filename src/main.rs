@@ -7,6 +7,7 @@ mod color;
 mod config;
 mod theme;
 mod cli;
+mod log;
 
 use clap::Parser;
 use colored::*;
@@ -15,12 +16,12 @@ use config::{Config, ConfigSection};
 fn main() {
     let args = cli::CliArgs::parse();
 
-    // Set environment variable for theme module logging based on CLI log level
-    match args.log_level {
-        cli::LogLevel::Quiet => std::env::set_var("TINCT_VERBOSE", "0"),
-        cli::LogLevel::Normal => std::env::set_var("TINCT_VERBOSE", "0"),
-        cli::LogLevel::Verbose => std::env::set_var("TINCT_VERBOSE", "1"),
-    }
+    // Initialize global logger with the specified log level
+    log::init_logger(match args.log_level {
+        cli::LogLevel::Quiet => log::LogLevel::Quiet,
+        cli::LogLevel::Normal => log::LogLevel::Normal,
+        cli::LogLevel::Verbose => log::LogLevel::Verbose,
+    });
 
     // Print basic info in a clean format
     if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
@@ -116,9 +117,9 @@ fn main() {
 
             if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
                 if result {
-                    println!("{} [{}] {}", "✓".green().bold(), section_name.blue(), "processed successfully".green());
+                    log::success(section_name, "processed successfully");
                 } else {
-                    println!("{} [{}] {}", "✗".red().bold(), section_name.blue(), "failed to process".red());
+                    log::error(section_name, "failed to process");
                 }
             }
         }
@@ -126,13 +127,13 @@ fn main() {
 
     if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
         println!();
-        println!(
+        log::info(&format!(
             "{}: {} {} {} {}",
             "Summary".bold(),
             success_count.to_string().green().bold(),
             "of".white(),
             total_count.to_string().white().bold(),
             "sections processed successfully".green()
-        );
+        ));
     }
 }

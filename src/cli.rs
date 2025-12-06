@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::config::ConfigSection;
 use crate::theme;
+use crate::log;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -113,7 +114,7 @@ pub fn resolve_path(
 }
 
 // Hook execution functions
-pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>, log_level: LogLevel) -> bool {
+pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>, _log_level: LogLevel) -> bool {
     if post_hook.is_empty() {
         return true;
     }
@@ -128,50 +129,40 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
 
         if post_hook_path.exists() && is_executable(&post_hook_path) {
             if let Some(name) = section_name {
-                if log_level == LogLevel::Verbose {
-                    println!("[{}] ✓ Hook script executing...", name);
-                }
+                log::hook_executing(name);
             }
 
             match std::process::Command::new(&post_hook_path).output() {
                 Ok(result) => {
                     if result.status.success() {
                         if let Some(name) = section_name {
-                            if log_level != LogLevel::Quiet {
-                                println!("[{}] ✓ Hook script executed successfully", name);
-                            }
+                            log::hook_success(name);
                         }
                         true
                     } else {
                         if let Some(name) = section_name {
-                            eprintln!("[{}] ✗ Error executing hook script", name);
+                            log::error(name, "Error executing hook script");
                         }
                         false
                     }
                 }
                 Err(e) => {
                     if let Some(name) = section_name {
-                        eprintln!("[{}] ✗ Error executing hook script: {}", name, e);
+                        log::error(name, &format!("Error executing hook script: {}", e));
                     }
                     false
                 }
             }
         } else {
             if let Some(name) = section_name {
-                eprintln!(
-                    "[{}] ⚠ post_hook '{}' not found. Skipping.",
-                    name,
-                    post_hook_path.display()
-                );
+                log::error(name, &format!("post_hook '{}' not found. Skipping.", post_hook_path.display()));
             }
             false
         }
     } else {
         // Handle command execution
         if let Some(name) = section_name {
-            if log_level == LogLevel::Verbose {
-                println!("[{}] ✓ Hook command executing...", name);
-            }
+            log::hook_executing(name);
         }
 
         match std::process::Command::new("sh")
@@ -182,17 +173,14 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
             Ok(result) => {
                 if result.status.success() {
                     if let Some(name) = section_name {
-                        if log_level != LogLevel::Quiet {
-                            println!("[{}] ✓ Hook command executed successfully", name);
-                        }
+                        log::hook_success(name);
                     }
                     true
                 } else {
                     if let Some(name) = section_name {
-                        eprintln!(
-                            "[{}] ✗ Error executing hook command: {}",
+                        log::hook_error(
                             name,
-                            String::from_utf8_lossy(&result.stderr)
+                            &String::from_utf8_lossy(&result.stderr).to_string(),
                         );
                     }
                     false
@@ -200,7 +188,7 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
             }
             Err(e) => {
                 if let Some(name) = section_name {
-                    eprintln!("[{}] ✗ Error executing hook command: {}", name, e);
+                    log::hook_error(name, &e.to_string());
                 }
                 false
             }
@@ -247,7 +235,7 @@ pub fn process_section(
     section: &ConfigSection,
     theme_file: &str,
     mode: &str,
-    log_level: LogLevel,
+    _log_level: LogLevel,
 ) -> bool {
     let input_path = &section.input_path;
     let output_path = &section.output_path;
@@ -255,24 +243,20 @@ pub fn process_section(
 
     // Validate input file exists
     if !Path::new(input_path).exists() {
-        if log_level != LogLevel::Quiet {
-            eprintln!(
-                "[{}] Input file '{}' does not exist. Skipping.",
-                section_name, input_path
-            );
-        }
+        log::error(
+            section_name,
+            &format!("Input file '{}' does not exist. Skipping.", input_path),
+        );
         return false;
     }
 
     // Ensure output directory exists
     if let Some(parent) = Path::new(output_path).parent() {
         if let Err(e) = fs::create_dir_all(parent) {
-            if log_level != LogLevel::Quiet {
-                eprintln!(
-                    "[{}] Error creating output directory: {}. Skipping.",
-                    section_name, e
-                );
-            }
+            log::error(
+                section_name,
+                &format!("Error creating output directory: {}. Skipping.", e),
+            );
             return false;
         }
     }
@@ -282,14 +266,12 @@ pub fn process_section(
         Ok(()) => {
             // Run post hook if specified
             if !post_hook.is_empty() {
-                run_post_hook(post_hook, output_path, Some(section_name), log_level);
+                run_post_hook(post_hook, output_path, Some(section_name), _log_level);
             }
             true
         }
         Err(e) => {
-            if log_level != LogLevel::Quiet {
-                eprintln!("[{}] Error processing theme: {}", section_name, e);
-            }
+            log::error(section_name, &format!("Error processing theme: {}", e));
             false
         }
     }
