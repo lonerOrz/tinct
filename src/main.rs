@@ -11,7 +11,7 @@ mod log;
 
 use clap::Parser;
 use colored::*;
-use config::{Config, ConfigSection};
+use config::Config;
 
 fn main() {
     let args = cli::CliArgs::parse();
@@ -117,9 +117,9 @@ fn main() {
 
             if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
                 if result {
-                    log::success(section_name, "processed successfully");
+                    crate::log::info::processed_successfully(section_name);
                 } else {
-                    log::error(section_name, "failed to process");
+                    crate::log::error::message(section_name, "failed to process");
                 }
             }
         }
@@ -127,13 +127,6 @@ fn main() {
 
     if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
         println!();
-        log::info(&format!(
-            "{}: {} {} {} {}",
-            "Summary".bold(),
-            success_count.to_string().green().bold(),
-            "of".white(),
-            total_count.to_string().white().bold(),
-            "sections processed successfully".green()
-        ));
+        crate::log::general::summary(success_count, total_count);
     }
 }

@@ -95,7 +95,7 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
 
 /// Load theme JSON file
 pub fn load_theme(theme_path: &str) -> Result<Value, String> {
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Loading theme from {}", theme_path);
     }
 
@@ -105,7 +105,7 @@ pub fn load_theme(theme_path: &str) -> Result<Value, String> {
     let theme_data: Value = serde_json::from_str(&content)
         .map_err(|e| format!("Invalid JSON format in '{}': {}", theme_path, e))?;
 
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Theme loaded successfully from {}", theme_path);
     }
     Ok(theme_data)
@@ -130,14 +130,14 @@ pub fn select_theme_mode(theme_all: &Value, mode: &str) -> Result<(Value, String
 
 /// Load template file
 pub fn load_template(template_path: &str) -> Result<String, String> {
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Loading template from {}", template_path);
     }
 
     let template_content = fs::read_to_string(template_path)
         .map_err(|e| format!("Could not read template file '{}': {}", template_path, e))?;
 
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Template loaded successfully from {}", template_path);
     }
     Ok(template_content)
@@ -145,7 +145,7 @@ pub fn load_template(template_path: &str) -> Result<String, String> {
 
 /// Process template by replacing color placeholders and mode placeholders
 pub fn process_template(template_content: &str, palette: &Palette, effective_mode: &str) -> String {
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Processing template...");
     }
 
@@ -287,7 +287,7 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
             .to_string();
     }
 
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Template processed successfully");
     }
     content
@@ -295,7 +295,7 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
 
 /// Save processed content to output file
 pub fn save_output(content: &str, output_path: &str) -> Result<(), String> {
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Saving output to {}", output_path);
     }
 
@@ -315,7 +315,7 @@ pub fn save_output(content: &str, output_path: &str) -> Result<(), String> {
         )
     })?;
 
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Output saved successfully to {}", output_path.display());
     }
     Ok(())
@@ -327,7 +327,7 @@ pub fn generate_palette(
     is_dark_mode: bool,
     _is_strict: bool,
 ) -> Result<Palette, String> {
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Generating color palette...");
     }
 
@@ -512,7 +512,7 @@ pub fn generate_palette(
         shadow: ColorEntry { default: shadow },
     };
 
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Color palette generated successfully");
     }
     Ok(palette)
@@ -525,7 +525,7 @@ pub fn process_theme(
     output_path: &str,
     mode: &str,
 ) -> Result<(), String> {
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Starting theme generation: mode={}", mode);
     }
 
@@ -542,11 +542,11 @@ pub fn process_theme(
     let (theme, effective_mode) = select_theme_mode(&theme_all, mode)?;
 
     // Generate palette
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Generating color palette...");
     }
     let palette = generate_palette(&theme, effective_mode == "dark", false)?;
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!("Color palette generated successfully");
     }
 
@@ -559,7 +559,7 @@ pub fn process_theme(
     // Save output
     save_output(&result_content, output_path)?;
 
-    if super::log::is_verbose() {
+    if crate::log::is_verbose() {
         eprintln!(
             "Theme generated successfully! Mode: {}, output: {}",
             effective_mode, output_path

@@ -5,7 +5,6 @@ use std::path::Path;
 
 use crate::config::ConfigSection;
 use crate::theme;
-use crate::log;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -129,40 +128,40 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
 
         if post_hook_path.exists() && is_executable(&post_hook_path) {
             if let Some(name) = section_name {
-                log::hook_executing(name);
+                crate::log::hook::executing(name);
             }
 
             match std::process::Command::new(&post_hook_path).output() {
                 Ok(result) => {
                     if result.status.success() {
                         if let Some(name) = section_name {
-                            log::hook_success(name);
+                            crate::log::hook::success(name);
                         }
                         true
                     } else {
                         if let Some(name) = section_name {
-                            log::error(name, "Error executing hook script");
+                            crate::log::error::message(name, "Error executing hook script");
                         }
                         false
                     }
                 }
                 Err(e) => {
                     if let Some(name) = section_name {
-                        log::error(name, &format!("Error executing hook script: {}", e));
+                        crate::log::error::message(name, &format!("Error executing hook script: {}", e));
                     }
                     false
                 }
             }
         } else {
             if let Some(name) = section_name {
-                log::error(name, &format!("post_hook '{}' not found. Skipping.", post_hook_path.display()));
+                crate::log::error::message(name, &format!("post_hook '{}' not found. Skipping.", post_hook_path.display()));
             }
             false
         }
     } else {
         // Handle command execution
         if let Some(name) = section_name {
-            log::hook_executing(name);
+            crate::log::hook::executing(name);
         }
 
         match std::process::Command::new("sh")
@@ -173,12 +172,12 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
             Ok(result) => {
                 if result.status.success() {
                     if let Some(name) = section_name {
-                        log::hook_success(name);
+                        crate::log::hook::success(name);
                     }
                     true
                 } else {
                     if let Some(name) = section_name {
-                        log::hook_error(
+                        crate::log::error::hook_error(
                             name,
                             &String::from_utf8_lossy(&result.stderr).to_string(),
                         );
@@ -188,7 +187,7 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
             }
             Err(e) => {
                 if let Some(name) = section_name {
-                    log::hook_error(name, &e.to_string());
+                    crate::log::error::hook_error(name, &e.to_string());
                 }
                 false
             }
@@ -243,7 +242,7 @@ pub fn process_section(
 
     // Validate input file exists
     if !Path::new(input_path).exists() {
-        log::error(
+        crate::log::error::message(
             section_name,
             &format!("Input file '{}' does not exist. Skipping.", input_path),
         );
@@ -253,7 +252,7 @@ pub fn process_section(
     // Ensure output directory exists
     if let Some(parent) = Path::new(output_path).parent() {
         if let Err(e) = fs::create_dir_all(parent) {
-            log::error(
+            crate::log::error::message(
                 section_name,
                 &format!("Error creating output directory: {}. Skipping.", e),
             );
@@ -276,7 +275,7 @@ pub fn process_section(
             hook_result || true
         }
         Err(e) => {
-            log::error(section_name, &format!("Error processing theme: {}", e));
+            crate::log::error::theme_error(section_name, &format!("{}", e));
             false
         }
     }
