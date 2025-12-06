@@ -59,6 +59,8 @@ pub fn resolve_path_to_abs(path: &str, base_dir: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_resolve_path_to_abs() {
         // Since this function depends on file system paths, we'll just verify it compiles
