@@ -2,6 +2,7 @@ pub mod color;
 pub mod config;
 pub mod theme;
 pub mod log;
+pub mod preview;
 
 /// Public API for tinct
 pub use color::*;

@@ -11,6 +11,7 @@ pub struct ConfigSection {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(dead_code)]
 pub struct ConfigGroup {
     pub sections: HashMap<String, ConfigSection>,
 }

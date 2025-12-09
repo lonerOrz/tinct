@@ -21,6 +21,10 @@ pub struct CliArgs {
     #[arg(long, value_enum, default_value = "dark")]
     pub mode: ThemeMode,
 
+    /// Show color preview instead of processing templates
+    #[arg(long)]
+    pub preview: bool,
+
     /// Logging level: quiet, normal, verbose
     #[arg(long, value_enum, default_value = "normal")]
     pub log_level: LogLevel,

@@ -14,6 +14,7 @@ pub struct Hsl {
 }
 
 /// Clamp a value between min and max
+#[allow(dead_code)]
 pub fn clamp(n: f64, minn: f64, maxn: f64) -> f64 {
     n.max(minn).min(maxn)
 }
@@ -39,6 +40,7 @@ pub fn hex_to_rgb(hex_color: &str) -> Result<Rgb, String> {
 }
 
 /// Convert RGB values to HEX color
+#[allow(dead_code)]
 pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
     let r = clamp(r.round(), 0.0, 255.0) as u8;
     let g = clamp(g.round(), 0.0, 255.0) as u8;
@@ -86,6 +88,7 @@ pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
 }
 
 /// Convert HSL values to RGB
+#[allow(dead_code)]
 pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
     let h = h / 360.0;
     let s = s / 100.0;
@@ -139,6 +142,7 @@ pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
 }
 
 /// Calculate relative luminance of a color
+#[allow(dead_code)]
 pub fn get_luminance(hexcolor: &str) -> Result<f64, String> {
     let rgb = hex_to_rgb(hexcolor)?;
 
@@ -158,6 +162,7 @@ pub fn get_luminance(hexcolor: &str) -> Result<f64, String> {
 }
 
 /// Calculate contrast ratio between two colors
+#[allow(dead_code)]
 pub fn get_contrast_ratio(a: &str, b: &str) -> Result<f64, String> {
     let l1 = get_luminance(a)?;
     let l2 = get_luminance(b)?;
@@ -168,11 +173,13 @@ pub fn get_contrast_ratio(a: &str, b: &str) -> Result<f64, String> {
 }
 
 /// Check if a color is light or dark based on luminance
+#[allow(dead_code)]
 pub fn is_light_color(hexcolor: &str) -> Result<bool, String> {
     Ok(get_luminance(hexcolor)? > 0.5)
 }
 
 /// Adjust the lightness of a color by a given amount
+#[allow(dead_code)]
 pub fn adjust_lightness(hexcolor: &str, amount: f64) -> Result<String, String> {
     let rgb = hex_to_rgb(hexcolor)?;
     let hsl = rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
@@ -186,6 +193,7 @@ pub fn adjust_lightness(hexcolor: &str, amount: f64) -> Result<String, String> {
 }
 
 /// Adjust the saturation of a color by a given amount
+#[allow(dead_code)]
 pub fn adjust_saturation(hexcolor: &str, amount: f64) -> Result<String, String> {
     let rgb = hex_to_rgb(hexcolor)?;
     let hsl = rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
@@ -199,6 +207,7 @@ pub fn adjust_saturation(hexcolor: &str, amount: f64) -> Result<String, String> 
 }
 
 /// Adjust both lightness and saturation of a color
+#[allow(dead_code)]
 pub fn adjust_lightness_and_saturation(hexcolor: &str, la: f64, sa: f64) -> Result<String, String> {
     let rgb = hex_to_rgb(hexcolor)?;
     let hsl = rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
@@ -213,6 +222,7 @@ pub fn adjust_lightness_and_saturation(hexcolor: &str, la: f64, sa: f64) -> Resu
 }
 
 /// Generate appropriate text color for a given background
+#[allow(dead_code)]
 pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
     // The _is_dark parameter determines the overall theme preference,
     // but we still want to ensure good contrast regardless of the theme preference

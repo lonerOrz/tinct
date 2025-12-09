@@ -8,6 +8,7 @@ mod config;
 mod theme;
 mod cli;
 mod log;
+mod preview;
 
 use clap::Parser;
 use colored::*;
@@ -32,15 +33,6 @@ fn main() {
         println!();
     }
 
-    // Resolve config path
-    let config_path = cli::resolve_path(Some(&args.config), Some("config.toml"), None)
-        .expect("Config file path could not be resolved");
-
-    if !Path::new(&config_path).exists() {
-        eprintln!("Config file '{}' does not exist.", args.config);
-        process::exit(1);
-    }
-
     // Resolve theme path
     let theme_path = cli::resolve_path(Some(&args.theme), None, Some("themes"));
     let theme_file = if let Some(path) = theme_path {
@@ -56,6 +48,26 @@ fn main() {
         );
         process::exit(1);
     };
+
+    // If preview flag is set, show color preview and exit (before trying to load config)
+    if args.preview {
+        match preview::show_color_preview(&theme_file, &args.mode.to_string()) {
+            Ok(()) => process::exit(0),
+            Err(e) => {
+                eprintln!("Error showing color preview: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    // Resolve config path only when not in preview mode
+    let config_path = cli::resolve_path(Some(&args.config), Some("config.toml"), None)
+        .expect("Config file path could not be resolved");
+
+    if !Path::new(&config_path).exists() {
+        eprintln!("Config file '{}' does not exist.", args.config);
+        process::exit(1);
+    }
 
     // Read TOML config
     let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
