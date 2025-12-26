@@ -424,14 +424,14 @@ pub fn generate_palette(
             .get("on_primary")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#ffffff"))
     } else {
         theme
             .get("on_primary")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#000000"))
     }?;
 
@@ -442,14 +442,14 @@ pub fn generate_palette(
             .get("on_secondary")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnSecondary").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#ffffff"))
     } else {
         theme
             .get("on_secondary")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnSecondary").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#000000"))
     }?;
 
@@ -459,14 +459,14 @@ pub fn generate_palette(
             .get("on_tertiary")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnTertiary").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#ffffff"))
     } else {
         theme
             .get("on_tertiary")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnTertiary").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#000000"))
     }?;
 
@@ -482,14 +482,14 @@ pub fn generate_palette(
             .get("on_primary_container")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str())) // Use mOnPrimary as fallback
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#ffffff"))
     } else {
         theme
             .get("on_primary_container")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str())) // Use mOnPrimary as fallback
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#000000"))
     }?;
 
@@ -525,14 +525,14 @@ pub fn generate_palette(
                 .get("on_surface")
                 .and_then(|v| v.as_str())
                 .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
-                .map(|s| create_color_format(s))
+                .map(create_color_format)
                 .unwrap_or_else(|| create_color_format("#e0e0e0"))?  // Light text on dark surface
         } else {
             theme
                 .get("on_surface")
                 .and_then(|v| v.as_str())
                 .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
-                .map(|s| create_color_format(s))
+                .map(create_color_format)
                 .unwrap_or_else(|| create_color_format("#1f1f1f"))?  // Dark text on light surface
         };
         // Create HCT from the provided surface color for use in other calculations
@@ -563,14 +563,14 @@ pub fn generate_palette(
                 .get("on_surface_variant")
                 .and_then(|v| v.as_str())
                 .or_else(|| theme.get("mOnSurfaceVariant").and_then(|v| v.as_str()))
-                .map(|s| create_color_format(s))
+                .map(create_color_format)
                 .unwrap_or_else(|| create_color_format("#c4c4c4"))?
         } else {
             theme
                 .get("on_surface_variant")
                 .and_then(|v| v.as_str())
                 .or_else(|| theme.get("mOnSurfaceVariant").and_then(|v| v.as_str()))
-                .map(|s| create_color_format(s))
+                .map(create_color_format)
                 .unwrap_or_else(|| create_color_format("#49454f"))?
         };
         (surface_variant, on_surface_variant)
@@ -664,14 +664,14 @@ pub fn generate_palette(
             .get("on_error")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#410002"))?  // Dark text on light error
     } else {
         theme
             .get("on_error")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
-            .map(|s| create_color_format(s))
+            .map(create_color_format)
             .unwrap_or_else(|| create_color_format("#ffffff"))?  // Light text on dark error
     };
 
@@ -688,7 +688,7 @@ pub fn generate_palette(
         .get("outline")
         .and_then(|v| v.as_str())
         .or_else(|| theme.get("mOutline").and_then(|v| v.as_str()))
-        .map(|s| create_color_format(s))
+        .map(create_color_format)
         .unwrap_or_else(|| {
             let outline_hct = color::Hct::from_hct(surface_hct.h, 10.0, if is_dark_mode { 60.0 } else { 50.0 });
             create_color_format(&outline_hct.to_hex())
@@ -704,7 +704,7 @@ pub fn generate_palette(
         .get("shadow")
         .and_then(|v| v.as_str())
         .or_else(|| theme.get("mShadow").and_then(|v| v.as_str()))
-        .map(|s| create_color_format(s))
+        .map(create_color_format)
         .unwrap_or_else(|| create_color_format("#000000"))?; // Use mShadow if available, otherwise black
 
     let scrim = create_color_format("#000000")?; // Always black
