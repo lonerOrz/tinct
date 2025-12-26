@@ -10,8 +10,8 @@ use crate::theme;
 #[command(version, about, long_about = None)]
 pub struct CliArgs {
     /// Path to the TOML config file
-    #[arg(long, default_value = "config.toml")]
-    pub config: String,
+    #[arg(long)]
+    pub config: Option<String>,
 
     /// Path to theme.json file or theme name in themes/ folder
     #[arg(long, required = true)]
