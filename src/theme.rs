@@ -473,8 +473,8 @@ pub fn generate_palette(
     // Generate container colors (lower chroma, adjusted tone)
     let primary_container_hct = color::Hct::from_hct(
         primary_hct.h,
-        primary_hct.c * 0.4,              // Much less chroma
-        if is_dark_mode { 30.0 } else { 90.0 }   // Lower tone for container
+        primary_hct.c * 0.4,                    // Much less chroma
+        if is_dark_mode { 30.0 } else { 90.0 }, // Lower tone for container
     );
     let primary_container = create_color_format(&primary_container_hct.to_hex())?;
     let on_primary_container = if is_dark_mode {
@@ -496,7 +496,7 @@ pub fn generate_palette(
     let secondary_container_hct = color::Hct::from_hct(
         secondary_hct.h,
         secondary_hct.c * 0.4,
-        if is_dark_mode { 20.0 } else { 95.0 }
+        if is_dark_mode { 20.0 } else { 95.0 },
     );
     let secondary_container = create_color_format(&secondary_container_hct.to_hex())?;
     let on_secondary_container = if is_dark_mode {
@@ -508,7 +508,7 @@ pub fn generate_palette(
     let tertiary_container_hct = color::Hct::from_hct(
         tertiary_hct.h,
         tertiary_hct.c * 0.4,
-        if is_dark_mode { 25.0 } else { 95.0 }
+        if is_dark_mode { 25.0 } else { 95.0 },
     );
     let tertiary_container = create_color_format(&tertiary_container_hct.to_hex())?;
     let on_tertiary_container = if is_dark_mode {
@@ -526,14 +526,14 @@ pub fn generate_palette(
                 .and_then(|v| v.as_str())
                 .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
                 .map(create_color_format)
-                .unwrap_or_else(|| create_color_format("#e0e0e0"))?  // Light text on dark surface
+                .unwrap_or_else(|| create_color_format("#e0e0e0"))? // Light text on dark surface
         } else {
             theme
                 .get("on_surface")
                 .and_then(|v| v.as_str())
                 .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
                 .map(create_color_format)
-                .unwrap_or_else(|| create_color_format("#1f1f1f"))?  // Dark text on light surface
+                .unwrap_or_else(|| create_color_format("#1f1f1f"))? // Dark text on light surface
         };
         // Create HCT from the provided surface color for use in other calculations
         let surface_rgb = color::hex_to_rgb(hex)?;
@@ -545,9 +545,9 @@ pub fn generate_palette(
         let surface_hct = color::Hct::from_hct(primary_hct.h, 5.0, surface_tone); // Low chroma for surface
         let surface = create_color_format(&surface_hct.to_hex())?;
         let on_surface = if is_dark_mode {
-            create_color_format("#e0e0e0")?  // Light text on dark surface
+            create_color_format("#e0e0e0")? // Light text on dark surface
         } else {
-            create_color_format("#1f1f1f")?  // Dark text on light surface
+            create_color_format("#1f1f1f")? // Dark text on light surface
         };
         (surface, on_surface, surface_hct)
     };
@@ -577,9 +577,9 @@ pub fn generate_palette(
     } else {
         // Generate surface variant (slightly different hue)
         let surface_variant_hct = color::Hct::from_hct(
-            (surface_hct.h + 15.0) % 360.0,  // Slight hue shift from actual surface
+            (surface_hct.h + 15.0) % 360.0, // Slight hue shift from actual surface
             5.0,
-            if is_dark_mode { 10.0 } else { 94.0 }
+            if is_dark_mode { 10.0 } else { 94.0 },
         );
         let surface_variant = create_color_format(&surface_variant_hct.to_hex())?;
         let on_surface_variant = if is_dark_mode {
@@ -591,11 +591,16 @@ pub fn generate_palette(
     };
 
     // Surface container colors (different tones for hierarchy)
-    let surface_container_lowest_hct = color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 4.0 } else { 100.0 });
-    let surface_container_low_hct = color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 6.0 } else { 98.0 });
-    let surface_container_hct = color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 8.0 } else { 96.0 });
-    let surface_container_high_hct = color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 10.0 } else { 92.0 });
-    let surface_container_highest_hct = color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 12.0 } else { 87.0 });
+    let surface_container_lowest_hct =
+        color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 4.0 } else { 100.0 });
+    let surface_container_low_hct =
+        color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 6.0 } else { 98.0 });
+    let surface_container_hct =
+        color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 8.0 } else { 96.0 });
+    let surface_container_high_hct =
+        color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 10.0 } else { 92.0 });
+    let surface_container_highest_hct =
+        color::Hct::from_hct(primary_hct.h, 5.0, if is_dark_mode { 12.0 } else { 87.0 });
 
     let surface_container_lowest = create_color_format(&surface_container_lowest_hct.to_hex())?;
     let surface_container_low = create_color_format(&surface_container_low_hct.to_hex())?;
@@ -610,20 +615,21 @@ pub fn generate_palette(
     let primary_fixed_dim = create_color_format(&primary_fixed_dim_hct.to_hex())?;
     let on_primary_fixed = create_color_format("#000000")?;
     let on_primary_fixed_variant = if is_dark_mode {
-        create_color_format("#9a87ff")?  // Based on primary
+        create_color_format("#9a87ff")? // Based on primary
     } else {
-        create_color_format("#43389d")?  // Based on primary
+        create_color_format("#43389d")? // Based on primary
     };
 
     let secondary_fixed_hct = color::Hct::from_hct(secondary_hct.h, secondary_hct.c * 0.9, 90.0);
-    let secondary_fixed_dim_hct = color::Hct::from_hct(secondary_hct.h, secondary_hct.c * 0.7, 75.0);
+    let secondary_fixed_dim_hct =
+        color::Hct::from_hct(secondary_hct.h, secondary_hct.c * 0.7, 75.0);
     let secondary_fixed = create_color_format(&secondary_fixed_hct.to_hex())?;
     let secondary_fixed_dim = create_color_format(&secondary_fixed_dim_hct.to_hex())?;
     let on_secondary_fixed = create_color_format("#000000")?;
     let on_secondary_fixed_variant = if is_dark_mode {
-        create_color_format("#67daff")?  // Based on secondary
+        create_color_format("#67daff")? // Based on secondary
     } else {
-        create_color_format("#006b60")?  // Based on secondary
+        create_color_format("#006b60")? // Based on secondary
     };
 
     let tertiary_fixed_hct = color::Hct::from_hct(tertiary_hct.h, tertiary_hct.c * 0.9, 90.0);
@@ -632,28 +638,40 @@ pub fn generate_palette(
     let tertiary_fixed_dim = create_color_format(&tertiary_fixed_dim_hct.to_hex())?;
     let on_tertiary_fixed = create_color_format("#000000")?;
     let on_tertiary_fixed_variant = if is_dark_mode {
-        create_color_format("#f8c26d")?  // Based on tertiary
+        create_color_format("#f8c26d")? // Based on tertiary
     } else {
-        create_color_format("#442a51")?  // Based on tertiary
+        create_color_format("#442a51")? // Based on tertiary
     };
 
     // Inverse colors
-    let inverse_surface_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { 90.0 } else { 20.0 });
+    let inverse_surface_hct = color::Hct::from_hct(
+        surface_hct.h,
+        surface_hct.c,
+        if is_dark_mode { 90.0 } else { 20.0 },
+    );
     let inverse_surface = create_color_format(&inverse_surface_hct.to_hex())?;
     let inverse_on_surface = if is_dark_mode {
-        create_color_format("#313031")?  // Dark text on light inverse
+        create_color_format("#313031")? // Dark text on light inverse
     } else {
-        create_color_format("#e3e1e3")?  // Light text on dark inverse
+        create_color_format("#e3e1e3")? // Light text on dark inverse
     };
     let inverse_primary = if is_dark_mode {
-        create_color_format("#6200ee")?  // Light theme primary for dark theme inverse
+        create_color_format("#6200ee")? // Light theme primary for dark theme inverse
     } else {
-        create_color_format("#bb86fc")?  // Dark theme primary for light theme inverse
+        create_color_format("#bb86fc")? // Dark theme primary for light theme inverse
     };
 
     // Bright and dim surface colors
-    let surface_dim_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { 6.0 } else { 87.0 });
-    let surface_bright_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { 24.0 } else { 100.0 });
+    let surface_dim_hct = color::Hct::from_hct(
+        surface_hct.h,
+        surface_hct.c,
+        if is_dark_mode { 6.0 } else { 87.0 },
+    );
+    let surface_bright_hct = color::Hct::from_hct(
+        surface_hct.h,
+        surface_hct.c,
+        if is_dark_mode { 24.0 } else { 100.0 },
+    );
     let surface_dim = create_color_format(&surface_dim_hct.to_hex())?;
     let surface_bright = create_color_format(&surface_bright_hct.to_hex())?;
 
@@ -665,22 +683,23 @@ pub fn generate_palette(
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
             .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#410002"))?  // Dark text on light error
+            .unwrap_or_else(|| create_color_format("#410002"))? // Dark text on light error
     } else {
         theme
             .get("on_error")
             .and_then(|v| v.as_str())
             .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
             .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#ffffff"))?  // Light text on dark error
+            .unwrap_or_else(|| create_color_format("#ffffff"))? // Light text on dark error
     };
 
-    let error_container_hct = color::Hct::from_hct(error_hct.h, 30.0, if is_dark_mode { 30.0 } else { 95.0 });
+    let error_container_hct =
+        color::Hct::from_hct(error_hct.h, 30.0, if is_dark_mode { 30.0 } else { 95.0 });
     let error_container = create_color_format(&error_container_hct.to_hex())?;
     let on_error_container = if is_dark_mode {
-        create_color_format("#ffdad6")?  // Light text on dark error container
+        create_color_format("#ffdad6")? // Light text on dark error container
     } else {
-        create_color_format("#410002")?  // Dark text on light error container
+        create_color_format("#410002")? // Dark text on light error container
     };
 
     // Outline colors - try to use mOutline if available
@@ -690,12 +709,14 @@ pub fn generate_palette(
         .or_else(|| theme.get("mOutline").and_then(|v| v.as_str()))
         .map(create_color_format)
         .unwrap_or_else(|| {
-            let outline_hct = color::Hct::from_hct(surface_hct.h, 10.0, if is_dark_mode { 60.0 } else { 50.0 });
+            let outline_hct =
+                color::Hct::from_hct(surface_hct.h, 10.0, if is_dark_mode { 60.0 } else { 50.0 });
             create_color_format(&outline_hct.to_hex())
         })?;
 
     let outline_variant = {
-        let outline_variant_hct = color::Hct::from_hct(surface_hct.h, 5.0, if is_dark_mode { 30.0 } else { 80.0 });
+        let outline_variant_hct =
+            color::Hct::from_hct(surface_hct.h, 5.0, if is_dark_mode { 30.0 } else { 80.0 });
         create_color_format(&outline_variant_hct.to_hex())?
     };
 
@@ -845,13 +866,25 @@ pub fn generate_palette(
 }
 
 /// Generate a harmonious color based on the source color with a hue shift
-fn generate_harmonious_color(source_hex: &str, hue_shift: f64, saturation_change: f64) -> Result<ColorFormat, String> {
+fn generate_harmonious_color(
+    source_hex: &str,
+    hue_shift: f64,
+    saturation_change: f64,
+) -> Result<ColorFormat, String> {
     let source_rgb = color::hex_to_rgb(source_hex)?;
-    let source_hsl = color::rgb_to_hsl(source_rgb.r as f64, source_rgb.g as f64, source_rgb.b as f64);
+    let source_hsl = color::rgb_to_hsl(
+        source_rgb.r as f64,
+        source_rgb.g as f64,
+        source_rgb.b as f64,
+    );
 
     // Apply hue shift (keeping within 0-360 range)
     let new_hue = (source_hsl.h + hue_shift) % 360.0;
-    let new_hue = if new_hue < 0.0 { new_hue + 360.0 } else { new_hue };
+    let new_hue = if new_hue < 0.0 {
+        new_hue + 360.0
+    } else {
+        new_hue
+    };
 
     // Apply saturation change (keeping within 0-100 range)
     let new_saturation = color::clamp(source_hsl.s + saturation_change, 0.0, 100.0);
@@ -863,7 +896,10 @@ fn generate_harmonious_color(source_hex: &str, hue_shift: f64, saturation_change
 }
 
 /// Generate a color with appropriate contrast based on the background
-fn generate_contrast_color(background_hex: &str, is_dark_mode: bool) -> Result<ColorFormat, String> {
+fn generate_contrast_color(
+    background_hex: &str,
+    is_dark_mode: bool,
+) -> Result<ColorFormat, String> {
     let luminance = color::get_luminance(background_hex)?;
 
     // For dark mode, if background is dark, use light text; if background is light, use dark text
@@ -892,7 +928,11 @@ fn generate_contrast_color(background_hex: &str, is_dark_mode: bool) -> Result<C
 /// Generate a container color based on the source color and theme
 fn generate_container_color(source_hex: &str, is_dark_mode: bool) -> Result<String, String> {
     let source_rgb = color::hex_to_rgb(source_hex)?;
-    let source_hsl = color::rgb_to_hsl(source_rgb.r as f64, source_rgb.g as f64, source_rgb.b as f64);
+    let source_hsl = color::rgb_to_hsl(
+        source_rgb.r as f64,
+        source_rgb.g as f64,
+        source_rgb.b as f64,
+    );
 
     // Container colors are typically more muted and darker/lighter than the source
     let new_lightness = if is_dark_mode {
@@ -902,7 +942,11 @@ fn generate_container_color(source_hex: &str, is_dark_mode: bool) -> Result<Stri
     };
 
     let new_rgb = color::hsl_to_rgb(source_hsl.h, source_hsl.s, new_lightness);
-    Ok(color::rgb_to_hex(new_rgb.r as f64, new_rgb.g as f64, new_rgb.b as f64))
+    Ok(color::rgb_to_hex(
+        new_rgb.r as f64,
+        new_rgb.g as f64,
+        new_rgb.b as f64,
+    ))
 }
 
 /// Adjust the lightness of a color by a given amount

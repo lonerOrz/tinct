@@ -107,13 +107,16 @@ fn test_theme_functions() {
     let secondary = "#607D8B";
     let background = "#121212";
 
-    let theme_content = format!(r#"{{
+    let theme_content = format!(
+        r#"{{
         "dark": {{
             "primary": "{}",
             "secondary": "{}",
             "background": "{}"
         }}
-    }}"#, primary, secondary, background);
+    }}"#,
+        primary, secondary, background
+    );
 
     std::fs::write(&theme_path, theme_content).expect("Unable to write theme file");
 
@@ -144,7 +147,8 @@ fn test_load_theme() {
     let light_primary = "#E91E63";
     let light_secondary = "#00BCD4";
 
-    let theme_content = format!(r#"{{
+    let theme_content = format!(
+        r#"{{
         "dark": {{
             "primary": "{}",
             "secondary": "{}"
@@ -153,7 +157,9 @@ fn test_load_theme() {
             "primary": "{}",
             "secondary": "{}"
         }}
-    }}"#, primary, secondary, light_primary, light_secondary);
+    }}"#,
+        primary, secondary, light_primary, light_secondary
+    );
 
     std::fs::write(&theme_path, theme_content).expect("Unable to write theme file");
 

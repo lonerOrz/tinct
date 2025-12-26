@@ -228,9 +228,9 @@ pub fn adjust_lightness_and_saturation(hexcolor: &str, la: f64, sa: f64) -> Resu
 /// Represents a color in the HCT (Hue-Chroma-Tone) color space
 #[derive(Debug, Clone)]
 pub struct Hct {
-    pub h: f64,  // Hue (0-360)
-    pub c: f64,  // Chroma (0-100+)
-    pub t: f64,  // Tone (0-100, equivalent to L* in L*a*b*)
+    pub h: f64, // Hue (0-360)
+    pub c: f64, // Chroma (0-100+)
+    pub t: f64, // Tone (0-100, equivalent to L* in L*a*b*)
 }
 
 impl Hct {

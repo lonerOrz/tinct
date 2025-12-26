@@ -3,12 +3,12 @@ use std::fs;
 use std::path::Path;
 use std::process;
 
+mod cli;
 mod color;
 mod config;
-mod theme;
-mod cli;
 mod log;
 mod preview;
+mod theme;
 
 use clap::Parser;
 use colored::*;
@@ -25,7 +25,10 @@ fn main() {
     });
 
     // Print basic info in a clean format
-    if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
+    if matches!(
+        args.log_level,
+        cli::LogLevel::Normal | cli::LogLevel::Verbose
+    ) {
         println!("{}", "tinct - Theme Injector".bold());
         println!("{}: {}", "Config".blue(), args.config);
         println!("{}: {}", "Theme".blue(), args.theme);
@@ -121,13 +124,22 @@ fn main() {
                 continue;
             }
 
-            let result = cli::process_section(section_name, section, &theme_file, &mode_str, args.log_level.clone());
+            let result = cli::process_section(
+                section_name,
+                section,
+                &theme_file,
+                &mode_str,
+                args.log_level.clone(),
+            );
 
             if result {
                 success_count += 1;
             }
 
-            if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
+            if matches!(
+                args.log_level,
+                cli::LogLevel::Normal | cli::LogLevel::Verbose
+            ) {
                 if result {
                     crate::log::info::processed_successfully(section_name);
                 } else {
@@ -137,7 +149,10 @@ fn main() {
         }
     }
 
-    if matches!(args.log_level, cli::LogLevel::Normal | cli::LogLevel::Verbose) {
+    if matches!(
+        args.log_level,
+        cli::LogLevel::Normal | cli::LogLevel::Verbose
+    ) {
         println!();
         crate::log::general::summary(success_count, total_count);
     }

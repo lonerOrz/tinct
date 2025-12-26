@@ -34,7 +34,10 @@ pub fn resolve_path_to_abs(path: &str, base_dir: &str) -> Option<String> {
                 .ok()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| {
-                    Path::new(base_dir).join(&expanded).to_string_lossy().to_string()
+                    Path::new(base_dir)
+                        .join(&expanded)
+                        .to_string_lossy()
+                        .to_string()
                 }),
         );
     }

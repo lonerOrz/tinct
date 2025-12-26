@@ -117,7 +117,12 @@ pub fn resolve_path(
 }
 
 // Hook execution functions
-pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>, _log_level: LogLevel) -> bool {
+pub fn run_post_hook(
+    post_hook: &str,
+    output_file: &str,
+    section_name: Option<&str>,
+    _log_level: LogLevel,
+) -> bool {
     if post_hook.is_empty() {
         return true;
     }
@@ -151,14 +156,23 @@ pub fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&s
                 }
                 Err(e) => {
                     if let Some(name) = section_name {
-                        crate::log::error::message(name, &format!("Error executing hook script: {}", e));
+                        crate::log::error::message(
+                            name,
+                            &format!("Error executing hook script: {}", e),
+                        );
                     }
                     false
                 }
             }
         } else {
             if let Some(name) = section_name {
-                crate::log::error::message(name, &format!("post_hook '{}' not found. Skipping.", post_hook_path.display()));
+                crate::log::error::message(
+                    name,
+                    &format!(
+                        "post_hook '{}' not found. Skipping.",
+                        post_hook_path.display()
+                    ),
+                );
             }
             false
         }
@@ -272,7 +286,7 @@ pub fn process_section(
             if !post_hook.is_empty() {
                 run_post_hook(post_hook, output_path, Some(section_name), _log_level)
             } else {
-                true  // No hook to run, so consider it successful
+                true // No hook to run, so consider it successful
             }
         }
         Err(e) => {
