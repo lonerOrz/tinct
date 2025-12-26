@@ -10,19 +10,19 @@ use crate::theme;
 #[command(version, about, long_about = None)]
 pub struct CliArgs {
     /// Path to the TOML config file
-    #[arg(long)]
+    #[arg(short, long)]
     pub config: Option<String>,
 
     /// Path to theme.json file or theme name in themes/ folder
-    #[arg(long, required = true)]
+    #[arg(short, long, required = true)]
     pub theme: String,
 
     /// Theme mode override
-    #[arg(long, value_enum, default_value = "dark")]
+    #[arg(short, long, value_enum, default_value = "dark")]
     pub mode: ThemeMode,
 
     /// Show color preview instead of processing templates
-    #[arg(long)]
+    #[arg(short, long)]
     pub preview: bool,
 
     /// Logging level: quiet, normal, verbose
