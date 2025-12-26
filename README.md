@@ -2,6 +2,8 @@
 
 A theme injector tool that applies Material Design 3 color palettes to various configuration files.
 
+![Preview](Assets/preview.png)
+
 ## Description
 
 tinct is a command-line utility that generates themed configuration files based on Material Design 3 color specifications. It reads color themes from JSON files and injects the appropriate color values into template files, producing themed output files for various applications.
