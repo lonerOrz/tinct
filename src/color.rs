@@ -221,6 +221,61 @@ pub fn adjust_lightness_and_saturation(hexcolor: &str, la: f64, sa: f64) -> Resu
     ))
 }
 
+// HCT (Hue-Chroma-Tone) color space implementation for Material Design 3
+// Note: This is a simplified implementation based on the concepts
+// A full HCT implementation would require CAM16 color space conversion
+
+/// Represents a color in the HCT (Hue-Chroma-Tone) color space
+#[derive(Debug, Clone)]
+pub struct Hct {
+    pub h: f64,  // Hue (0-360)
+    pub c: f64,  // Chroma (0-100+)
+    pub t: f64,  // Tone (0-100, equivalent to L* in L*a*b*)
+}
+
+impl Hct {
+    /// Create an HCT color from hue, chroma, and tone values
+    pub fn from_hct(h: f64, c: f64, t: f64) -> Self {
+        Self {
+            h: clamp(h, 0.0, 360.0),
+            c: clamp(c, 0.0, 200.0), // Chroma can go higher than 100
+            t: clamp(t, 0.0, 100.0),
+        }
+    }
+
+    /// Convert HCT to RGB
+    pub fn to_rgb(&self) -> Rgb {
+        // This is a simplified conversion
+        // A full implementation would require CAM16 conversion
+        // For now, we'll convert HCT to HSL then to RGB as an approximation
+        // Using a more accurate mapping from chroma to saturation
+        let hsl = Hsl {
+            h: self.h,
+            s: clamp(self.c * 0.8, 0.0, 100.0), // Better mapping from chroma to saturation
+            l: self.t,
+        };
+        hsl_to_rgb(hsl.h, hsl.s, hsl.l)
+    }
+
+    /// Convert HCT to HEX
+    pub fn to_hex(&self) -> String {
+        let rgb = self.to_rgb();
+        rgb_to_hex(rgb.r as f64, rgb.g as f64, rgb.b as f64)
+    }
+}
+
+/// Generate HCT color from RGB
+pub fn rgb_to_hct(r: u8, g: u8, b: u8) -> Hct {
+    // This is a simplified conversion
+    // A full implementation would require CAM16 conversion
+    let hsl = rgb_to_hsl(r as f64, g as f64, b as f64);
+    Hct {
+        h: hsl.h,
+        c: clamp(hsl.s * 1.2, 0.0, 150.0), // Increase the chroma to compensate for the conversion loss
+        t: hsl.l,
+    }
+}
+
 /// Generate appropriate text color for a given background
 #[allow(dead_code)]
 pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
