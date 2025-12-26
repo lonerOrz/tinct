@@ -2,6 +2,14 @@
 name = "tinct"
 version = "0.1.0"
 edition = "2021"
+authors = ["lonerOrz <lonerOrz@qq.com>"]
+description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files"
+homepage = "https://github.com/lonerOrz/tinct"
+repository = "https://github.com/lonerOrz/tinct"
+license = "BSD-3-Clause"
+keywords = ["theme", "material-design", "color", "terminal", "configuration"]
+categories = ["command-line-utilities", "visualization", "graphics"]
+readme = "README.md"
 
 [lib]
 name = "tinct"
