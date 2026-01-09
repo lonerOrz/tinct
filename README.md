@@ -82,6 +82,129 @@ Options:
 - `-p, --preview`: Show color preview instead of processing templates
 - `--log-level`: Logging level (quiet/normal/verbose, defaults to normal)
 
+## Template Color Format
+
+In tinct's template files, you can use the following color formats to reference colors from your theme.
+
+### Color Roles
+
+Available color roles include:
+
+- `primary` - Primary brand color
+- `on_primary` - Text/icon color that appears on top of primary
+- `primary_container` - Container color matching the primary
+- `on_primary_container` - Text/icon color that appears on top of primary container
+- `secondary` - Secondary brand color
+- `on_secondary` - Text/icon color that appears on top of secondary
+- `secondary_container` - Container color matching the secondary
+- `on_secondary_container` - Text/icon color that appears on top of secondary container
+- `tertiary` - Tertiary brand color
+- `on_tertiary` - Text/icon color that appears on top of tertiary
+- `tertiary_container` - Container color matching the tertiary
+- `on_tertiary_container` - Text/icon color that appears on top of tertiary container
+- `error` - Error state color
+- `on_error` - Text/icon color that appears on top of error
+- `error_container` - Container color matching the error
+- `on_error_container` - Text/icon color that appears on top of error container
+- `background` - Background color
+- `on_background` - Text/icon color that appears on top of background
+- `surface` - Surface color
+- `on_surface` - Text/icon color that appears on top of surface
+- `surface_variant` - Variant surface color
+- `on_surface_variant` - Text/icon color that appears on top of surface variant
+- `surface_container_lowest` - Lowest level surface container
+- `surface_container_low` - Low level surface container
+- `surface_container` - Standard surface container
+- `surface_container_high` - High level surface container
+- `surface_container_highest` - Highest level surface container
+- `inverse_surface` - Inverse surface color
+- `inverse_on_surface` - Text/icon color for inverse surface
+- `inverse_primary` - Inverse primary color
+- `surface_dim` - Dimmed surface color
+- `surface_bright` - Bright surface color
+- `outline` - Outline/border color
+- `outline_variant` - Variant outline color
+- `shadow` - Shadow color
+- `scrim` - Scrim overlay color
+
+### Color Format Attributes
+
+For each color role, you can use the following format attributes:
+
+| Attribute | Example Placeholder | Output Example |
+|-----------|---------------------|----------------|
+| Hex complete | `{{colors.primary.default.hex}}` | `#ff5722` |
+| Hex stripped | `{{colors.primary.default.hex_stripped}}` | `ff5722` |
+| RGB | `{{colors.primary.default.rgb}}` | `rgb(255, 87, 34)` |
+| RGBA | `{{colors.primary.default.rgba}}` | `rgba(255, 87, 34, 255)` |
+| Red | `{{colors.primary.default.red}}` | `255` |
+| Green | `{{colors.primary.default.green}}` | `87` |
+| Blue | `{{colors.primary.default.blue}}` | `34` |
+| Alpha | `{{colors.primary.default.alpha}}` | `255` |
+| HSL | `{{colors.primary.default.hsl}}` | `hsl(14, 100%, 57%)` |
+| HSLA | `{{colors.primary.default.hsla}}` | `hsla(14, 100%, 57%, 1.0)` |
+| Hue | `{{colors.primary.default.hue}}` | `14` |
+| Saturation | `{{colors.primary.default.saturation}}` | `100` |
+| Lightness | `{{colors.primary.default.lightness}}` | `57` |
+
+**Note:** If you want to use transparency in `rgba()`, you need to reference the `.red`, `.green`, `.blue` components separately, otherwise it will generate invalid CSS.
+
+### Mode-related Placeholders
+
+- `{{mode}}` → `"dark"` or `"light"`
+- `{{is_dark}}` → `"true"` or `"false"`
+- `{{is_light}}` → `"true"` or `"false"`
+
+### Usage Examples
+
+* **Hex Colors**
+```css
+.primary-button {
+    background-color: {{colors.primary.default.hex}};
+    color: {{colors.on_primary.default.hex}};
+}
+```
+
+* **RGB Colors**
+```css
+.surface-background {
+    background-color: {{colors.surface.default.rgb}};
+    border: 1px solid {{colors.outline.default.hex}};
+}
+```
+
+* **RGBA Colors (with components)**
+```css
+.semi-transparent-overlay {
+    background-color: rgba({{colors.surface.default.red}}, {{colors.surface.default.green}}, {{colors.surface.default.blue}}, 0.8);
+}
+```
+
+* **HSL Colors**
+```css
+.accent-element {
+    background-color: {{colors.tertiary.default.hsl}};
+}
+```
+
+* **Stripped Hex**
+```css
+.styled-border {
+    border-color: #{{colors.outline.default.hex_stripped}};
+}
+```
+
+* **Conditional Styling**
+```css
+@media (prefers-color-scheme: {{mode}}) {
+    body {
+        background-color: {{colors.background.default.hex}};
+    }
+}
+```
+
+These formats allow you to flexibly use various color representations in your templates to accommodate the requirements of different application configuration files.
+
 ## License
 
 BSD 3-Clause License
