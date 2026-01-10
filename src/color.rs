@@ -22,9 +22,9 @@ pub fn clamp(n: f64, minn: f64, maxn: f64) -> f64 {
 /// Convert HEX color to RGB values
 pub fn hex_to_rgb(hex_color: &str) -> Result<Rgb, String> {
     let hex = hex_color.trim_start_matches('#');
-    if hex.len() != 6 {
+    if hex.len() != 6 && hex.len() != 8 {
         return Err(format!(
-            "Invalid hex color format: {}. Expected 6 characters.",
+            "Invalid hex color format: {}. Expected 6 or 8 characters.",
             hex
         ));
     }

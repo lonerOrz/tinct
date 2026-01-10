@@ -64,6 +64,25 @@ fn display_md3_cards_grid(palette: &crate::theme::Palette) {
             ("Error Container", &palette.error_container.default),
             ("On Error Container", &palette.on_error_container.default),
         ],
+        // Fixed Accent Cards
+        vec![
+            ("Primary Fixed", &palette.primary_fixed.default),
+            ("Primary Fixed Dim", &palette.primary_fixed_dim.default),
+            ("On Primary Fixed", &palette.on_primary_fixed.default),
+            ("On Primary Fixed Var", &palette.on_primary_fixed_variant.default),
+        ],
+        vec![
+            ("Secondary Fixed", &palette.secondary_fixed.default),
+            ("Secondary Fixed Dim", &palette.secondary_fixed_dim.default),
+            ("On Secondary Fixed", &palette.on_secondary_fixed.default),
+            ("On Secondary Fixed Var", &palette.on_secondary_fixed_variant.default),
+        ],
+        vec![
+            ("Tertiary Fixed", &palette.tertiary_fixed.default),
+            ("Tertiary Fixed Dim", &palette.tertiary_fixed_dim.default),
+            ("On Tertiary Fixed", &palette.on_tertiary_fixed.default),
+            ("On Tertiary Fixed Var", &palette.on_tertiary_fixed_variant.default),
+        ],
         // Surface card
         vec![
             ("Surface Dim", &palette.surface_dim.default),
