@@ -24,6 +24,10 @@ pub struct CliArgs {
     #[arg(short, long)]
     pub preview: bool,
 
+    /// Skip sending ANSI escape sequences to update terminal colors
+    #[arg(long)]
+    pub skip_sequences: bool,
+
     /// Logging level: quiet, normal, verbose
     #[arg(long, value_enum, default_value = "normal")]
     pub log_level: LogLevel,
@@ -51,7 +55,6 @@ pub enum LogLevel {
     Verbose,
 }
 
-// Hook execution functions
 pub fn run_post_hook(
     post_hook: &str,
     output_file: &str,
@@ -160,11 +163,9 @@ fn is_executable(path: &Path) -> bool {
 
 #[cfg(not(unix))]
 fn is_executable(_path: &Path) -> bool {
-    // On Windows, we assume files with certain extensions are executable
     true
 }
 
-// Configuration validation
 pub fn validate_config_section(section: &ConfigSection, section_name: &str) -> bool {
     let mut is_valid = true;
 
@@ -181,13 +182,13 @@ pub fn validate_config_section(section: &ConfigSection, section_name: &str) -> b
     is_valid
 }
 
-// Section processing
 pub fn process_section(
     section_name: &str,
     section: &ConfigSection,
     theme_file: &str,
     mode: &str,
     _log_level: LogLevel,
+    skip_terminal_sequences: bool,
 ) -> bool {
     let input_path = &section.input_path;
     let output_path = &section.output_path;
@@ -214,7 +215,13 @@ pub fn process_section(
     }
 
     // Process the theme
-    match tinct::process_theme_workflow(theme_file, input_path, output_path, mode) {
+    match tinct::process_theme_workflow(
+        theme_file,
+        input_path,
+        output_path,
+        mode,
+        skip_terminal_sequences,
+    ) {
         Ok(()) => {
             // Run post hook if specified
             // The section is considered successful based on the post hook result

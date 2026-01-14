@@ -48,6 +48,15 @@ pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
     format!("#{:02x}{:02x}{:02x}", r, g, b)
 }
 
+/// Convert RGB values to HEX color (uppercase)
+#[allow(dead_code)]
+pub fn rgb_to_hex_upper(r: f64, g: f64, b: f64) -> String {
+    let r = clamp(r.round(), 0.0, 255.0) as u8;
+    let g = clamp(g.round(), 0.0, 255.0) as u8;
+    let b = clamp(b.round(), 0.0, 255.0) as u8;
+    format!("#{:02X}{:02X}{:02X}", r, g, b)
+}
+
 /// Convert RGB values to HSL
 pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     let r = r / 255.0;

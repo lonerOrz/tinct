@@ -192,6 +192,7 @@ fn main() {
                 &theme_file,
                 &mode_str,
                 args.log_level.clone(),
+                args.skip_sequences,
             );
 
             if result {

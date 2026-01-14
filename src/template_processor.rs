@@ -367,7 +367,7 @@ mod tests {
         let color_format = ColorFormat {
             hex: "#FF5722".to_string(),
             hex_stripped: "FF5722".to_string(),
-            hex8: "#FF5722FF".to_string(),  // Assuming full opacity
+            hex8: "#FF5722FF".to_string(), // Assuming full opacity
             hex8_stripped: "FF5722FF".to_string(), // Assuming full opacity
             rgb: "rgb(255, 87, 34)".to_string(),
             rgba: "rgba(255, 87, 34, 255)".to_string(),
@@ -528,7 +528,56 @@ mod tests {
                 default: color_format.clone(),
             },
             scrim: ColorEntry {
-                default: color_format,
+                default: color_format.clone(),
+            },
+            // Terminal colors - using the same color format for all in tests
+            black: ColorEntry {
+                default: color_format.clone(),
+            },
+            red: ColorEntry {
+                default: color_format.clone(),
+            },
+            green: ColorEntry {
+                default: color_format.clone(),
+            },
+            yellow: ColorEntry {
+                default: color_format.clone(),
+            },
+            blue: ColorEntry {
+                default: color_format.clone(),
+            },
+            magenta: ColorEntry {
+                default: color_format.clone(),
+            },
+            cyan: ColorEntry {
+                default: color_format.clone(),
+            },
+            white: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_black: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_red: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_green: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_yellow: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_blue: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_magenta: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_cyan: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_white: ColorEntry {
+                default: color_format.clone(),
             },
         };
 
@@ -545,7 +594,7 @@ mod tests {
         let color_format = ColorFormat {
             hex: "#FF5722".to_string(),
             hex_stripped: "FF5722".to_string(),
-            hex8: "#FF5722FF".to_string(),  // Assuming full opacity
+            hex8: "#FF5722FF".to_string(), // Assuming full opacity
             hex8_stripped: "FF5722FF".to_string(), // Assuming full opacity
             rgb: "rgb(255, 87, 34)".to_string(),
             rgba: "rgba(255, 87, 34, 255)".to_string(),
@@ -706,7 +755,56 @@ mod tests {
                 default: color_format.clone(),
             },
             scrim: ColorEntry {
-                default: color_format,
+                default: color_format.clone(),
+            },
+            // Terminal colors - using the same color format for all in tests
+            black: ColorEntry {
+                default: color_format.clone(),
+            },
+            red: ColorEntry {
+                default: color_format.clone(),
+            },
+            green: ColorEntry {
+                default: color_format.clone(),
+            },
+            yellow: ColorEntry {
+                default: color_format.clone(),
+            },
+            blue: ColorEntry {
+                default: color_format.clone(),
+            },
+            magenta: ColorEntry {
+                default: color_format.clone(),
+            },
+            cyan: ColorEntry {
+                default: color_format.clone(),
+            },
+            white: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_black: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_red: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_green: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_yellow: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_blue: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_magenta: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_cyan: ColorEntry {
+                default: color_format.clone(),
+            },
+            bright_white: ColorEntry {
+                default: color_format.clone(),
             },
         };
 

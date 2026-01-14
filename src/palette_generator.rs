@@ -5,7 +5,7 @@ use serde_json::Value;
 pub struct ColorFormat {
     pub hex: String,
     pub hex_stripped: String,
-    pub hex8: String,        // 8-digit hex with alpha (#rrggbbaa)
+    pub hex8: String,          // 8-digit hex with alpha (#rrggbbaa)
     pub hex8_stripped: String, // 8-digit hex without # prefix (rrggbbaa)
     pub rgb: String,
     pub rgba: String,
@@ -14,7 +14,7 @@ pub struct ColorFormat {
     pub red: u8,
     pub green: u8,
     pub blue: u8,
-    pub alpha: f64,  // Changed from u8 (0-255) to f64 (0.0-1.0) for consistency
+    pub alpha: f64, // Changed from u8 (0-255) to f64 (0.0-1.0) for consistency
     pub hue: f64,
     pub saturation: f64,
     pub lightness: f64,
@@ -96,6 +96,24 @@ pub struct Palette {
     // Other colors
     pub shadow: ColorEntry,
     pub scrim: ColorEntry,
+
+    // Terminal colors
+    pub black: ColorEntry,
+    pub red: ColorEntry,
+    pub green: ColorEntry,
+    pub yellow: ColorEntry,
+    pub blue: ColorEntry,
+    pub magenta: ColorEntry,
+    pub cyan: ColorEntry,
+    pub white: ColorEntry,
+    pub bright_black: ColorEntry,
+    pub bright_red: ColorEntry,
+    pub bright_green: ColorEntry,
+    pub bright_yellow: ColorEntry,
+    pub bright_blue: ColorEntry,
+    pub bright_magenta: ColorEntry,
+    pub bright_cyan: ColorEntry,
+    pub bright_white: ColorEntry,
 }
 
 /// Create a color format from a hex string
@@ -111,28 +129,32 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
             .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
         let a = u8::from_str_radix(&hex_stripped[6..8], 16)
             .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
-        (color::Rgb { r, g, b }, a as f64 / 255.0)  // Convert to 0.0-1.0 range
+        (color::Rgb { r, g, b }, a as f64 / 255.0) // Convert to 0.0-1.0 range
     } else {
         // Handle 6-digit hex (RGB) or call the existing function
         let rgb = color::hex_to_rgb(hex)?;
-        (rgb, 1.0)  // Default to fully opaque (1.0)
+        (rgb, 1.0) // Default to fully opaque (1.0)
     };
 
     let hsl = color::rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
 
-    // Create 8-digit hex formats
+    // Create 8-digit hex formats with uppercase letters to match wallust behavior
     let alpha_byte = (alpha * 255.0).round() as u8;
-    let hex8 = format!("#{:02x}{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b, alpha_byte);
-    let hex8_stripped = format!("{:02x}{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b, alpha_byte);
+    let hex8 = format!("#{:02X}{:02X}{:02X}{:02X}", rgb.r, rgb.g, rgb.b, alpha_byte);
+    let hex8_stripped = format!("{:02X}{:02X}{:02X}{:02X}", rgb.r, rgb.g, rgb.b, alpha_byte);
 
     // Round the HSL values to integers for consistent formatting
     let h_int = hsl.h.round() as u32;
     let s_int = hsl.s.round() as u32;
     let l_int = hsl.l.round() as u32;
 
+    // Create uppercase hex formats to match wallust behavior
+    let hex_upper = format!("#{:02X}{:02X}{:02X}", rgb.r, rgb.g, rgb.b);
+    let hex_stripped_upper = format!("{:02X}{:02X}{:02X}", rgb.r, rgb.g, rgb.b);
+
     Ok(ColorFormat {
-        hex: hex.to_string(),
-        hex_stripped: hex_stripped.to_string(),
+        hex: hex_upper,
+        hex_stripped: hex_stripped_upper,
         hex8,
         hex8_stripped,
         rgb: format!("rgb({}, {}, {})", rgb.r, rgb.g, rgb.b),
@@ -153,7 +175,7 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
         red: rgb.r,
         green: rgb.g,
         blue: rgb.b,
-        alpha,  // Now stored as f64 in 0.0-1.0 range
+        alpha, // Now stored as f64 in 0.0-1.0 range
         hue: hsl.h,
         saturation: hsl.s,
         lightness: hsl.l,
@@ -690,132 +712,200 @@ pub fn generate_palette(
     let scrim = create_color_format(scrim_hex)?;
 
     let palette = Palette {
-        primary: ColorEntry { default: primary },
+        primary: ColorEntry {
+            default: primary.clone(),
+        },
         on_primary: ColorEntry {
-            default: on_primary,
+            default: on_primary.clone(),
         },
         primary_container: ColorEntry {
-            default: primary_container,
+            default: primary_container.clone(),
         },
         on_primary_container: ColorEntry {
-            default: on_primary_container,
+            default: on_primary_container.clone(),
         },
         primary_fixed: ColorEntry {
-            default: primary_fixed,
+            default: primary_fixed.clone(),
         },
         primary_fixed_dim: ColorEntry {
-            default: primary_fixed_dim,
+            default: primary_fixed_dim.clone(),
         },
         on_primary_fixed: ColorEntry {
-            default: on_primary_fixed,
+            default: on_primary_fixed.clone(),
         },
         on_primary_fixed_variant: ColorEntry {
-            default: on_primary_fixed_variant,
+            default: on_primary_fixed_variant.clone(),
         },
-        secondary: ColorEntry { default: secondary },
+        secondary: ColorEntry {
+            default: secondary.clone(),
+        },
         on_secondary: ColorEntry {
-            default: on_secondary,
+            default: on_secondary.clone(),
         },
         secondary_container: ColorEntry {
-            default: secondary_container,
+            default: secondary_container.clone(),
         },
         on_secondary_container: ColorEntry {
-            default: on_secondary_container,
+            default: on_secondary_container.clone(),
         },
         secondary_fixed: ColorEntry {
-            default: secondary_fixed,
+            default: secondary_fixed.clone(),
         },
         secondary_fixed_dim: ColorEntry {
-            default: secondary_fixed_dim,
+            default: secondary_fixed_dim.clone(),
         },
         on_secondary_fixed: ColorEntry {
-            default: on_secondary_fixed,
+            default: on_secondary_fixed.clone(),
         },
         on_secondary_fixed_variant: ColorEntry {
-            default: on_secondary_fixed_variant,
+            default: on_secondary_fixed_variant.clone(),
         },
-        tertiary: ColorEntry { default: tertiary },
+        tertiary: ColorEntry {
+            default: tertiary.clone(),
+        },
         on_tertiary: ColorEntry {
-            default: on_tertiary,
+            default: on_tertiary.clone(),
         },
         tertiary_container: ColorEntry {
-            default: tertiary_container,
+            default: tertiary_container.clone(),
         },
         on_tertiary_container: ColorEntry {
-            default: on_tertiary_container,
+            default: on_tertiary_container.clone(),
         },
         tertiary_fixed: ColorEntry {
-            default: tertiary_fixed,
+            default: tertiary_fixed.clone(),
         },
         tertiary_fixed_dim: ColorEntry {
-            default: tertiary_fixed_dim,
+            default: tertiary_fixed_dim.clone(),
         },
         on_tertiary_fixed: ColorEntry {
-            default: on_tertiary_fixed,
+            default: on_tertiary_fixed.clone(),
         },
         on_tertiary_fixed_variant: ColorEntry {
-            default: on_tertiary_fixed_variant,
+            default: on_tertiary_fixed_variant.clone(),
         },
-        error: ColorEntry { default: error },
-        on_error: ColorEntry { default: on_error },
+        error: ColorEntry {
+            default: error.clone(),
+        },
+        on_error: ColorEntry {
+            default: on_error.clone(),
+        },
         error_container: ColorEntry {
-            default: error_container,
+            default: error_container.clone(),
         },
         on_error_container: ColorEntry {
-            default: on_error_container,
+            default: on_error_container.clone(),
         },
         background: ColorEntry {
-            default: background,
+            default: background.clone(),
         },
         on_background: ColorEntry {
-            default: on_background,
+            default: on_background.clone(),
         },
-        surface: ColorEntry { default: surface },
+        surface: ColorEntry {
+            default: surface.clone(),
+        },
         on_surface: ColorEntry {
-            default: on_surface,
+            default: on_surface.clone(),
         },
         surface_variant: ColorEntry {
-            default: surface_variant,
+            default: surface_variant.clone(),
         },
         on_surface_variant: ColorEntry {
-            default: on_surface_variant,
+            default: on_surface_variant.clone(),
         },
         surface_container_lowest: ColorEntry {
-            default: surface_container_lowest,
+            default: surface_container_lowest.clone(),
         },
         surface_container_low: ColorEntry {
-            default: surface_container_low,
+            default: surface_container_low.clone(),
         },
         surface_container: ColorEntry {
-            default: surface_container,
+            default: surface_container.clone(),
         },
         surface_container_high: ColorEntry {
-            default: surface_container_high,
+            default: surface_container_high.clone(),
         },
         surface_container_highest: ColorEntry {
-            default: surface_container_highest,
+            default: surface_container_highest.clone(),
         },
         inverse_surface: ColorEntry {
-            default: inverse_surface,
+            default: inverse_surface.clone(),
         },
         inverse_on_surface: ColorEntry {
-            default: inverse_on_surface,
+            default: inverse_on_surface.clone(),
         },
         inverse_primary: ColorEntry {
-            default: inverse_primary,
+            default: inverse_primary.clone(),
         },
         surface_dim: ColorEntry {
-            default: surface_dim,
+            default: surface_dim.clone(),
         },
         surface_bright: ColorEntry {
-            default: surface_bright,
+            default: surface_bright.clone(),
         },
-        outline: ColorEntry { default: outline },
+        outline: ColorEntry {
+            default: outline.clone(),
+        },
         outline_variant: ColorEntry {
-            default: outline_variant,
+            default: outline_variant.clone(),
         },
-        shadow: ColorEntry { default: shadow },
-        scrim: ColorEntry { default: scrim },
+        shadow: ColorEntry {
+            default: shadow.clone(),
+        },
+        scrim: ColorEntry {
+            default: scrim.clone(),
+        },
+
+        // Terminal colors - mapping MD3 colors to terminal equivalents
+        black: ColorEntry {
+            default: surface.clone(),
+        }, // Use surface as black
+        red: ColorEntry {
+            default: error.clone(),
+        }, // Use error as red
+        green: ColorEntry {
+            default: tertiary.clone(),
+        }, // Use tertiary as green
+        yellow: ColorEntry {
+            default: primary.clone(),
+        }, // Use primary as yellow
+        blue: ColorEntry {
+            default: secondary.clone(),
+        }, // Use secondary as blue
+        magenta: ColorEntry {
+            default: primary_container.clone(),
+        }, // Use primary container as magenta
+        cyan: ColorEntry {
+            default: secondary_container.clone(),
+        }, // Use secondary container as cyan
+        white: ColorEntry {
+            default: on_surface.clone(),
+        }, // Use on_surface as white
+        bright_black: ColorEntry {
+            default: surface_variant.clone(),
+        }, // Use surface variant as bright black
+        bright_red: ColorEntry {
+            default: error_container.clone(),
+        }, // Use error container as bright red
+        bright_green: ColorEntry {
+            default: tertiary_container.clone(),
+        }, // Use tertiary container as bright green
+        bright_yellow: ColorEntry {
+            default: primary_fixed.clone(),
+        }, // Use primary fixed as bright yellow
+        bright_blue: ColorEntry {
+            default: secondary_fixed.clone(),
+        }, // Use secondary fixed as bright blue
+        bright_magenta: ColorEntry {
+            default: primary_fixed_dim.clone(),
+        }, // Use primary fixed dim as bright magenta
+        bright_cyan: ColorEntry {
+            default: secondary_fixed_dim.clone(),
+        }, // Use secondary fixed dim as bright cyan
+        bright_white: ColorEntry {
+            default: inverse_surface.clone(),
+        }, // Use inverse surface as bright white
     };
 
     if crate::log::is_verbose() {

@@ -26,6 +26,7 @@ pub fn init_logger(level: LogLevel) {
     LOGGER.get_or_init(|| Logger::new(level));
 }
 
+#[allow(dead_code)]
 pub fn is_verbose() -> bool {
     if let Some(logger) = LOGGER.get() {
         logger.level == LogLevel::Verbose
