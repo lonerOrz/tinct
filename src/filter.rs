@@ -198,37 +198,14 @@ impl Filter for SetAlphaFilter {
                 }
                 ColorFormatType::Hsla => {
                     // Original was hsla, modify the alpha
-                    if ctx.original_value.starts_with("hsla(") {
-                        if let Some(hsl_part) = ctx
-                            .original_value
-                            .strip_prefix("hsla(")
-                            .unwrap_or(&ctx.original_value)
-                            .strip_suffix(')')
-                        {
-                            let parts: Vec<&str> = hsl_part.split(',').map(|s| s.trim()).collect();
-                            if parts.len() >= 4 {
-                                return format!(
-                                    "hsla({}, {}, {}, {:.1})",
-                                    parts[0].trim(),
-                                    parts[1].trim(),
-                                    parts[2].trim(),
-                                    alpha_val
-                                );
-                            }
-                        }
-                    }
-                    // Fallback to hsla with the current color
-                    let hsl = crate::color::rgb_to_hsl(
-                        ctx.color_format.red as f64,
-                        ctx.color_format.green as f64,
-                        ctx.color_format.blue as f64,
-                    );
+                    // Use the original HSL values stored in the color format to maintain consistency
+                    let h = ctx.color_format.original_hue.unwrap_or(ctx.color_format.hue.round() as u32);
+                    let s = ctx.color_format.original_saturation.unwrap_or(ctx.color_format.saturation.round() as u32);
+                    let l = ctx.color_format.original_lightness.unwrap_or(ctx.color_format.lightness.round() as u32);
+
                     format!(
                         "hsla({}, {}%, {}%, {:.1})",
-                        hsl.h,
-                        hsl.s,
-                        hsl.l,
-                        alpha_val
+                        h, s, l, alpha_val
                     )
                 }
                 ColorFormatType::Rgb => {
@@ -243,17 +220,14 @@ impl Filter for SetAlphaFilter {
                 }
                 ColorFormatType::Hsl => {
                     // Original was hsl, convert to hsla with new alpha
-                    let hsl = crate::color::rgb_to_hsl(
-                        ctx.color_format.red as f64,
-                        ctx.color_format.green as f64,
-                        ctx.color_format.blue as f64,
-                    );
+                    // Use the original HSL values stored in the color format to maintain consistency
+                    let h = ctx.color_format.original_hue.unwrap_or(ctx.color_format.hue.round() as u32);
+                    let s = ctx.color_format.original_saturation.unwrap_or(ctx.color_format.saturation.round() as u32);
+                    let l = ctx.color_format.original_lightness.unwrap_or(ctx.color_format.lightness.round() as u32);
+
                     format!(
                         "hsla({}, {}%, {}%, {:.1})",
-                        hsl.h,
-                        hsl.s,
-                        hsl.l,
-                        alpha_val
+                        h, s, l, alpha_val
                     )
                 }
                 ColorFormatType::Hex => {
@@ -267,6 +241,24 @@ impl Filter for SetAlphaFilter {
                 }
                 ColorFormatType::HexStripped => {
                     // For hex_stripped format, convert to 8-digit hex without # prefix
+                    let alpha_byte = (alpha_val * 255.0).round() as u8;
+                    format!("{:02x}{:02x}{:02x}{:02x}",
+                           ctx.color_format.red,
+                           ctx.color_format.green,
+                           ctx.color_format.blue,
+                           alpha_byte)
+                }
+                ColorFormatType::Hex8 => {
+                    // For hex8 format, modify the alpha part
+                    let alpha_byte = (alpha_val * 255.0).round() as u8;
+                    format!("#{:02x}{:02x}{:02x}{:02x}",
+                           ctx.color_format.red,
+                           ctx.color_format.green,
+                           ctx.color_format.blue,
+                           alpha_byte)
+                }
+                ColorFormatType::Hex8Stripped => {
+                    // For hex8_stripped format, modify the alpha part
                     let alpha_byte = (alpha_val * 255.0).round() as u8;
                     format!("{:02x}{:02x}{:02x}{:02x}",
                            ctx.color_format.red,
@@ -320,13 +312,18 @@ impl Filter for LightenFilter {
                         format!("rgba({}, {}, {}, {:.1})", new_rgb.r, new_rgb.g, new_rgb.b, ctx.color_format.alpha)
                     } // Keep alpha value but update RGB
                     ColorFormatType::Hsl => {
-                        format!("hsl({}, {}%, {}%)", hsl.h, hsl.s, new_lightness)
+                        // Use original hue and saturation values for consistency, but updated lightness
+                        let h = ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32);
+                        let s = ctx.color_format.original_saturation.unwrap_or(hsl.s.round() as u32);
+                        let l = new_lightness.round() as u32;
+
+                        format!("hsl({}, {}%, {}%)", h, s, l)
                     }
                     ColorFormatType::Hsla => format!(
                         "hsla({}, {}%, {}%, {:.1})",
-                        hsl.h,
-                        hsl.s,
-                        new_lightness,
+                        ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32),  // Use original hue for consistency
+                        ctx.color_format.original_saturation.unwrap_or(hsl.s.round() as u32),  // Use original saturation for consistency
+                        new_lightness.round() as u32,  // Updated lightness
                         ctx.color_format.alpha
                     ),
                     ColorFormatType::Hex => crate::color::rgb_to_hex(
@@ -342,6 +339,18 @@ impl Filter for LightenFilter {
                             new_rgb.b as f64,
                         );
                         hex.strip_prefix('#').unwrap_or(&hex).to_string()
+                    },
+                    ColorFormatType::Hex8 => {
+                        // Convert to hex8 format with alpha preserved
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("#{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
+                    ColorFormatType::Hex8Stripped => {
+                        // Convert to hex8 format without # prefix
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
                     },
                     _ => ctx.original_value.clone(),
                 }
@@ -380,23 +389,49 @@ impl Filter for DarkenFilter {
                         format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
                     }
                     ColorFormatType::Rgba => {
-                        format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
-                    } // Keep as rgb since alpha stays the same
+                        format!("rgba({}, {}, {}, {:.1})", new_rgb.r, new_rgb.g, new_rgb.b, ctx.color_format.alpha)
+                    } // Keep alpha value but update RGB
                     ColorFormatType::Hsl => {
-                        format!("hsl({}, {}%, {}%)", hsl.h, hsl.s, new_lightness)
+                        // Use original hue and saturation values for consistency, but updated lightness
+                        let h = ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32);
+                        let s = ctx.color_format.original_saturation.unwrap_or(hsl.s.round() as u32);
+                        let l = new_lightness.round() as u32;
+
+                        format!("hsl({}, {}%, {}%)", h, s, l)
                     }
                     ColorFormatType::Hsla => format!(
-                        "hsla({}, {}%, {}%, {})",
-                        hsl.h,
-                        hsl.s,
-                        new_lightness,
-                        ctx.color_format.alpha as f64 / 255.0
+                        "hsla({}, {}%, {}%, {:.1})",
+                        ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32),  // Use original hue for consistency
+                        ctx.color_format.original_saturation.unwrap_or(hsl.s.round() as u32),  // Use original saturation for consistency
+                        new_lightness.round() as u32,  // Updated lightness
+                        ctx.color_format.alpha
                     ),
                     ColorFormatType::Hex => crate::color::rgb_to_hex(
                         new_rgb.r as f64,
                         new_rgb.g as f64,
                         new_rgb.b as f64,
                     ),
+                    ColorFormatType::HexStripped => {
+                        // Return hex without the '#' prefix
+                        let hex = crate::color::rgb_to_hex(
+                            new_rgb.r as f64,
+                            new_rgb.g as f64,
+                            new_rgb.b as f64,
+                        );
+                        hex.strip_prefix('#').unwrap_or(&hex).to_string()
+                    },
+                    ColorFormatType::Hex8 => {
+                        // Convert to hex8 format with alpha preserved
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("#{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
+                    ColorFormatType::Hex8Stripped => {
+                        // Convert to hex8 format without # prefix
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
                     _ => ctx.original_value.clone(),
                 }
             } else {
@@ -434,23 +469,49 @@ impl Filter for SaturateFilter {
                         format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
                     }
                     ColorFormatType::Rgba => {
-                        format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
-                    } // Keep as rgb since alpha stays the same
+                        format!("rgba({}, {}, {}, {:.1})", new_rgb.r, new_rgb.g, new_rgb.b, ctx.color_format.alpha)
+                    } // Keep alpha value but update RGB
                     ColorFormatType::Hsl => {
-                        format!("hsl({}, {}%, {}%)", hsl.h, new_saturation, hsl.l)
+                        // Use original hue and lightness values for consistency, but updated saturation
+                        let h = ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32);
+                        let s = new_saturation.round() as u32;
+                        let l = ctx.color_format.original_lightness.unwrap_or(hsl.l.round() as u32);
+
+                        format!("hsl({}, {}%, {}%)", h, s, l)
                     }
                     ColorFormatType::Hsla => format!(
-                        "hsla({}, {}%, {}%, {})",
-                        hsl.h,
-                        new_saturation,
-                        hsl.l,
-                        ctx.color_format.alpha as f64 / 255.0
+                        "hsla({}, {}%, {}%, {:.1})",
+                        ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32),  // Use original hue for consistency
+                        new_saturation.round() as u32,  // Updated saturation
+                        ctx.color_format.original_lightness.unwrap_or(hsl.l.round() as u32),  // Use original lightness for consistency
+                        ctx.color_format.alpha
                     ),
                     ColorFormatType::Hex => crate::color::rgb_to_hex(
                         new_rgb.r as f64,
                         new_rgb.g as f64,
                         new_rgb.b as f64,
                     ),
+                    ColorFormatType::HexStripped => {
+                        // Return hex without the '#' prefix
+                        let hex = crate::color::rgb_to_hex(
+                            new_rgb.r as f64,
+                            new_rgb.g as f64,
+                            new_rgb.b as f64,
+                        );
+                        hex.strip_prefix('#').unwrap_or(&hex).to_string()
+                    },
+                    ColorFormatType::Hex8 => {
+                        // Convert to hex8 format with alpha preserved
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("#{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
+                    ColorFormatType::Hex8Stripped => {
+                        // Convert to hex8 format without # prefix
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
                     _ => ctx.original_value.clone(),
                 }
             } else {
@@ -488,23 +549,49 @@ impl Filter for DesaturateFilter {
                         format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
                     }
                     ColorFormatType::Rgba => {
-                        format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
-                    } // Keep as rgb since alpha stays the same
+                        format!("rgba({}, {}, {}, {:.1})", new_rgb.r, new_rgb.g, new_rgb.b, ctx.color_format.alpha)
+                    } // Keep alpha value but update RGB
                     ColorFormatType::Hsl => {
-                        format!("hsl({}, {}%, {}%)", hsl.h, new_saturation, hsl.l)
+                        // Use original hue and lightness values for consistency, but updated saturation
+                        let h = ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32);
+                        let s = new_saturation.round() as u32;
+                        let l = ctx.color_format.original_lightness.unwrap_or(hsl.l.round() as u32);
+
+                        format!("hsl({}, {}%, {}%)", h, s, l)
                     }
                     ColorFormatType::Hsla => format!(
-                        "hsla({}, {}%, {}%, {})",
-                        hsl.h,
-                        new_saturation,
-                        hsl.l,
-                        ctx.color_format.alpha as f64 / 255.0
+                        "hsla({}, {}%, {}%, {:.1})",
+                        ctx.color_format.original_hue.unwrap_or(hsl.h.round() as u32),  // Use original hue for consistency
+                        new_saturation.round() as u32,  // Updated saturation
+                        ctx.color_format.original_lightness.unwrap_or(hsl.l.round() as u32),  // Use original lightness for consistency
+                        ctx.color_format.alpha
                     ),
                     ColorFormatType::Hex => crate::color::rgb_to_hex(
                         new_rgb.r as f64,
                         new_rgb.g as f64,
                         new_rgb.b as f64,
                     ),
+                    ColorFormatType::HexStripped => {
+                        // Return hex without the '#' prefix
+                        let hex = crate::color::rgb_to_hex(
+                            new_rgb.r as f64,
+                            new_rgb.g as f64,
+                            new_rgb.b as f64,
+                        );
+                        hex.strip_prefix('#').unwrap_or(&hex).to_string()
+                    },
+                    ColorFormatType::Hex8 => {
+                        // Convert to hex8 format with alpha preserved
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("#{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
+                    ColorFormatType::Hex8Stripped => {
+                        // Convert to hex8 format without # prefix
+                        let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
+                        format!("{:02x}{:02x}{:02x}{:02x}",
+                               new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte)
+                    },
                     _ => ctx.original_value.clone(),
                 }
             } else {
@@ -545,6 +632,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
         // Test with rgba value
@@ -603,6 +693,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
         // Test with invalid alpha value (should return original value)
@@ -651,6 +744,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
         // Test that channel formats (like red) are not affected by color filters
@@ -689,6 +785,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
         let result = registry.apply_filter(

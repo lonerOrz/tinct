@@ -302,6 +302,9 @@ fn process_filters(
                         hue: 0.0,
                         saturation: 0.0,
                         lightness: 0.0,
+                        original_hue: Some(0),
+                        original_saturation: Some(0),
+                        original_lightness: Some(0),
                     },
                     format_type,
                 )
@@ -327,6 +330,9 @@ fn process_filters(
                         hue: 0.0,
                         saturation: 0.0,
                         lightness: 0.0,
+                        original_hue: Some(0),
+                        original_saturation: Some(0),
+                        original_lightness: Some(0),
                     },
                     crate::filter::ColorFormatType::Hex,
                 )
@@ -374,6 +380,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
         let palette = Palette {
@@ -549,6 +558,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
         let palette = Palette {

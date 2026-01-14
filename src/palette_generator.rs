@@ -18,6 +18,10 @@ pub struct ColorFormat {
     pub hue: f64,
     pub saturation: f64,
     pub lightness: f64,
+    // Store the original HSL values as they appeared in the source (for consistent formatting)
+    pub original_hue: Option<u32>,
+    pub original_saturation: Option<u32>,
+    pub original_lightness: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -121,6 +125,11 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
     let hex8 = format!("#{:02x}{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b, alpha_byte);
     let hex8_stripped = format!("{:02x}{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b, alpha_byte);
 
+    // Round the HSL values to integers for consistent formatting
+    let h_int = hsl.h.round() as u32;
+    let s_int = hsl.s.round() as u32;
+    let l_int = hsl.l.round() as u32;
+
     Ok(ColorFormat {
         hex: hex.to_string(),
         hex_stripped: hex_stripped.to_string(),
@@ -130,15 +139,15 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
         rgba: format!("rgba({}, {}, {}, {:.1})", rgb.r, rgb.g, rgb.b, alpha),
         hsl: format!(
             "hsl({}, {}%, {}%)",
-            (hsl.h as u32) % 360,
-            (hsl.s as u32).min(100),
-            (hsl.l as u32).min(100)
+            h_int % 360,
+            s_int.min(100),
+            l_int.min(100)
         ),
         hsla: format!(
             "hsla({}, {}%, {}%, {:.1})",
-            (hsl.h as u32) % 360,
-            (hsl.s as u32).min(100),
-            (hsl.l as u32).min(100),
+            h_int % 360,
+            s_int.min(100),
+            l_int.min(100),
             alpha
         ),
         red: rgb.r,
@@ -148,6 +157,10 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
         hue: hsl.h,
         saturation: hsl.s,
         lightness: hsl.l,
+        // Store original HSL values for consistent formatting
+        original_hue: Some(h_int),
+        original_saturation: Some(s_int),
+        original_lightness: Some(l_int),
     })
 }
 

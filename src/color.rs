@@ -87,6 +87,11 @@ pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     }
 }
 
+/// Format HSL values consistently for output
+pub fn format_hsl(h: f64, s: f64, l: f64) -> (u32, u32, u32) {
+    (h.round() as u32, s.round() as u32, l.round() as u32)
+}
+
 /// Convert HSL values to RGB
 #[allow(dead_code)]
 pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
