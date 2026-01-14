@@ -564,6 +564,101 @@ mod tests {
         };
         let result = filter.apply(&ctx, Some("0.5"));
         assert!(result.contains("rgba(255, 87, 34, 0.")); // Check for approximate match due to float precision
+
+        // Test with hex value
+        let ctx = FilterContext {
+            original_value: "#FF5722".to_string(),
+            format_type: ColorFormatType::Hex,
+            color_format: color_format.clone(),
+        };
+        let result = filter.apply(&ctx, Some("0.3"));
+        assert!(result.contains("#ff5722")); // Hex8 format with alpha
+
+        // Test with hex_stripped value
+        let ctx = FilterContext {
+            original_value: "FF5722".to_string(),
+            format_type: ColorFormatType::HexStripped,
+            color_format: color_format.clone(),
+        };
+        let result = filter.apply(&ctx, Some("0.7"));
+        assert!(result.contains("ff5722")); // Hex8 stripped format with alpha
+    }
+
+    #[test]
+    fn test_invalid_alpha_values() {
+        let filter = SetAlphaFilter;
+        let color_format = ColorFormat {
+            hex: "#FF5722".to_string(),
+            hex_stripped: "FF5722".to_string(),
+            hex8: "#FF5722FF".to_string(),
+            hex8_stripped: "FF5722FF".to_string(),
+            rgb: "rgb(255, 87, 34)".to_string(),
+            rgba: "rgba(255, 87, 34, 255)".to_string(),
+            hsl: "hsl(14, 100%, 57%)".to_string(),
+            hsla: "hsla(14, 100%, 57%, 1.0)".to_string(),
+            red: 255,
+            green: 87,
+            blue: 34,
+            alpha: 1.0,
+            hue: 14.0,
+            saturation: 100.0,
+            lightness: 57.0,
+        };
+
+        // Test with invalid alpha value (should return original value)
+        let ctx = FilterContext {
+            original_value: "rgba(255, 87, 34, 255)".to_string(),
+            format_type: ColorFormatType::Rgba,
+            color_format: color_format.clone(),
+        };
+        let result = filter.apply(&ctx, Some("invalid"));
+        assert_eq!(result, "rgba(255, 87, 34, 255)"); // Should return original value
+
+        // Test with out-of-range alpha value (should clamp to valid range)
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color_format.clone(),
+        };
+        let result = filter.apply(&ctx, Some("1.5")); // Out of range (> 1.0)
+        assert!(result.contains("rgba(255, 87, 34, 1.0")); // Should clamp to 1.0
+
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color_format.clone(),
+        };
+        let result = filter.apply(&ctx, Some("-0.5")); // Out of range (< 0.0)
+        assert!(result.contains("rgba(255, 87, 34, 0.0")); // Should clamp to 0.0
+    }
+
+    #[test]
+    fn test_channel_formats_not_filtered() {
+        let registry = FilterRegistry::new();
+        let color_format = ColorFormat {
+            hex: "#FF5722".to_string(),
+            hex_stripped: "FF5722".to_string(),
+            hex8: "#FF5722FF".to_string(),
+            hex8_stripped: "FF5722FF".to_string(),
+            rgb: "rgb(255, 87, 34)".to_string(),
+            rgba: "rgba(255, 87, 34, 255)".to_string(),
+            hsl: "hsl(14, 100%, 57%)".to_string(),
+            hsla: "hsla(14, 100%, 57%, 1.0)".to_string(),
+            red: 255,
+            green: 87,
+            blue: 34,
+            alpha: 1.0,
+            hue: 14.0,
+            saturation: 100.0,
+            lightness: 57.0,
+        };
+
+        // Test that channel formats (like red) are not affected by color filters
+        let result = registry.apply_filter("255", "set_alpha", Some("0.5"), &color_format, ColorFormatType::Red);
+        assert_eq!(result, "255"); // Should return original value since Red is a channel, not a color format
+
+        let result = registry.apply_filter("14", "lighten", Some("10"), &color_format, ColorFormatType::Hue);
+        assert_eq!(result, "14"); // Should return original value since Hue is a channel, not a color format
     }
 
     #[test]
