@@ -4,7 +4,6 @@ use std::fs;
 use std::path::Path;
 
 use crate::config::ConfigSection;
-use crate::theme;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -50,70 +49,6 @@ pub enum LogLevel {
     Quiet,
     Normal,
     Verbose,
-}
-
-// Functions to resolve paths
-pub fn resolve_path(
-    path: Option<&str>,
-    default_file: Option<&str>,
-    subfolder: Option<&str>,
-) -> Option<String> {
-    let script_dir = Path::new(env!("CARGO_MANIFEST_DIR")).to_str().unwrap();
-
-    // Handle default file
-    if path.is_none() {
-        if let Some(default) = default_file {
-            return Some(
-                Path::new(script_dir)
-                    .join(default)
-                    .to_string_lossy()
-                    .to_string(),
-            );
-        } else {
-            return None;
-        }
-    }
-
-    let path_str = path.unwrap();
-
-    // Check if path contains separators, if not, look in subfolder
-    if let Some(subfolder_name) = subfolder {
-        if !path_str.contains('/') && !path_str.contains('\\') {
-            let full_path = Path::new(script_dir)
-                .join(subfolder_name)
-                .join(format!("{}.json", path_str));
-
-            if full_path.exists() {
-                return Some(full_path.to_string_lossy().to_string());
-            }
-        }
-    }
-
-    // Check if path exists as provided
-    let expanded_path = shellexpand::tilde(path_str).to_string();
-    if Path::new(&expanded_path).exists() {
-        return Some(
-            Path::new(&expanded_path)
-                .canonicalize()
-                .ok()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or(expanded_path),
-        );
-    }
-
-    // Try as relative to script directory
-    let relative_path = Path::new(script_dir).join(path_str);
-    if relative_path.exists() {
-        return Some(
-            relative_path
-                .canonicalize()
-                .ok()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or(relative_path.to_string_lossy().to_string()),
-        );
-    }
-
-    None
 }
 
 // Hook execution functions
@@ -279,7 +214,7 @@ pub fn process_section(
     }
 
     // Process the theme
-    match theme::process_theme(theme_file, input_path, output_path, mode) {
+    match tinct::process_theme_workflow(theme_file, input_path, output_path, mode) {
         Ok(()) => {
             // Run post hook if specified
             // The section is considered successful based on the post hook result

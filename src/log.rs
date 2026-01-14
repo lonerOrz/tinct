@@ -20,10 +20,6 @@ impl Logger {
     pub fn new(level: LogLevel) -> Self {
         Self { level }
     }
-
-    pub fn is_verbose(&self) -> bool {
-        self.level == LogLevel::Verbose
-    }
 }
 
 pub fn init_logger(level: LogLevel) {
@@ -32,7 +28,7 @@ pub fn init_logger(level: LogLevel) {
 
 pub fn is_verbose() -> bool {
     if let Some(logger) = LOGGER.get() {
-        logger.is_verbose()
+        logger.level == LogLevel::Verbose
     } else {
         false
     }

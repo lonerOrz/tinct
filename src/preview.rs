@@ -1,4 +1,5 @@
-use crate::theme::{generate_palette, load_theme, select_theme_mode};
+use crate::palette_generator::generate_palette;
+use crate::theme_loader::{load_theme, select_theme_mode};
 use colored::*;
 
 /// Display a color preview showing all available colors in the theme as a matrix
@@ -24,7 +25,7 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
 }
 
 /// Display colors in a card grid layout similar to the MD3 official documentation
-fn display_md3_cards_grid(palette: &crate::theme::Palette) {
+fn display_md3_cards_grid(palette: &crate::palette_generator::Palette) {
     // Define color cards based on the MD3 documentation structure
     let cards = vec![
         // Primary card
@@ -69,19 +70,28 @@ fn display_md3_cards_grid(palette: &crate::theme::Palette) {
             ("Primary Fixed", &palette.primary_fixed.default),
             ("Primary Fixed Dim", &palette.primary_fixed_dim.default),
             ("On Primary Fixed", &palette.on_primary_fixed.default),
-            ("On Primary Fixed Var", &palette.on_primary_fixed_variant.default),
+            (
+                "On Primary Fixed Var",
+                &palette.on_primary_fixed_variant.default,
+            ),
         ],
         vec![
             ("Secondary Fixed", &palette.secondary_fixed.default),
             ("Secondary Fixed Dim", &palette.secondary_fixed_dim.default),
             ("On Secondary Fixed", &palette.on_secondary_fixed.default),
-            ("On Secondary Fixed Var", &palette.on_secondary_fixed_variant.default),
+            (
+                "On Secondary Fixed Var",
+                &palette.on_secondary_fixed_variant.default,
+            ),
         ],
         vec![
             ("Tertiary Fixed", &palette.tertiary_fixed.default),
             ("Tertiary Fixed Dim", &palette.tertiary_fixed_dim.default),
             ("On Tertiary Fixed", &palette.on_tertiary_fixed.default),
-            ("On Tertiary Fixed Var", &palette.on_tertiary_fixed_variant.default),
+            (
+                "On Tertiary Fixed Var",
+                &palette.on_tertiary_fixed_variant.default,
+            ),
         ],
         // Surface card
         vec![

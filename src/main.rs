@@ -4,15 +4,13 @@ use std::path::Path;
 use std::process;
 
 mod cli;
-mod color;
 mod config;
 mod log;
-mod preview;
-mod theme;
 
 use clap::Parser;
 use colored::*;
 use config::Config;
+use tinct::preview;
 
 fn main() {
     let args = cli::CliArgs::parse();

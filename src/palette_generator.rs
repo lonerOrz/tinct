@@ -1,0 +1,846 @@
+use crate::color;
+use serde_json::Value;
+
+#[derive(Debug, Clone)]
+pub struct ColorFormat {
+    pub hex: String,
+    pub hex_stripped: String,
+    pub rgb: String,
+    pub rgba: String,
+    pub hsl: String,
+    pub hsla: String,
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    pub alpha: u8,
+    pub hue: f64,
+    pub saturation: f64,
+    pub lightness: f64,
+}
+
+#[derive(Debug)]
+pub struct ColorEntry {
+    pub default: ColorFormat,
+}
+
+#[derive(Debug)]
+pub struct Palette {
+    pub primary: ColorEntry,
+    pub on_primary: ColorEntry,
+    pub primary_container: ColorEntry,
+    pub on_primary_container: ColorEntry,
+    // Fixed accent colors
+    pub primary_fixed: ColorEntry,
+    pub primary_fixed_dim: ColorEntry,
+    pub on_primary_fixed: ColorEntry,
+    pub on_primary_fixed_variant: ColorEntry,
+
+    pub secondary: ColorEntry,
+    pub on_secondary: ColorEntry,
+    pub secondary_container: ColorEntry,
+    pub on_secondary_container: ColorEntry,
+    // Fixed accent colors
+    pub secondary_fixed: ColorEntry,
+    pub secondary_fixed_dim: ColorEntry,
+    pub on_secondary_fixed: ColorEntry,
+    pub on_secondary_fixed_variant: ColorEntry,
+
+    pub tertiary: ColorEntry,
+    pub on_tertiary: ColorEntry,
+    pub tertiary_container: ColorEntry,
+    pub on_tertiary_container: ColorEntry,
+    // Fixed accent colors
+    pub tertiary_fixed: ColorEntry,
+    pub tertiary_fixed_dim: ColorEntry,
+    pub on_tertiary_fixed: ColorEntry,
+    pub on_tertiary_fixed_variant: ColorEntry,
+
+    pub error: ColorEntry,
+    pub on_error: ColorEntry,
+    pub error_container: ColorEntry,
+    pub on_error_container: ColorEntry,
+
+    pub background: ColorEntry,
+    pub on_background: ColorEntry,
+    pub surface: ColorEntry,
+    pub on_surface: ColorEntry,
+    pub surface_variant: ColorEntry,
+    pub on_surface_variant: ColorEntry,
+
+    // Surface container colors
+    pub surface_container_lowest: ColorEntry,
+    pub surface_container_low: ColorEntry,
+    pub surface_container: ColorEntry,
+    pub surface_container_high: ColorEntry,
+    pub surface_container_highest: ColorEntry,
+
+    // Inverse colors
+    pub inverse_surface: ColorEntry,
+    pub inverse_on_surface: ColorEntry,
+    pub inverse_primary: ColorEntry,
+
+    // Bright and dim surface colors
+    pub surface_dim: ColorEntry,
+    pub surface_bright: ColorEntry,
+
+    // Outline colors
+    pub outline: ColorEntry,
+    pub outline_variant: ColorEntry,
+
+    // Other colors
+    pub shadow: ColorEntry,
+    pub scrim: ColorEntry,
+}
+
+/// Create a color format from a hex string
+fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
+    let hex_stripped = hex.trim_start_matches('#');
+    let (rgb, alpha) = if hex_stripped.len() == 8 {
+        // Handle 8-digit hex (RGBA)
+        let r = u8::from_str_radix(&hex_stripped[0..2], 16)
+            .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+        let g = u8::from_str_radix(&hex_stripped[2..4], 16)
+            .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+        let b = u8::from_str_radix(&hex_stripped[4..6], 16)
+            .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+        let a = u8::from_str_radix(&hex_stripped[6..8], 16)
+            .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+        (color::Rgb { r, g, b }, a)
+    } else {
+        // Handle 6-digit hex (RGB) or call the existing function
+        let rgb = color::hex_to_rgb(hex)?;
+        (rgb, 255)
+    };
+
+    let hsl = color::rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
+
+    Ok(ColorFormat {
+        hex: hex.to_string(),
+        hex_stripped: hex_stripped.to_string(),
+        rgb: format!("rgb({}, {}, {})", rgb.r, rgb.g, rgb.b),
+        rgba: format!("rgba({}, {}, {}, {})", rgb.r, rgb.g, rgb.b, alpha),
+        hsl: format!(
+            "hsl({}, {}%, {}%)",
+            (hsl.h as u32) % 360,
+            (hsl.s as u32).min(100),
+            (hsl.l as u32).min(100)
+        ),
+        hsla: format!(
+            "hsla({}, {}%, {}%, {:.1})",
+            (hsl.h as u32) % 360,
+            (hsl.s as u32).min(100),
+            (hsl.l as u32).min(100),
+            alpha as f64 / 255.0
+        ),
+        red: rgb.r,
+        green: rgb.g,
+        blue: rgb.b,
+        alpha,
+        hue: hsl.h,
+        saturation: hsl.s,
+        lightness: hsl.l,
+    })
+}
+
+/// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space
+pub fn generate_palette(
+    theme: &Value,
+    is_dark_mode: bool,
+    _is_strict: bool,
+) -> Result<Palette, String> {
+    if crate::log::is_verbose() {
+        eprintln!("Generating color palette...");
+    }
+
+    // Get colors from theme - try both standard and m-prefixed keys
+    let primary_hex = theme
+        .get("primary")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
+        .ok_or("Primary color not found in theme")?;
+
+    let secondary_hex = theme
+        .get("secondary")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mSecondary").and_then(|v| v.as_str()))
+        .unwrap_or(primary_hex); // Fallback to primary if not specified
+
+    let tertiary_hex = theme
+        .get("tertiary")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mTertiary").and_then(|v| v.as_str()))
+        .unwrap_or(secondary_hex); // Fallback to secondary if not specified
+
+    let error_hex = theme
+        .get("error")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mError").and_then(|v| v.as_str()))
+        .unwrap_or("#f44336"); // Standard error color if not specified
+
+    // Try to get surface colors from theme, fallback to generated ones if not available
+    let surface_hex = theme
+        .get("surface")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mSurface").and_then(|v| v.as_str()));
+
+    let surface_variant_hex = theme
+        .get("surface_variant")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mSurfaceVariant").and_then(|v| v.as_str()));
+
+    // Convert hex to HCT for primary
+    let primary_rgb = color::hex_to_rgb(primary_hex)?;
+    let primary_hct = color::rgb_to_hct(primary_rgb.r, primary_rgb.g, primary_rgb.b);
+
+    // Convert hex to HCT for secondary and tertiary
+    let secondary_rgb = color::hex_to_rgb(secondary_hex)?;
+    let secondary_hct = color::rgb_to_hct(secondary_rgb.r, secondary_rgb.g, secondary_rgb.b);
+
+    let tertiary_rgb = color::hex_to_rgb(tertiary_hex)?;
+    let tertiary_hct = color::rgb_to_hct(tertiary_rgb.r, tertiary_rgb.g, tertiary_rgb.b);
+
+    let error_rgb = color::hex_to_rgb(error_hex)?;
+    let error_hct = color::rgb_to_hct(error_rgb.r, error_rgb.g, error_rgb.b);
+
+    // Create primary colors using HCT
+    let primary = create_color_format(&primary_hct.to_hex())?;
+    let on_primary = if is_dark_mode {
+        // Try to get specific on_primary color, fallback to standard
+        theme
+            .get("on_primary")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#ffffff"))
+    } else {
+        theme
+            .get("on_primary")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#000000"))
+    }?;
+
+    // Create secondary and tertiary colors
+    let secondary = create_color_format(&secondary_hct.to_hex())?;
+    let on_secondary = if is_dark_mode {
+        theme
+            .get("on_secondary")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnSecondary").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#ffffff"))
+    } else {
+        theme
+            .get("on_secondary")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnSecondary").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#000000"))
+    }?;
+
+    let tertiary = create_color_format(&tertiary_hct.to_hex())?;
+    let on_tertiary = if is_dark_mode {
+        theme
+            .get("on_tertiary")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnTertiary").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#ffffff"))
+    } else {
+        theme
+            .get("on_tertiary")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnTertiary").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#000000"))
+    }?;
+
+    // Generate container colors (lower chroma, adjusted tone)
+    let primary_container_hct = color::Hct::from_hct(
+        primary_hct.h,
+        primary_hct.c * 0.4,                    // Much less chroma
+        if is_dark_mode { 30.0 } else { 90.0 }, // Lower tone for container
+    );
+    let primary_container = create_color_format(&primary_container_hct.to_hex())?;
+    let on_primary_container = if is_dark_mode {
+        theme
+            .get("on_primary_container")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str())) // Use mOnPrimary as fallback
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#ffffff"))
+    } else {
+        theme
+            .get("on_primary_container")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str())) // Use mOnPrimary as fallback
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#000000"))
+    }?;
+
+    let secondary_container_hct = color::Hct::from_hct(
+        secondary_hct.h,
+        secondary_hct.c * 0.4,
+        if is_dark_mode { 20.0 } else { 95.0 },
+    );
+    let secondary_container = create_color_format(&secondary_container_hct.to_hex())?;
+    let on_secondary_container = if is_dark_mode {
+        create_color_format("#ffffff")?
+    } else {
+        create_color_format("#000000")?
+    };
+
+    let tertiary_container_hct = color::Hct::from_hct(
+        tertiary_hct.h,
+        tertiary_hct.c * 0.4,
+        if is_dark_mode { 25.0 } else { 95.0 },
+    );
+    let tertiary_container = create_color_format(&tertiary_container_hct.to_hex())?;
+    let on_tertiary_container = if is_dark_mode {
+        create_color_format("#ffffff")?
+    } else {
+        create_color_format("#000000")?
+    };
+
+    // Use provided surface colors if available, otherwise generate
+    let (surface, on_surface, surface_hct) = if let Some(hex) = surface_hex {
+        let surface = create_color_format(hex)?;
+        let on_surface = if is_dark_mode {
+            theme
+                .get("on_surface")
+                .and_then(|v| v.as_str())
+                .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
+                .map(create_color_format)
+                .unwrap_or_else(|| create_color_format("#e0e0e0"))? // Light text on dark surface
+        } else {
+            theme
+                .get("on_surface")
+                .and_then(|v| v.as_str())
+                .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
+                .map(create_color_format)
+                .unwrap_or_else(|| create_color_format("#1f1f1f"))? // Dark text on light surface
+        };
+        // Create HCT from the provided surface color for use in other calculations
+        let surface_rgb = color::hex_to_rgb(hex)?;
+        let surface_hct = color::rgb_to_hct(surface_rgb.r, surface_rgb.g, surface_rgb.b);
+        (surface, on_surface, surface_hct)
+    } else {
+        // Generate surface colors based on the theme
+        let surface_tone = if is_dark_mode { 6.0 } else { 98.0 };
+        let surface_hct = color::Hct::from_hct(primary_hct.h, 5.0, surface_tone); // Low chroma for surface
+        let surface = create_color_format(&surface_hct.to_hex())?;
+        let on_surface = if is_dark_mode {
+            create_color_format("#e0e0e0")? // Light text on dark surface
+        } else {
+            create_color_format("#1f1f1f")? // Dark text on light surface
+        };
+        (surface, on_surface, surface_hct)
+    };
+
+    let background = surface.clone();
+    let on_background = on_surface.clone();
+
+    // Use provided surface variant color if available, otherwise generate
+    let (surface_variant, on_surface_variant) = if let Some(hex) = surface_variant_hex {
+        let surface_variant = create_color_format(hex)?;
+        let on_surface_variant = if is_dark_mode {
+            theme
+                .get("on_surface_variant")
+                .and_then(|v| v.as_str())
+                .or_else(|| theme.get("mOnSurfaceVariant").and_then(|v| v.as_str()))
+                .map(create_color_format)
+                .unwrap_or_else(|| create_color_format("#c4c4c4"))?
+        } else {
+            theme
+                .get("on_surface_variant")
+                .and_then(|v| v.as_str())
+                .or_else(|| theme.get("mOnSurfaceVariant").and_then(|v| v.as_str()))
+                .map(create_color_format)
+                .unwrap_or_else(|| create_color_format("#49454f"))?
+        };
+        (surface_variant, on_surface_variant)
+    } else {
+        // Generate surface variant (slightly different hue)
+        let surface_variant_hct = color::Hct::from_hct(
+            (surface_hct.h + 15.0) % 360.0, // Slight hue shift from actual surface
+            5.0,
+            if is_dark_mode { 10.0 } else { 94.0 },
+        );
+        let surface_variant = create_color_format(&surface_variant_hct.to_hex())?;
+        let on_surface_variant = if is_dark_mode {
+            create_color_format("#c4c4c4")?
+        } else {
+            create_color_format("#49454f")?
+        };
+        (surface_variant, on_surface_variant)
+    };
+
+    // Helper function to calculate container tone based on base tone and theme
+    fn container_tone(base_tone: f64, level: u8, is_dark: bool) -> f64 {
+        let step = if is_dark { 2.0 } else { 4.0 };
+        let tone = if is_dark {
+            base_tone + step * level as f64
+        } else {
+            base_tone - step * level as f64
+        };
+        color::clamp(tone, 4.0, 100.0)
+    }
+
+    // Surface container colors (different tones for hierarchy)
+    // Using surface_hct as base instead of primary_hct for better consistency
+    let surface_container_lowest_hct = color::Hct::from_hct(
+        surface_hct.h,
+        5.0,
+        container_tone(surface_hct.t, 0, is_dark_mode), // lowest level
+    );
+    let surface_container_low_hct = color::Hct::from_hct(
+        surface_hct.h,
+        5.0,
+        container_tone(surface_hct.t, 1, is_dark_mode), // low level
+    );
+    let surface_container_hct = color::Hct::from_hct(
+        surface_hct.h,
+        5.0,
+        container_tone(surface_hct.t, 2, is_dark_mode), // medium level
+    );
+    let surface_container_high_hct = color::Hct::from_hct(
+        surface_hct.h,
+        5.0,
+        container_tone(surface_hct.t, 3, is_dark_mode), // high level
+    );
+    let surface_container_highest_hct = color::Hct::from_hct(
+        surface_hct.h,
+        5.0,
+        container_tone(surface_hct.t, 4, is_dark_mode), // highest level
+    );
+
+    let surface_container_lowest = create_color_format(&surface_container_lowest_hct.to_hex())?;
+    let surface_container_low = create_color_format(&surface_container_low_hct.to_hex())?;
+    let surface_container = create_color_format(&surface_container_hct.to_hex())?;
+    let surface_container_high = create_color_format(&surface_container_high_hct.to_hex())?;
+    let surface_container_highest = create_color_format(&surface_container_highest_hct.to_hex())?;
+
+    // Fixed accent colors (maintain consistent appearance across themes)
+    // According to MD3 spec, fixed colors should maintain readability in both themes
+    // but should still vary based on the source color to preserve visual identity
+
+    // Primary fixed colors - preserve source color tone information while ensuring readability
+    let min_chroma = 12.0;
+    let base_chroma = if primary_hct.c > min_chroma {
+        primary_hct.c
+    } else {
+        min_chroma
+    };
+    let primary_fixed_tone = color::clamp(primary_hct.t * 0.8 + 18.0, 20.0, 90.0); // Clamp tone to readable range
+    let primary_fixed_hct = color::Hct::from_hct(
+        primary_hct.h,
+        base_chroma * 0.9,  // Moderate reduction in chroma
+        primary_fixed_tone, // Preserve original tone information with adjustment for readability
+    );
+    let primary_fixed_dim_tone = color::clamp(primary_hct.t * 0.7 + 25.0, 20.0, 90.0); // Clamp tone to readable range
+    let primary_fixed_dim_hct = color::Hct::from_hct(
+        primary_hct.h,
+        if primary_hct.c > 8.0 {
+            primary_hct.c * 0.7
+        } else {
+            8.0
+        }, // Maintain minimum chroma
+        primary_fixed_dim_tone, // Preserve original tone information with adjustment
+    );
+    let primary_fixed = create_color_format(&primary_fixed_hct.to_hex())?;
+    let primary_fixed_dim = create_color_format(&primary_fixed_dim_hct.to_hex())?;
+
+    // Generate appropriate text colors for fixed colors with more flexibility
+    let on_primary_fixed = {
+        // Allow for more flexible contrast ratios and potentially gray text colors
+        let fixed_color_hex = primary_fixed_hct.to_hex();
+        let on_color_hex = color::generate_on_color(&fixed_color_hex, is_dark_mode)?;
+        create_color_format(&on_color_hex)?
+    };
+    let on_primary_fixed_variant = {
+        // Generate variant with slight hue shift for distinction while maintaining harmony
+        let shifted_hue = (primary_hct.h + 20.0) % 360.0; // Small hue shift for distinction
+        let variant_tone = if primary_hct.t > 60.0 { 45.0 } else { 65.0 }; // Adjust based on source brightness
+        let base_hct = color::Hct::from_hct(
+            shifted_hue,
+            if primary_hct.c > 8.0 {
+                primary_hct.c * 0.6
+            } else {
+                8.0
+            }, // Maintain minimum chroma
+            variant_tone,
+        );
+        create_color_format(&base_hct.to_hex())?
+    };
+
+    // Secondary fixed colors - preserve source color tone information while ensuring readability
+    let secondary_base_chroma = if secondary_hct.c > min_chroma {
+        secondary_hct.c
+    } else {
+        min_chroma
+    };
+    let secondary_fixed_tone = color::clamp(secondary_hct.t * 0.8 + 18.0, 20.0, 90.0); // Clamp tone to readable range
+    let secondary_fixed_hct = color::Hct::from_hct(
+        secondary_hct.h,
+        secondary_base_chroma * 0.9, // Moderate reduction in chroma
+        secondary_fixed_tone, // Preserve original tone information with adjustment for readability
+    );
+    let secondary_fixed_dim_tone = color::clamp(secondary_hct.t * 0.7 + 25.0, 20.0, 90.0); // Clamp tone to readable range
+    let secondary_fixed_dim_hct = color::Hct::from_hct(
+        secondary_hct.h,
+        if secondary_hct.c > 8.0 {
+            secondary_hct.c * 0.7
+        } else {
+            8.0
+        }, // Maintain minimum chroma
+        secondary_fixed_dim_tone, // Preserve original tone information with adjustment
+    );
+    let secondary_fixed = create_color_format(&secondary_fixed_hct.to_hex())?;
+    let secondary_fixed_dim = create_color_format(&secondary_fixed_dim_hct.to_hex())?;
+
+    let on_secondary_fixed = {
+        // Allow for more flexible contrast ratios and potentially gray text colors
+        let fixed_color_hex = secondary_fixed_hct.to_hex();
+        let on_color_hex = color::generate_on_color(&fixed_color_hex, is_dark_mode)?;
+        create_color_format(&on_color_hex)?
+    };
+    let on_secondary_fixed_variant = {
+        // Generate variant with slight hue shift for distinction while maintaining harmony
+        let shifted_hue = (secondary_hct.h + 20.0) % 360.0; // Small hue shift for distinction
+        let variant_tone = if secondary_hct.t > 60.0 { 45.0 } else { 65.0 }; // Adjust based on source brightness
+        let base_hct = color::Hct::from_hct(
+            shifted_hue,
+            if secondary_hct.c > 8.0 {
+                secondary_hct.c * 0.6
+            } else {
+                8.0
+            }, // Maintain minimum chroma
+            variant_tone,
+        );
+        create_color_format(&base_hct.to_hex())?
+    };
+
+    // Tertiary fixed colors - preserve source color tone information while ensuring readability
+    let tertiary_base_chroma = if tertiary_hct.c > min_chroma {
+        tertiary_hct.c
+    } else {
+        min_chroma
+    };
+    let tertiary_fixed_tone = color::clamp(tertiary_hct.t * 0.8 + 18.0, 20.0, 90.0); // Clamp tone to readable range
+    let tertiary_fixed_hct = color::Hct::from_hct(
+        tertiary_hct.h,
+        tertiary_base_chroma * 0.9, // Moderate reduction in chroma
+        tertiary_fixed_tone, // Preserve original tone information with adjustment for readability
+    );
+    let tertiary_fixed_dim_tone = color::clamp(tertiary_hct.t * 0.7 + 25.0, 20.0, 90.0); // Clamp tone to readable range
+    let tertiary_fixed_dim_hct = color::Hct::from_hct(
+        tertiary_hct.h,
+        if tertiary_hct.c > 8.0 {
+            tertiary_hct.c * 0.7
+        } else {
+            8.0
+        }, // Maintain minimum chroma
+        tertiary_fixed_dim_tone, // Preserve original tone information with adjustment
+    );
+    let tertiary_fixed = create_color_format(&tertiary_fixed_hct.to_hex())?;
+    let tertiary_fixed_dim = create_color_format(&tertiary_fixed_dim_hct.to_hex())?;
+
+    let on_tertiary_fixed = {
+        // Allow for more flexible contrast ratios and potentially gray text colors
+        let fixed_color_hex = tertiary_fixed_hct.to_hex();
+        let on_color_hex = color::generate_on_color(&fixed_color_hex, is_dark_mode)?;
+        create_color_format(&on_color_hex)?
+    };
+    let on_tertiary_fixed_variant = {
+        // Generate variant with slight hue shift for distinction while maintaining harmony
+        let shifted_hue = (tertiary_hct.h + 20.0) % 360.0; // Small hue shift for distinction
+        let variant_tone = if tertiary_hct.t > 60.0 { 45.0 } else { 65.0 }; // Adjust based on source brightness
+        let base_hct = color::Hct::from_hct(
+            shifted_hue,
+            if tertiary_hct.c > 8.0 {
+                tertiary_hct.c * 0.6
+            } else {
+                8.0
+            }, // Maintain minimum chroma
+            variant_tone,
+        );
+        create_color_format(&base_hct.to_hex())?
+    };
+
+    // Inverse colors - based on surface color but inverted
+    let inverse_surface_hct = color::Hct::from_hct(
+        surface_hct.h,
+        surface_hct.c,
+        if is_dark_mode { 90.0 } else { 20.0 }, // Opposite tone of surface
+    );
+    let inverse_surface = create_color_format(&inverse_surface_hct.to_hex())?;
+
+    // Generate appropriate text color for inverse surface
+    let inverse_on_surface = {
+        let inv_surf_hex = inverse_surface_hct.to_hex();
+        let on_color_hex = color::generate_on_color(&inv_surf_hex, is_dark_mode)?;
+        create_color_format(&on_color_hex)?
+    };
+
+    // Inverse primary is based on the primary color but inverted in tone
+    let inverse_primary_hct = color::Hct::from_hct(
+        primary_hct.h,                          // Same hue as primary
+        primary_hct.c,                          // Same chroma as primary
+        if is_dark_mode { 40.0 } else { 80.0 }, // Different tone for contrast
+    );
+    let inverse_primary = create_color_format(&inverse_primary_hct.to_hex())?;
+
+    // Bright and dim surface colors
+    let surface_dim_hct = color::Hct::from_hct(
+        surface_hct.h,
+        surface_hct.c,
+        if is_dark_mode { 6.0 } else { 87.0 },
+    );
+    let surface_bright_hct = color::Hct::from_hct(
+        surface_hct.h,
+        surface_hct.c,
+        if is_dark_mode { 24.0 } else { 100.0 },
+    );
+    let surface_dim = create_color_format(&surface_dim_hct.to_hex())?;
+    let surface_bright = create_color_format(&surface_bright_hct.to_hex())?;
+
+    // Error colors
+    let error = create_color_format(&error_hct.to_hex())?;
+    let on_error = if is_dark_mode {
+        theme
+            .get("on_error")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#410002"))? // Dark text on light error
+    } else {
+        theme
+            .get("on_error")
+            .and_then(|v| v.as_str())
+            .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
+            .map(create_color_format)
+            .unwrap_or_else(|| create_color_format("#ffffff"))? // Light text on dark error
+    };
+
+    let error_container_hct =
+        color::Hct::from_hct(error_hct.h, 30.0, if is_dark_mode { 30.0 } else { 95.0 });
+    let error_container = create_color_format(&error_container_hct.to_hex())?;
+    let on_error_container = if is_dark_mode {
+        create_color_format("#ffdad6")? // Light text on dark error container
+    } else {
+        create_color_format("#410002")? // Dark text on light error container
+    };
+
+    // Outline colors - try to use mOutline if available
+    let outline = theme
+        .get("outline")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mOutline").and_then(|v| v.as_str()))
+        .map(create_color_format)
+        .unwrap_or_else(|| {
+            let outline_hct =
+                color::Hct::from_hct(surface_hct.h, 10.0, if is_dark_mode { 60.0 } else { 50.0 });
+            create_color_format(&outline_hct.to_hex())
+        })?;
+
+    let outline_variant = {
+        let outline_variant_hct =
+            color::Hct::from_hct(surface_hct.h, 5.0, if is_dark_mode { 30.0 } else { 80.0 });
+        create_color_format(&outline_variant_hct.to_hex())?
+    };
+
+    // Other colors
+    let shadow = theme
+        .get("shadow")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("mShadow").and_then(|v| v.as_str()))
+        .map(create_color_format)
+        .unwrap_or_else(|| create_color_format("#000000"))?; // Use mShadow if available, otherwise black
+
+    // Scrim color - should adapt to theme mode for better visual integration
+    // Using semi-transparent black for better overlay effect
+    let scrim_hex = if is_dark_mode {
+        "#00000080" // 50% opacity in dark mode
+    } else {
+        "#1111114D" // 30% opacity in light mode
+    };
+    let scrim = create_color_format(scrim_hex)?;
+
+    let palette = Palette {
+        primary: ColorEntry { default: primary },
+        on_primary: ColorEntry {
+            default: on_primary,
+        },
+        primary_container: ColorEntry {
+            default: primary_container,
+        },
+        on_primary_container: ColorEntry {
+            default: on_primary_container,
+        },
+        primary_fixed: ColorEntry {
+            default: primary_fixed,
+        },
+        primary_fixed_dim: ColorEntry {
+            default: primary_fixed_dim,
+        },
+        on_primary_fixed: ColorEntry {
+            default: on_primary_fixed,
+        },
+        on_primary_fixed_variant: ColorEntry {
+            default: on_primary_fixed_variant,
+        },
+        secondary: ColorEntry { default: secondary },
+        on_secondary: ColorEntry {
+            default: on_secondary,
+        },
+        secondary_container: ColorEntry {
+            default: secondary_container,
+        },
+        on_secondary_container: ColorEntry {
+            default: on_secondary_container,
+        },
+        secondary_fixed: ColorEntry {
+            default: secondary_fixed,
+        },
+        secondary_fixed_dim: ColorEntry {
+            default: secondary_fixed_dim,
+        },
+        on_secondary_fixed: ColorEntry {
+            default: on_secondary_fixed,
+        },
+        on_secondary_fixed_variant: ColorEntry {
+            default: on_secondary_fixed_variant,
+        },
+        tertiary: ColorEntry { default: tertiary },
+        on_tertiary: ColorEntry {
+            default: on_tertiary,
+        },
+        tertiary_container: ColorEntry {
+            default: tertiary_container,
+        },
+        on_tertiary_container: ColorEntry {
+            default: on_tertiary_container,
+        },
+        tertiary_fixed: ColorEntry {
+            default: tertiary_fixed,
+        },
+        tertiary_fixed_dim: ColorEntry {
+            default: tertiary_fixed_dim,
+        },
+        on_tertiary_fixed: ColorEntry {
+            default: on_tertiary_fixed,
+        },
+        on_tertiary_fixed_variant: ColorEntry {
+            default: on_tertiary_fixed_variant,
+        },
+        error: ColorEntry { default: error },
+        on_error: ColorEntry { default: on_error },
+        error_container: ColorEntry {
+            default: error_container,
+        },
+        on_error_container: ColorEntry {
+            default: on_error_container,
+        },
+        background: ColorEntry {
+            default: background,
+        },
+        on_background: ColorEntry {
+            default: on_background,
+        },
+        surface: ColorEntry { default: surface },
+        on_surface: ColorEntry {
+            default: on_surface,
+        },
+        surface_variant: ColorEntry {
+            default: surface_variant,
+        },
+        on_surface_variant: ColorEntry {
+            default: on_surface_variant,
+        },
+        surface_container_lowest: ColorEntry {
+            default: surface_container_lowest,
+        },
+        surface_container_low: ColorEntry {
+            default: surface_container_low,
+        },
+        surface_container: ColorEntry {
+            default: surface_container,
+        },
+        surface_container_high: ColorEntry {
+            default: surface_container_high,
+        },
+        surface_container_highest: ColorEntry {
+            default: surface_container_highest,
+        },
+        inverse_surface: ColorEntry {
+            default: inverse_surface,
+        },
+        inverse_on_surface: ColorEntry {
+            default: inverse_on_surface,
+        },
+        inverse_primary: ColorEntry {
+            default: inverse_primary,
+        },
+        surface_dim: ColorEntry {
+            default: surface_dim,
+        },
+        surface_bright: ColorEntry {
+            default: surface_bright,
+        },
+        outline: ColorEntry { default: outline },
+        outline_variant: ColorEntry {
+            default: outline_variant,
+        },
+        shadow: ColorEntry { default: shadow },
+        scrim: ColorEntry { default: scrim },
+    };
+
+    if crate::log::is_verbose() {
+        eprintln!("Color palette generated successfully");
+    }
+    Ok(palette)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_create_color_format() {
+        let color_format = create_color_format("#FF5722").unwrap();
+        assert_eq!(color_format.hex, "#FF5722");
+        assert_eq!(color_format.hex_stripped, "FF5722");
+        assert_eq!(color_format.rgb, "rgb(255, 87, 34)");
+        assert_eq!(color_format.red, 255);
+        assert_eq!(color_format.green, 87);
+        assert_eq!(color_format.blue, 34);
+    }
+
+    #[test]
+    fn test_generate_palette() {
+        let theme = json!({
+            "primary": "#FF5722",
+            "secondary": "#607D8B",
+            "tertiary": "#9C27B0",
+            "error": "#F44336",
+            "surface": "#FAFAFA",
+            "on_surface": "#212121"
+        });
+
+        let palette = generate_palette(&theme, false, false).unwrap();
+
+        // Test that primary color exists and has expected structure
+        assert!(!palette.primary.default.hex.is_empty());
+        assert!(!palette.primary.default.rgb.is_empty());
+        assert!(!palette.primary.default.hsl.is_empty());
+
+        // Test that other colors were generated
+        assert!(!palette.secondary.default.hex.is_empty());
+        assert!(!palette.tertiary.default.hex.is_empty());
+        assert!(!palette.error.default.hex.is_empty());
+        assert!(!palette.surface.default.hex.is_empty());
+        assert!(!palette.on_surface.default.hex.is_empty());
+    }
+}
