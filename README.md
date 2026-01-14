@@ -16,6 +16,11 @@ tinct is a command-line utility that generates themed configuration files based 
 - Color preview functionality
 - Configurable via TOML files
 - Support for post-processing hooks
+- Modular architecture for easy extensibility
+- Consistent alpha values (0.0-1.0 range)
+- Format-preserving color filters
+- Irreversible alpha upgrades with set_alpha filter
+- HSL-based color adjustments
 
 ## Installation
 
@@ -131,21 +136,35 @@ Available color roles include:
 
 For each color role, you can use the following format attributes:
 
-| Attribute | Example Placeholder | Output Example |
-|-----------|---------------------|----------------|
-| Hex complete | `{{colors.primary.default.hex}}` | `#ff5722` |
-| Hex stripped | `{{colors.primary.default.hex_stripped}}` | `ff5722` |
-| RGB | `{{colors.primary.default.rgb}}` | `rgb(255, 87, 34)` |
-| RGBA | `{{colors.primary.default.rgba}}` | `rgba(255, 87, 34, 255)` |
-| Red | `{{colors.primary.default.red}}` | `255` |
-| Green | `{{colors.primary.default.green}}` | `87` |
-| Blue | `{{colors.primary.default.blue}}` | `34` |
-| Alpha | `{{colors.primary.default.alpha}}` | `255` |
-| HSL | `{{colors.primary.default.hsl}}` | `hsl(14, 100%, 57%)` |
-| HSLA | `{{colors.primary.default.hsla}}` | `hsla(14, 100%, 57%, 1.0)` |
-| Hue | `{{colors.primary.default.hue}}` | `14` |
-| Saturation | `{{colors.primary.default.saturation}}` | `100` |
-| Lightness | `{{colors.primary.default.lightness}}` | `57` |
+| Attribute    | Example Placeholder                           | Output Example             |
+| ------------ | --------------------------------------------- | -------------------------- |
+| Hex complete | `{{colors.primary.default.hex}}`              | `#ff5722`                  |
+| Hex stripped | `{{colors.primary.default.hex_stripped}}`     | `ff5722`                   |
+| Hex8 complete | `{{colors.primary.default.hex8}}`             | `#ff5722ff`                |
+| Hex8 stripped | `{{colors.primary.default.hex8_stripped}}`    | `ff5722ff`                 |
+| RGB          | `{{colors.primary.default.rgb}}`              | `rgb(255, 87, 34)`         |
+| RGBA         | `{{colors.primary.default.rgba}}`             | `rgba(255, 87, 34, 1.0)`   |
+| Red          | `{{colors.primary.default.red}}`              | `255`                      |
+| Green        | `{{colors.primary.default.green}}`            | `87`                       |
+| Blue         | `{{colors.primary.default.blue}}`             | `34`                       |
+| Alpha        | `{{colors.primary.default.alpha}}`            | `1.0`                      |
+| HSL          | `{{colors.primary.default.hsl}}`              | `hsl(14, 100%, 57%)`       |
+| HSLA         | `{{colors.primary.default.hsla}}`             | `hsla(14, 100%, 57%, 1.0)` |
+| Hue          | `{{colors.primary.default.hue}}`              | `14`                       |
+| Saturation   | `{{colors.primary.default.saturation}}`       | `100`                      |
+| Lightness    | `{{colors.primary.default.lightness}}`        | `57`                       |
+
+### Template Filters
+
+tinct supports a modular filter system to transform color values:
+
+| Filter     | Example Placeholder                                 | Output Example           |
+| ---------- | --------------------------------------------------- | ------------------------ |
+| Set Alpha  | `{{colors.primary.default.rgba \| set_alpha: 0.5}}` | `rgba(255, 87, 34, 0.5)` |
+| Lighten    | `{{colors.primary.default.rgb \| lighten: 10}}`     | Lightened RGB color      |
+| Darken     | `{{colors.primary.default.rgb \| darken: 10}}`      | Darkened RGB color       |
+| Saturate   | `{{colors.primary.default.rgb \| saturate: 10}}`    | More saturated RGB color |
+| Desaturate | `{{colors.primary.default.rgb \| desaturate: 10}}`  | Less saturated RGB color |
 
 **Note:** If you want to use transparency in `rgba()`, you need to reference the `.red`, `.green`, `.blue` components separately, otherwise it will generate invalid CSS.
 
@@ -157,7 +176,8 @@ For each color role, you can use the following format attributes:
 
 ### Usage Examples
 
-* **Hex Colors**
+- **Hex Colors**
+
 ```css
 .primary-button {
     background-color: {{colors.primary.default.hex}};
@@ -165,7 +185,8 @@ For each color role, you can use the following format attributes:
 }
 ```
 
-* **RGB Colors**
+- **RGB Colors**
+
 ```css
 .surface-background {
     background-color: {{colors.surface.default.rgb}};
@@ -173,28 +194,37 @@ For each color role, you can use the following format attributes:
 }
 ```
 
-* **RGBA Colors (with components)**
+- **RGBA Colors (with components)**
+
 ```css
 .semi-transparent-overlay {
-    background-color: rgba({{colors.surface.default.red}}, {{colors.surface.default.green}}, {{colors.surface.default.blue}}, 0.8);
+  background-color: rgba(
+    {{colors.surface.default.red}},
+    {{colors.surface.default.green}},
+    {{colors.surface.default.blue}},
+    0.8
+  );
 }
 ```
 
-* **HSL Colors**
+- **HSL Colors**
+
 ```css
 .accent-element {
     background-color: {{colors.tertiary.default.hsl}};
 }
 ```
 
-* **Stripped Hex**
+- **Stripped Hex**
+
 ```css
 .styled-border {
     border-color: #{{colors.outline.default.hex_stripped}};
 }
 ```
 
-* **Conditional Styling**
+- **Conditional Styling**
+
 ```css
 @media (prefers-color-scheme: {{mode}}) {
     body {
