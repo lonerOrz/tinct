@@ -5,6 +5,8 @@ use serde_json::Value;
 pub struct ColorFormat {
     pub hex: String,
     pub hex_stripped: String,
+    pub hex8: String,        // 8-digit hex with alpha (#rrggbbaa)
+    pub hex8_stripped: String, // 8-digit hex without # prefix (rrggbbaa)
     pub rgb: String,
     pub rgba: String,
     pub hsl: String,
@@ -12,7 +14,7 @@ pub struct ColorFormat {
     pub red: u8,
     pub green: u8,
     pub blue: u8,
-    pub alpha: u8,
+    pub alpha: f64,  // Changed from u8 (0-255) to f64 (0.0-1.0) for consistency
     pub hue: f64,
     pub saturation: f64,
     pub lightness: f64,
@@ -105,20 +107,27 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
             .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
         let a = u8::from_str_radix(&hex_stripped[6..8], 16)
             .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
-        (color::Rgb { r, g, b }, a)
+        (color::Rgb { r, g, b }, a as f64 / 255.0)  // Convert to 0.0-1.0 range
     } else {
         // Handle 6-digit hex (RGB) or call the existing function
         let rgb = color::hex_to_rgb(hex)?;
-        (rgb, 255)
+        (rgb, 1.0)  // Default to fully opaque (1.0)
     };
 
     let hsl = color::rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
 
+    // Create 8-digit hex formats
+    let alpha_byte = (alpha * 255.0).round() as u8;
+    let hex8 = format!("#{:02x}{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b, alpha_byte);
+    let hex8_stripped = format!("{:02x}{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b, alpha_byte);
+
     Ok(ColorFormat {
         hex: hex.to_string(),
         hex_stripped: hex_stripped.to_string(),
+        hex8,
+        hex8_stripped,
         rgb: format!("rgb({}, {}, {})", rgb.r, rgb.g, rgb.b),
-        rgba: format!("rgba({}, {}, {}, {})", rgb.r, rgb.g, rgb.b, alpha),
+        rgba: format!("rgba({}, {}, {}, {:.1})", rgb.r, rgb.g, rgb.b, alpha),
         hsl: format!(
             "hsl({}, {}%, {}%)",
             (hsl.h as u32) % 360,
@@ -130,12 +139,12 @@ fn create_color_format(hex: &str) -> Result<ColorFormat, String> {
             (hsl.h as u32) % 360,
             (hsl.s as u32).min(100),
             (hsl.l as u32).min(100),
-            alpha as f64 / 255.0
+            alpha
         ),
         red: rgb.r,
         green: rgb.g,
         blue: rgb.b,
-        alpha,
+        alpha,  // Now stored as f64 in 0.0-1.0 range
         hue: hsl.h,
         saturation: hsl.s,
         lightness: hsl.l,

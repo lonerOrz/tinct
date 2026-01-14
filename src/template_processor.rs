@@ -1,6 +1,7 @@
+use crate::filter::FilterRegistry;
 use crate::palette_generator::{ColorFormat, Palette};
 use regex::Regex;
-use std::fs;
+use std::collections::HashMap;
 
 /// Load template file
 pub fn load_template(template_path: &str) -> Result<String, String> {
@@ -8,7 +9,7 @@ pub fn load_template(template_path: &str) -> Result<String, String> {
         eprintln!("Loading template from {}", template_path);
     }
 
-    let template_content = fs::read_to_string(template_path)
+    let template_content = std::fs::read_to_string(template_path)
         .map_err(|e| format!("Could not read template file '{}': {}", template_path, e))?;
 
     if crate::log::is_verbose() {
@@ -42,7 +43,7 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
     );
 
     // Create a mapping of color names to color entries
-    let color_map: std::collections::HashMap<&str, &ColorFormat> = [
+    let color_map: HashMap<&str, &ColorFormat> = [
         ("primary", &palette.primary.default),
         ("on_primary", &palette.on_primary.default),
         ("primary_container", &palette.primary_container.default),
@@ -126,10 +127,16 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
     .cloned()
     .collect();
 
-    // Replace all color property placeholders
+    // Process filters in template
+    let filter_registry = FilterRegistry::new();
+    content = process_filters(content, &color_map, &filter_registry);
+
+    // Replace all color property placeholders (without filters)
     let color_properties = [
         "hex",
         "hex_stripped",
+        "hex8",
+        "hex8_stripped",
         "rgb",
         "rgba",
         "hsl",
@@ -157,6 +164,8 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
                     match *prop {
                         "hex" => color_format.hex.clone(),
                         "hex_stripped" => color_format.hex_stripped.clone(),
+                        "hex8" => color_format.hex8.clone(),
+                        "hex8_stripped" => color_format.hex8_stripped.clone(),
                         "rgb" => color_format.rgb.clone(),
                         "rgba" => color_format.rgba.clone(),
                         "hsl" => color_format.hsl.clone(),
@@ -175,6 +184,8 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
                     match *prop {
                         "hex" => "#000000".to_string(),
                         "hex_stripped" => "000000".to_string(),
+                        "hex8" => "#00000000".to_string(),
+                        "hex8_stripped" => "00000000".to_string(),
                         "red" | "green" | "blue" | "alpha" => "0".to_string(),
                         "hue" | "saturation" | "lightness" => "0".to_string(),
                         "rgb" => "rgb(0, 0, 0)".to_string(),
@@ -192,6 +203,137 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
         eprintln!("Template processed successfully");
     }
     content
+}
+
+/// Process filters in template content
+fn process_filters(
+    content: String,
+    color_map: &HashMap<&str, &ColorFormat>,
+    filter_registry: &FilterRegistry,
+) -> String {
+    // Pattern for filters: {{ colors.color_name.default.property | filter_name: param }}
+    let filter_pattern = r"\{\{\s*colors\.([a-zA-Z0-9_]+)\.default\.([a-zA-Z0-9_]+)\s*\|\s*([a-zA-Z0-9_]+)(?::\s*([^}]+))?\s*\}\}";
+    let re = Regex::new(filter_pattern).unwrap();
+
+    re.replace_all(&content, |caps: &regex::Captures| {
+        let color_name = &caps[1];
+        let property = &caps[2];
+        let filter_name = &caps[3];
+        let filter_param = caps.get(4).map(|m| m.as_str().trim());
+
+        if let Some(color_format) = color_map.get(color_name) {
+            // Determine the format type based on the property
+            let format_type = crate::filter::ColorFormatType::from_property(property);
+
+            let original_value = match property {
+                "hex" => color_format.hex.clone(),
+                "hex_stripped" => color_format.hex_stripped.clone(),
+                "hex8" => color_format.hex8.clone(),
+                "hex8_stripped" => color_format.hex8_stripped.clone(),
+                "rgb" => color_format.rgb.clone(),
+                "rgba" => color_format.rgba.clone(),
+                "hsl" => color_format.hsl.clone(),
+                "hsla" => color_format.hsla.clone(),
+                "red" => color_format.red.to_string(),
+                "green" => color_format.green.to_string(),
+                "blue" => color_format.blue.to_string(),
+                "alpha" => color_format.alpha.to_string(),
+                "hue" => format!("{:.0}", color_format.hue),
+                "saturation" => format!("{:.0}", color_format.saturation),
+                "lightness" => format!("{:.0}", color_format.lightness),
+                _ => "#000000".to_string(), // default fallback
+            };
+
+            if let Some(format_type) = format_type {
+                filter_registry.apply_filter(
+                    &original_value,
+                    filter_name,
+                    filter_param,
+                    color_format,
+                    format_type,
+                )
+            } else {
+                // If format type is unknown, apply filter anyway
+                filter_registry.apply_filter(
+                    &original_value,
+                    filter_name,
+                    filter_param,
+                    color_format,
+                    crate::filter::ColorFormatType::Hex,
+                )
+            }
+        } else {
+            // Return default value if color key is not found
+            let default_value = match property {
+                "hex" => "#000000".to_string(),
+                "hex_stripped" => "000000".to_string(),
+                "hex8" => "#00000000".to_string(),
+                "hex8_stripped" => "00000000".to_string(),
+                "red" | "green" | "blue" | "alpha" => "0".to_string(),
+                "hue" | "saturation" | "lightness" => "0".to_string(),
+                "rgb" => "rgb(0, 0, 0)".to_string(),
+                "rgba" => "rgba(0, 0, 0, 0)".to_string(),
+                "hsl" => "hsl(0, 0%, 0%)".to_string(),
+                "hsla" => "hsla(0, 0%, 0%, 1.0)".to_string(),
+                _ => "#000000".to_string(),
+            };
+
+            // Determine the format type based on the property for default value
+            let format_type = crate::filter::ColorFormatType::from_property(property);
+
+            if let Some(format_type) = format_type {
+                filter_registry.apply_filter(
+                    &default_value,
+                    filter_name,
+                    filter_param,
+                    &ColorFormat {
+                        hex: "#000000".to_string(),
+                        hex_stripped: "000000".to_string(),
+                        hex8: "#00000000".to_string(),
+                        hex8_stripped: "00000000".to_string(),
+                        rgb: "rgb(0, 0, 0)".to_string(),
+                        rgba: "rgba(0, 0, 0, 0)".to_string(),
+                        hsl: "hsl(0, 0%, 0%)".to_string(),
+                        hsla: "hsla(0, 0%, 0%, 1.0)".to_string(),
+                        red: 0,
+                        green: 0,
+                        blue: 0,
+                        alpha: 0.0,
+                        hue: 0.0,
+                        saturation: 0.0,
+                        lightness: 0.0,
+                    },
+                    format_type,
+                )
+            } else {
+                // If format type is unknown, apply filter anyway
+                filter_registry.apply_filter(
+                    &default_value,
+                    filter_name,
+                    filter_param,
+                    &ColorFormat {
+                        hex: "#000000".to_string(),
+                        hex_stripped: "000000".to_string(),
+                        hex8: "#00000000".to_string(),
+                        hex8_stripped: "00000000".to_string(),
+                        rgb: "rgb(0, 0, 0)".to_string(),
+                        rgba: "rgba(0, 0, 0, 0)".to_string(),
+                        hsl: "hsl(0, 0%, 0%)".to_string(),
+                        hsla: "hsla(0, 0%, 0%, 1.0)".to_string(),
+                        red: 0,
+                        green: 0,
+                        blue: 0,
+                        alpha: 0.0,
+                        hue: 0.0,
+                        saturation: 0.0,
+                        lightness: 0.0,
+                    },
+                    crate::filter::ColorFormatType::Hex,
+                )
+            }
+        }
+    })
+    .to_string()
 }
 
 #[cfg(test)]
@@ -219,6 +361,8 @@ mod tests {
         let color_format = ColorFormat {
             hex: "#FF5722".to_string(),
             hex_stripped: "FF5722".to_string(),
+            hex8: "#FF5722FF".to_string(),  // Assuming full opacity
+            hex8_stripped: "FF5722FF".to_string(), // Assuming full opacity
             rgb: "rgb(255, 87, 34)".to_string(),
             rgba: "rgba(255, 87, 34, 255)".to_string(),
             hsl: "hsl(14, 100%, 57%)".to_string(),
@@ -226,7 +370,7 @@ mod tests {
             red: 255,
             green: 87,
             blue: 34,
-            alpha: 255,
+            alpha: 1.0,
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
@@ -385,5 +529,178 @@ mod tests {
         // The result should contain the expected placeholders replaced
         assert!(result.contains("Primary color: #FF5722"));
         assert!(result.contains(", Mode: dark"));
+    }
+
+    #[test]
+    fn test_set_alpha_filter() {
+        let color_format = ColorFormat {
+            hex: "#FF5722".to_string(),
+            hex_stripped: "FF5722".to_string(),
+            hex8: "#FF5722FF".to_string(),  // Assuming full opacity
+            hex8_stripped: "FF5722FF".to_string(), // Assuming full opacity
+            rgb: "rgb(255, 87, 34)".to_string(),
+            rgba: "rgba(255, 87, 34, 255)".to_string(),
+            hsl: "hsl(14, 100%, 57%)".to_string(),
+            hsla: "hsla(14, 100%, 57%, 1.0)".to_string(),
+            red: 255,
+            green: 87,
+            blue: 34,
+            alpha: 1.0,
+            hue: 14.0,
+            saturation: 100.0,
+            lightness: 57.0,
+        };
+
+        let palette = Palette {
+            primary: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_primary: ColorEntry {
+                default: color_format.clone(),
+            },
+            primary_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_primary_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            primary_fixed: ColorEntry {
+                default: color_format.clone(),
+            },
+            primary_fixed_dim: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_primary_fixed: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_primary_fixed_variant: ColorEntry {
+                default: color_format.clone(),
+            },
+            secondary: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_secondary: ColorEntry {
+                default: color_format.clone(),
+            },
+            secondary_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_secondary_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            secondary_fixed: ColorEntry {
+                default: color_format.clone(),
+            },
+            secondary_fixed_dim: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_secondary_fixed: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_secondary_fixed_variant: ColorEntry {
+                default: color_format.clone(),
+            },
+            tertiary: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_tertiary: ColorEntry {
+                default: color_format.clone(),
+            },
+            tertiary_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_tertiary_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            tertiary_fixed: ColorEntry {
+                default: color_format.clone(),
+            },
+            tertiary_fixed_dim: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_tertiary_fixed: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_tertiary_fixed_variant: ColorEntry {
+                default: color_format.clone(),
+            },
+            error: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_error: ColorEntry {
+                default: color_format.clone(),
+            },
+            error_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_error_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            background: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_background: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_surface: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_variant: ColorEntry {
+                default: color_format.clone(),
+            },
+            on_surface_variant: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_container_lowest: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_container_low: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_container: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_container_high: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_container_highest: ColorEntry {
+                default: color_format.clone(),
+            },
+            inverse_surface: ColorEntry {
+                default: color_format.clone(),
+            },
+            inverse_on_surface: ColorEntry {
+                default: color_format.clone(),
+            },
+            inverse_primary: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_dim: ColorEntry {
+                default: color_format.clone(),
+            },
+            surface_bright: ColorEntry {
+                default: color_format.clone(),
+            },
+            outline: ColorEntry {
+                default: color_format.clone(),
+            },
+            outline_variant: ColorEntry {
+                default: color_format.clone(),
+            },
+            shadow: ColorEntry {
+                default: color_format.clone(),
+            },
+            scrim: ColorEntry {
+                default: color_format,
+            },
+        };
+
+        // Test set_alpha filter with rgba value
+        let template_content = "Primary color: {{colors.primary.default.rgba | set_alpha: 0.5}}";
+        let result = process_template(template_content, &palette, "dark");
+        assert!(result.contains("rgba(255, 87, 34, 0."));
     }
 }
