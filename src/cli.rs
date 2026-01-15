@@ -189,6 +189,7 @@ pub fn process_section(
     mode: &str,
     _log_level: LogLevel,
     skip_terminal_sequences: bool,
+    algorithm_params: crate::config::AlgorithmConfig, // Algorithm parameters from config
 ) -> bool {
     let input_path = &section.input_path;
     let output_path = &section.output_path;
@@ -214,6 +215,15 @@ pub fn process_section(
         }
     }
 
+    // Convert config algorithm parameters to internal format
+    let internal_alg_params = tinct::AlgorithmParameters {
+        contrast_threshold: algorithm_params.contrast_threshold,
+        saturation_adjustment: algorithm_params.saturation_adjustment,
+        lightness_adjustment: algorithm_params.lightness_adjustment,
+        hue_shift: algorithm_params.hue_shift,
+        min_contrast_ratio: algorithm_params.min_contrast_ratio,
+    };
+
     // Process the theme
     match tinct::process_theme_workflow(
         theme_file,
@@ -221,6 +231,7 @@ pub fn process_section(
         output_path,
         mode,
         skip_terminal_sequences,
+        internal_alg_params,
     ) {
         Ok(()) => {
             // Run post hook if specified

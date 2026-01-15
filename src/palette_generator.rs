@@ -192,8 +192,41 @@ pub fn generate_palette(
     is_dark_mode: bool,
     _is_strict: bool,
 ) -> Result<Palette, String> {
+    // Use default algorithm parameters for now
+    let alg_params = AlgorithmParameters {
+        contrast_threshold: 0.15,
+        saturation_adjustment: 0,
+        lightness_adjustment: 0,
+        hue_shift: 0,
+        min_contrast_ratio: 4.5,
+    };
+
+    generate_palette_with_params(theme, is_dark_mode, alg_params)
+}
+
+/// Parameters for controlling the color generation algorithm
+#[derive(Debug, Clone)]
+pub struct AlgorithmParameters {
+    /// Color contrast threshold (0.0-1.0)
+    pub contrast_threshold: f64,
+    /// Saturation adjustment (-100 to 100)
+    pub saturation_adjustment: i8,
+    /// Lightness adjustment (-100 to 100)
+    pub lightness_adjustment: i8,
+    /// Hue shift (-180 to 180)
+    pub hue_shift: i16,
+    /// Minimum contrast ratio for readability
+    pub min_contrast_ratio: f64,
+}
+
+/// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space with algorithm parameters
+pub fn generate_palette_with_params(
+    theme: &Value,
+    is_dark_mode: bool,
+    params: AlgorithmParameters,
+) -> Result<Palette, String> {
     if crate::log::is_verbose() {
-        eprintln!("Generating color palette...");
+        eprintln!("Generating color palette with algorithm parameters...");
     }
 
     // Get colors from theme - try both standard and m-prefixed keys
@@ -234,17 +267,25 @@ pub fn generate_palette(
 
     // Convert hex to HCT for primary
     let primary_rgb = color::hex_to_rgb(primary_hex)?;
-    let primary_hct = color::rgb_to_hct(primary_rgb.r, primary_rgb.g, primary_rgb.b);
+    let mut primary_hct = color::rgb_to_hct(primary_rgb.r, primary_rgb.g, primary_rgb.b);
+    // Apply algorithm parameters to primary
+    primary_hct = apply_algorithm_params(primary_hct, &params);
 
     // Convert hex to HCT for secondary and tertiary
     let secondary_rgb = color::hex_to_rgb(secondary_hex)?;
-    let secondary_hct = color::rgb_to_hct(secondary_rgb.r, secondary_rgb.g, secondary_rgb.b);
+    let mut secondary_hct = color::rgb_to_hct(secondary_rgb.r, secondary_rgb.g, secondary_rgb.b);
+    // Apply algorithm parameters to secondary
+    secondary_hct = apply_algorithm_params(secondary_hct, &params);
 
     let tertiary_rgb = color::hex_to_rgb(tertiary_hex)?;
-    let tertiary_hct = color::rgb_to_hct(tertiary_rgb.r, tertiary_rgb.g, tertiary_rgb.b);
+    let mut tertiary_hct = color::rgb_to_hct(tertiary_rgb.r, tertiary_rgb.g, tertiary_rgb.b);
+    // Apply algorithm parameters to tertiary
+    tertiary_hct = apply_algorithm_params(tertiary_hct, &params);
 
     let error_rgb = color::hex_to_rgb(error_hex)?;
-    let error_hct = color::rgb_to_hct(error_rgb.r, error_rgb.g, error_rgb.b);
+    let mut error_hct = color::rgb_to_hct(error_rgb.r, error_rgb.g, error_rgb.b);
+    // Apply algorithm parameters to error
+    error_hct = apply_algorithm_params(error_hct, &params);
 
     // Create primary colors using HCT
     let primary = create_color_format(&primary_hct.to_hex())?;
@@ -912,6 +953,23 @@ pub fn generate_palette(
         eprintln!("Color palette generated successfully");
     }
     Ok(palette)
+}
+
+/// Apply algorithm parameters to an HCT color
+fn apply_algorithm_params(mut hct: color::Hct, params: &AlgorithmParameters) -> color::Hct {
+    // Apply hue shift
+    hct.h = (hct.h + params.hue_shift as f64) % 360.0;
+    if hct.h < 0.0 {
+        hct.h += 360.0;
+    }
+
+    // Apply saturation adjustment
+    hct.c = color::clamp(hct.c + params.saturation_adjustment as f64, 0.0, 200.0);
+
+    // Apply lightness adjustment
+    hct.t = color::clamp(hct.t + params.lightness_adjustment as f64, 0.0, 100.0);
+
+    hct
 }
 
 #[cfg(test)]

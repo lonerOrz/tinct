@@ -19,6 +19,7 @@ pub mod theme_loader;
 pub use filter::*;
 pub use output_handler::*;
 pub use palette_generator::*;
+pub use palette_generator::AlgorithmParameters;
 pub use template_processor::*;
 pub use terminal_sender::*;
 /// Public API for tinct
@@ -32,9 +33,9 @@ pub fn process_theme_workflow(
     output_path: &str,
     mode: &str,
     skip_terminal_sequences: bool, // New parameter - inverted logic
+    algorithm_params: crate::palette_generator::AlgorithmParameters, // Algorithm parameters
 ) -> Result<(), String> {
     use crate::output_handler::save_output;
-    use crate::palette_generator::generate_palette;
     use crate::template_processor::process_template;
     use crate::theme_loader::load_theme;
 
@@ -44,8 +45,8 @@ pub fn process_theme_workflow(
     // Select theme mode
     let (theme, effective_mode) = crate::theme_loader::select_theme_mode(&theme_data, mode)?;
 
-    // Generate palette
-    let palette = generate_palette(&theme, effective_mode == "dark", false)?;
+    // Generate palette with algorithm parameters
+    let palette = crate::palette_generator::generate_palette_with_params(&theme, effective_mode == "dark", algorithm_params)?;
 
     // Send terminal sequences by default, unless explicitly skipped
     // This is done immediately after palette generation to trigger terminal reload
