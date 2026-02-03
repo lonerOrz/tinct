@@ -1013,6 +1013,29 @@ mod tests {
         assert!(!palette.surface.default.hex.is_empty());
         assert!(!palette.on_surface.default.hex.is_empty());
     }
+
+    #[test]
+    fn test_process_theme_workflow_with_algorithm_params() {
+        let theme = json!({
+            "primary": "#FF5722",
+            "secondary": "#607D8B",
+            "tertiary": "#9C27B0",
+            "error": "#F44336",
+            "surface": "#FAFAFA",
+            "on_surface": "#212121"
+        });
+
+        let params = AlgorithmParameters {
+            contrast_threshold: 0.15,
+            saturation_adjustment: 10,
+            lightness_adjustment: 5,
+            hue_shift: 15,
+            min_contrast_ratio: 4.5,
+        };
+
+        let palette = generate_palette_with_params(&theme, false, params).unwrap();
+        assert!(!palette.primary.default.hex.is_empty());
+    }
 }
 
 /// Process a theme workflow: load theme, apply to template, and write output
@@ -1030,8 +1053,7 @@ pub fn process_theme_workflow(
     // Select theme mode
     let (theme_value, selected_mode) = crate::theme_loader::select_theme_mode(&theme, mode)?;
 
-    // Generate palette from theme
-    let palette = generate_palette(&theme_value, mode == "dark", false)?;
+    let palette = generate_palette_with_params(&theme_value, mode == "dark", _alg_params)?;
 
     // Read template content
     let template_content = std::fs::read_to_string(input_path)

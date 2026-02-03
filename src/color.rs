@@ -294,4 +294,26 @@ mod tests {
         let ratio = calculate_contrast_ratio("#FFFFFF", "#000000").unwrap();
         assert!((ratio - 21.0).abs() < 1.0);
     }
+
+    #[test]
+    fn test_is_light_color() {
+        // White should be light
+        assert!(is_light_color("#FFFFFF").unwrap());
+        // Black should be dark
+        assert!(!is_light_color("#000000").unwrap());
+        // Test with actual colors
+        assert!(is_light_color("#FF5722").unwrap()); // Orange - should be light
+        assert!(!is_light_color("#1a1a1a").unwrap()); // Very dark gray - should be dark
+    }
+
+    #[test]
+    fn test_relative_luminance() {
+        // White has luminance of 1.0
+        let lum = calculate_relative_luminance(255, 255, 255);
+        assert!((lum - 1.0).abs() < 0.001);
+
+        // Black has luminance of 0.0
+        let lum = calculate_relative_luminance(0, 0, 0);
+        assert!((lum - 0.0).abs() < 0.001);
+    }
 }
