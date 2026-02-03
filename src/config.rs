@@ -68,9 +68,9 @@ pub struct ConfigRoot {
 impl ConfigRoot {
     pub fn parse(config_content: &str) -> Result<Self, String> {
         use toml::Value;
-        
-        let value: Value = toml::from_str(config_content)
-            .map_err(|e| format!("Invalid TOML format: {}", e))?;
+
+        let value: Value =
+            toml::from_str(config_content).map_err(|e| format!("Invalid TOML format: {}", e))?;
 
         // Extract algorithm config if present
         let mut algorithm = AlgorithmConfig::default();
@@ -78,10 +78,16 @@ impl ConfigRoot {
             if let Some(v) = table.get("contrast_threshold").and_then(|v| v.as_float()) {
                 algorithm.contrast_threshold = v;
             }
-            if let Some(v) = table.get("saturation_adjustment").and_then(|v| v.as_integer()) {
+            if let Some(v) = table
+                .get("saturation_adjustment")
+                .and_then(|v| v.as_integer())
+            {
                 algorithm.saturation_adjustment = v as i8;
             }
-            if let Some(v) = table.get("lightness_adjustment").and_then(|v| v.as_integer()) {
+            if let Some(v) = table
+                .get("lightness_adjustment")
+                .and_then(|v| v.as_integer())
+            {
                 algorithm.lightness_adjustment = v as i8;
             }
             if let Some(v) = table.get("hue_shift").and_then(|v| v.as_integer()) {
@@ -107,12 +113,16 @@ impl ConfigRoot {
                             // Only try to parse as ConfigSection if it has the required fields
                             if let Value::Table(section_fields) = section_value {
                                 // Check if this table has the required fields for a ConfigSection
-                                if section_fields.contains_key("input_path") && section_fields.contains_key("output_path") {
+                                if section_fields.contains_key("input_path")
+                                    && section_fields.contains_key("output_path")
+                                {
                                     // Convert the table to a proper TOML string representation for parsing
                                     let toml_doc = toml::to_string(&section_fields)
                                         .unwrap_or_else(|_| String::from(""));
 
-                                    if let Ok(config_section) = toml::from_str::<ConfigSection>(&toml_doc) {
+                                    if let Ok(config_section) =
+                                        toml::from_str::<ConfigSection>(&toml_doc)
+                                    {
                                         section_map.insert(section_name.clone(), config_section);
                                     }
                                 }
@@ -129,10 +139,7 @@ impl ConfigRoot {
 
         // No debug output in release version - only for development
 
-        Ok(ConfigRoot {
-            algorithm,
-            groups,
-        })
+        Ok(ConfigRoot { algorithm, groups })
     }
 }
 

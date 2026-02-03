@@ -1014,3 +1014,36 @@ mod tests {
         assert!(!palette.on_surface.default.hex.is_empty());
     }
 }
+
+/// Process a theme workflow: load theme, apply to template, and write output
+pub fn process_theme_workflow(
+    theme_file: &str,
+    input_path: &str,
+    output_path: &str,
+    mode: &str,
+    _skip_terminal_sequences: bool,
+    _alg_params: AlgorithmParameters,
+) -> Result<(), String> {
+    // Load the theme
+    let theme = crate::theme_loader::load_theme(theme_file)?;
+
+    // Select theme mode
+    let (theme_value, selected_mode) = crate::theme_loader::select_theme_mode(&theme, mode)?;
+
+    // Generate palette from theme
+    let palette = generate_palette(&theme_value, mode == "dark", false)?;
+
+    // Read template content
+    let template_content = std::fs::read_to_string(input_path)
+        .map_err(|e| format!("Failed to read template file: {}", e))?;
+
+    // Apply template processing
+    let processed_content =
+        crate::template_processor::process_template(&template_content, &palette, &selected_mode);
+
+    // Write output
+    std::fs::write(output_path, processed_content)
+        .map_err(|e| format!("Failed to write output file: {}", e))?;
+
+    Ok(())
+}

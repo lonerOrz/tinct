@@ -19,48 +19,6 @@ pub mod theme_loader;
 pub use filter::*;
 pub use output_handler::*;
 pub use palette_generator::*;
-pub use palette_generator::AlgorithmParameters;
 pub use template_processor::*;
 pub use terminal_sender::*;
-/// Public API for tinct
 pub use theme_loader::*;
-
-/// Process a theme using a theme file, input template, and output path
-/// This is the main entry point for the library functionality
-pub fn process_theme_workflow(
-    theme_path: &str,
-    template_path: &str,
-    output_path: &str,
-    mode: &str,
-    skip_terminal_sequences: bool, // New parameter - inverted logic
-    algorithm_params: crate::palette_generator::AlgorithmParameters, // Algorithm parameters
-) -> Result<(), String> {
-    use crate::output_handler::save_output;
-    use crate::template_processor::process_template;
-    use crate::theme_loader::load_theme;
-
-    // Load theme
-    let theme_data = load_theme(theme_path)?;
-
-    // Select theme mode
-    let (theme, effective_mode) = crate::theme_loader::select_theme_mode(&theme_data, mode)?;
-
-    // Generate palette with algorithm parameters
-    let palette = crate::palette_generator::generate_palette_with_params(&theme, effective_mode == "dark", algorithm_params)?;
-
-    // Send terminal sequences by default, unless explicitly skipped
-    // This is done immediately after palette generation to trigger terminal reload
-    if !skip_terminal_sequences {
-        // Send sequences to all active TTY devices
-        crate::terminal_sender::send_terminal_sequences(&palette)?;
-    }
-
-    // Load and process template
-    let template_content = crate::template_processor::load_template(template_path)?;
-    let processed_content = process_template(&template_content, &palette, &effective_mode);
-
-    // Save output
-    save_output(&processed_content, output_path)?;
-
-    Ok(())
-}

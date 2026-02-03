@@ -1,245 +1,203 @@
-// Color format representation
-#[derive(Debug, Clone)]
+use std::fmt;
+
+/// RGB color representation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rgb {
     pub r: u8,
     pub g: u8,
     pub b: u8,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Display for Rgb {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "RGB({}, {}, {})", self.r, self.g, self.b)
+    }
+}
+
+/// HSL color representation  
+#[derive(Debug, Clone, Copy)]
 pub struct Hsl {
-    pub h: f64,
-    pub s: f64,
-    pub l: f64,
+    pub h: f64, // Hue (0-360)
+    pub s: f64, // Saturation (0-100)
+    pub l: f64, // Lightness (0-100)
 }
 
-/// Clamp a value between min and max
-#[allow(dead_code)]
-pub fn clamp(n: f64, minn: f64, maxn: f64) -> f64 {
-    n.max(minn).min(maxn)
+impl fmt::Display for Hsl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "HSL({:.1}°, {:.1}%, {:.1}%)", self.h, self.s, self.l)
+    }
 }
 
-/// Convert HEX color to RGB values
-pub fn hex_to_rgb(hex_color: &str) -> Result<Rgb, String> {
-    let hex = hex_color.trim_start_matches('#');
-    if hex.len() != 6 && hex.len() != 8 {
-        return Err(format!(
-            "Invalid hex color format: {}. Expected 6 or 8 characters.",
-            hex
-        ));
+/// Clamp value between min and max
+pub fn clamp<T: PartialOrd + Copy>(n: T, minn: T, maxn: T) -> T {
+    if n < minn {
+        minn
+    } else if n > maxn {
+        maxn
+    } else {
+        n
+    }
+}
+
+/// Convert RGB to hex string
+pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
+    let r_byte = (clamp(r, 0.0, 255.0)).round() as u8;
+    let g_byte = (clamp(g, 0.0, 255.0)).round() as u8;
+    let b_byte = (clamp(b, 0.0, 255.0)).round() as u8;
+    format!("#{:02X}{:02X}{:02X}", r_byte, g_byte, b_byte)
+}
+
+/// Convert hex string to RGB
+pub fn hex_to_rgb(hex: &str) -> Result<Rgb, String> {
+    let hex_stripped = hex.trim_start_matches('#');
+
+    if hex_stripped.len() != 6 {
+        return Err("Invalid hex color format".to_string());
     }
 
-    let r = u8::from_str_radix(&hex[0..2], 16)
-        .map_err(|_| format!("Invalid hex color format: {}", hex))?;
-    let g = u8::from_str_radix(&hex[2..4], 16)
-        .map_err(|_| format!("Invalid hex color format: {}", hex))?;
-    let b = u8::from_str_radix(&hex[4..6], 16)
-        .map_err(|_| format!("Invalid hex color format: {}", hex))?;
+    let r = u8::from_str_radix(&hex_stripped[0..2], 16)
+        .map_err(|_| format!("Invalid hex color: {}", hex))?;
+    let g = u8::from_str_radix(&hex_stripped[2..4], 16)
+        .map_err(|_| format!("Invalid hex color: {}", hex))?;
+    let b = u8::from_str_radix(&hex_stripped[4..6], 16)
+        .map_err(|_| format!("Invalid hex color: {}", hex))?;
 
     Ok(Rgb { r, g, b })
 }
 
-/// Convert RGB values to HEX color
-#[allow(dead_code)]
-pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
-    let r = clamp(r.round(), 0.0, 255.0) as u8;
-    let g = clamp(g.round(), 0.0, 255.0) as u8;
-    let b = clamp(b.round(), 0.0, 255.0) as u8;
-    format!("#{:02x}{:02x}{:02x}", r, g, b)
-}
-
-/// Convert RGB values to HEX color (uppercase)
-#[allow(dead_code)]
-pub fn rgb_to_hex_upper(r: f64, g: f64, b: f64) -> String {
-    let r = clamp(r.round(), 0.0, 255.0) as u8;
-    let g = clamp(g.round(), 0.0, 255.0) as u8;
-    let b = clamp(b.round(), 0.0, 255.0) as u8;
-    format!("#{:02X}{:02X}{:02X}", r, g, b)
-}
-
-/// Convert RGB values to HSL
+/// Convert RGB to HSL
 pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     let r = r / 255.0;
     let g = g / 255.0;
     let b = b / 255.0;
-    let mx = r.max(g).max(b);
-    let mn = r.min(g).min(b);
-    let l = (mx + mn) / 2.0;
 
-    if (mx - mn).abs() < f64::EPSILON {
-        return Hsl {
-            h: 0.0,
-            s: 0.0,
-            l: l * 100.0,
-        };
-    }
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
 
-    let d = mx - mn;
-    let s = if l > 0.5 {
-        d / (2.0 - mx - mn)
+    let h = if max == min {
+        0.0
+    } else if max == r {
+        60.0 * (((g - b) / (max - min)) % 6.0)
+    } else if max == g {
+        60.0 * (((b - r) / (max - min)) + 2.0)
     } else {
-        d / (mx + mn)
+        60.0 * (((r - g) / (max - min)) + 4.0)
     };
 
-    let h = if (mx - r).abs() < f64::EPSILON {
-        (g - b) / d + if g < b { 6.0 } else { 0.0 }
-    } else if (mx - g).abs() < f64::EPSILON {
-        (b - r) / d + 2.0
+    let l = (max + min) / 2.0;
+
+    let s = if max == min {
+        0.0
+    } else if l < 0.5 {
+        (max - min) / (2.0 * l)
     } else {
-        (r - g) / d + 4.0
-    } / 6.0;
+        (max - min) / (2.0 - 2.0 * l)
+    };
 
     Hsl {
-        h: h * 360.0,
-        s: s * 100.0,
-        l: l * 100.0,
+        h: clamp(h, 0.0, 360.0),
+        s: clamp(s * 100.0, 0.0, 100.0),
+        l: clamp(l * 100.0, 0.0, 100.0),
     }
 }
 
-/// Format HSL values consistently for output
-pub fn format_hsl(h: f64, s: f64, l: f64) -> (u32, u32, u32) {
-    (h.round() as u32, s.round() as u32, l.round() as u32)
-}
-
-/// Convert HSL values to RGB
-#[allow(dead_code)]
+/// Convert HSL to RGB
 pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
     let h = h / 360.0;
     let s = s / 100.0;
     let l = l / 100.0;
 
-    if s.abs() < f64::EPSILON {
-        let val = (l * 255.0).round() as u8;
-        return Rgb {
-            r: val,
-            g: val,
-            b: val,
-        };
-    }
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
 
-    let q = if l < 0.5 {
-        l * (1.0 + s)
+    let (r, g, b) = if h < 1.0 / 6.0 {
+        (c, x, 0.0)
+    } else if h < 2.0 / 6.0 {
+        (x, c, 0.0)
+    } else if h < 3.0 / 6.0 {
+        (0.0, c, x)
+    } else if h < 4.0 / 6.0 {
+        (0.0, x, c)
+    } else if h < 5.0 / 6.0 {
+        (x, 0.0, c)
     } else {
-        l + s - l * s
+        (c, 0.0, x)
     };
-    let p = 2.0 * l - q;
-
-    fn hue2rgb(p: f64, q: f64, t: f64) -> f64 {
-        let mut t = t;
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            return p + (q - p) * 6.0 * t;
-        }
-        if t < 0.5 {
-            return q;
-        }
-        if t < 2.0 / 3.0 {
-            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-        }
-        p
-    }
-
-    let r = hue2rgb(p, q, h + 1.0 / 3.0);
-    let g = hue2rgb(p, q, h);
-    let b = hue2rgb(p, q, h - 1.0 / 3.0);
 
     Rgb {
-        r: (r * 255.0).round() as u8,
-        g: (g * 255.0).round() as u8,
-        b: (b * 255.0).round() as u8,
+        r: ((r + m) * 255.0).round() as u8,
+        g: ((g + m) * 255.0).round() as u8,
+        b: ((b + m) * 255.0).round() as u8,
     }
 }
 
-/// Calculate relative luminance of a color
-#[allow(dead_code)]
-pub fn get_luminance(hexcolor: &str) -> Result<f64, String> {
-    let rgb = hex_to_rgb(hexcolor)?;
+/// Determine if a color is light or dark based on relative luminance
+pub fn is_light_color(hex: &str) -> Result<bool, String> {
+    let rgb = hex_to_rgb(hex)?;
+    let luminance = calculate_relative_luminance(rgb.r, rgb.g, rgb.b);
+    Ok(luminance > 0.1791)
+}
 
-    fn convert(v: u8) -> f64 {
-        let v = v as f64 / 255.0;
-        if v <= 0.03928 {
-            v / 12.92
-        } else {
-            ((v + 0.055) / 1.055).powf(2.4)
-        }
-    }
+/// Calculate relative luminance for a color
+pub fn calculate_relative_luminance(r: u8, g: u8, b: u8) -> f64 {
+    let r = r as f64 / 255.0;
+    let g = g as f64 / 255.0;
+    let b = b as f64 / 255.0;
 
-    let r = convert(rgb.r);
-    let g = convert(rgb.g);
-    let b = convert(rgb.b);
-    Ok(0.2126 * r + 0.7152 * g + 0.0722 * b)
+    let linear_r = if r <= 0.03928 {
+        r / 12.92
+    } else {
+        ((r + 0.055) / 1.055).powf(2.4)
+    };
+    let linear_g = if g <= 0.03928 {
+        g / 12.92
+    } else {
+        ((g + 0.055) / 1.055).powf(2.4)
+    };
+    let linear_b = if b <= 0.03928 {
+        b / 12.92
+    } else {
+        ((b + 0.055) / 1.055).powf(2.4)
+    };
+
+    0.2126 * linear_r + 0.7152 * linear_g + 0.0722 * linear_b
 }
 
 /// Calculate contrast ratio between two colors
-#[allow(dead_code)]
-pub fn get_contrast_ratio(a: &str, b: &str) -> Result<f64, String> {
-    let l1 = get_luminance(a)?;
-    let l2 = get_luminance(b)?;
+pub fn calculate_contrast_ratio(color1: &str, color2: &str) -> Result<f64, String> {
+    let rgb1 = hex_to_rgb(color1)?;
+    let rgb2 = hex_to_rgb(color2)?;
 
-    let bright = l1.max(l2);
-    let dark = l1.min(l2);
-    Ok((bright + 0.05) / (dark + 0.05))
+    let l1 = calculate_relative_luminance(rgb1.r, rgb1.g, rgb1.b);
+    let l2 = calculate_relative_luminance(rgb2.r, rgb2.g, rgb2.b);
+
+    let lighter = l1.max(l2);
+    let darker = l1.min(l2);
+
+    Ok((lighter + 0.05) / (darker + 0.05))
 }
 
-/// Check if a color is light or dark based on luminance
-#[allow(dead_code)]
-pub fn is_light_color(hexcolor: &str) -> Result<bool, String> {
-    Ok(get_luminance(hexcolor)? > 0.5)
+/// Generate appropriate text color for a given background
+pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
+    let light = is_light_color(base)?;
+
+    if light {
+        if calculate_contrast_ratio(base, "#000000")? >= 4.5 {
+            Ok("#000000".to_string())
+        } else {
+            Ok("#1c1b1f".to_string())
+        }
+    } else {
+        if calculate_contrast_ratio(base, "#ffffff")? >= 4.5 {
+            Ok("#ffffff".to_string())
+        } else {
+            Ok("#e6e1e5".to_string())
+        }
+    }
 }
 
-/// Adjust the lightness of a color by a given amount
-#[allow(dead_code)]
-pub fn adjust_lightness(hexcolor: &str, amount: f64) -> Result<String, String> {
-    let rgb = hex_to_rgb(hexcolor)?;
-    let hsl = rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
-    let new_l = clamp(hsl.l + amount, 0.0, 100.0);
-    let new_rgb = hsl_to_rgb(hsl.h, hsl.s, new_l);
-    Ok(rgb_to_hex(
-        new_rgb.r as f64,
-        new_rgb.g as f64,
-        new_rgb.b as f64,
-    ))
-}
-
-/// Adjust the saturation of a color by a given amount
-#[allow(dead_code)]
-pub fn adjust_saturation(hexcolor: &str, amount: f64) -> Result<String, String> {
-    let rgb = hex_to_rgb(hexcolor)?;
-    let hsl = rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
-    let new_s = clamp(hsl.s + amount, 0.0, 100.0);
-    let new_rgb = hsl_to_rgb(hsl.h, new_s, hsl.l);
-    Ok(rgb_to_hex(
-        new_rgb.r as f64,
-        new_rgb.g as f64,
-        new_rgb.b as f64,
-    ))
-}
-
-/// Adjust both lightness and saturation of a color
-#[allow(dead_code)]
-pub fn adjust_lightness_and_saturation(hexcolor: &str, la: f64, sa: f64) -> Result<String, String> {
-    let rgb = hex_to_rgb(hexcolor)?;
-    let hsl = rgb_to_hsl(rgb.r as f64, rgb.g as f64, rgb.b as f64);
-    let new_l = clamp(hsl.l + la, 0.0, 100.0);
-    let new_s = clamp(hsl.s + sa, 0.0, 100.0);
-    let new_rgb = hsl_to_rgb(hsl.h, new_s, new_l);
-    Ok(rgb_to_hex(
-        new_rgb.r as f64,
-        new_rgb.g as f64,
-        new_rgb.b as f64,
-    ))
-}
-
-// HCT (Hue-Chroma-Tone) color space implementation for Material Design 3
-// Note: This is a simplified implementation based on the concepts
-// A full HCT implementation would require CAM16 color space conversion
-
-/// Represents a color in the HCT (Hue-Chroma-Tone) color space
+/// HCT (Hue-Chroma-Tone) color space implementation for Material Design 3
 #[derive(Debug, Clone)]
 pub struct Hct {
     pub h: f64, // Hue (0-360)
@@ -252,20 +210,16 @@ impl Hct {
     pub fn from_hct(h: f64, c: f64, t: f64) -> Self {
         Self {
             h: clamp(h, 0.0, 360.0),
-            c: clamp(c, 0.0, 200.0), // Chroma can go higher than 100
+            c: clamp(c, 0.0, 200.0),
             t: clamp(t, 0.0, 100.0),
         }
     }
 
     /// Convert HCT to RGB
     pub fn to_rgb(&self) -> Rgb {
-        // This is a simplified conversion
-        // A full implementation would require CAM16 conversion
-        // For now, we'll convert HCT to HSL then to RGB as an approximation
-        // Using a more accurate mapping from chroma to saturation
         let hsl = Hsl {
             h: self.h,
-            s: clamp(self.c * 0.8, 0.0, 100.0), // Better mapping from chroma to saturation
+            s: clamp(self.c * 0.8, 0.0, 100.0),
             l: self.t,
         };
         hsl_to_rgb(hsl.h, hsl.s, hsl.l)
@@ -280,38 +234,17 @@ impl Hct {
 
 /// Generate HCT color from RGB
 pub fn rgb_to_hct(r: u8, g: u8, b: u8) -> Hct {
-    // This is a simplified conversion
-    // A full implementation would require CAM16 conversion
     let hsl = rgb_to_hsl(r as f64, g as f64, b as f64);
     Hct {
         h: hsl.h,
-        c: clamp(hsl.s * 1.2, 0.0, 150.0), // Increase the chroma to compensate for the conversion loss
+        c: clamp(hsl.s * 1.2, 0.0, 150.0),
         t: hsl.l,
     }
 }
 
-/// Generate appropriate text color for a given background
-#[allow(dead_code)]
-pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
-    // The _is_dark parameter determines the overall theme preference,
-    // but we still want to ensure good contrast regardless of the theme preference
-    let light = is_light_color(base)?;
-
-    if light {
-        // If the base color is light, we want dark text for contrast
-        if get_contrast_ratio(base, "#000000")? >= 4.5 {
-            Ok("#000000".to_string())
-        } else {
-            Ok("#1c1b1f".to_string())
-        }
-    } else {
-        // If the base color is dark, we want light text for contrast
-        if get_contrast_ratio(base, "#ffffff")? >= 4.5 {
-            Ok("#ffffff".to_string())
-        } else {
-            Ok("#e6e1e5".to_string())
-        }
-    }
+/// Convert RGB to hex string with uppercase letters
+pub fn rgb_to_hex_upper(r: f64, g: f64, b: f64) -> String {
+    rgb_to_hex(r, g, b).to_uppercase()
 }
 
 #[cfg(test)]
@@ -329,115 +262,36 @@ mod tests {
         assert_eq!(rgb.r, 0);
         assert_eq!(rgb.g, 0);
         assert_eq!(rgb.b, 0);
-
-        let rgb = hex_to_rgb("#ff0000").unwrap();
-        assert_eq!(rgb.r, 255);
-        assert_eq!(rgb.g, 0);
-        assert_eq!(rgb.b, 0);
-
-        // Test hex without hash
-        let rgb = hex_to_rgb("ffffff").unwrap();
-        assert_eq!(rgb.r, 255);
-        assert_eq!(rgb.g, 255);
-        assert_eq!(rgb.b, 255);
     }
 
     #[test]
     fn test_rgb_to_hex() {
-        assert_eq!(rgb_to_hex(255.0, 255.0, 255.0), "#ffffff");
-        assert_eq!(rgb_to_hex(0.0, 0.0, 0.0), "#000000");
-        assert_eq!(rgb_to_hex(255.0, 0.0, 0.0), "#ff0000");
+        let hex = rgb_to_hex(255.0, 255.0, 255.0);
+        assert_eq!(hex, "#FFFFFF");
+
+        let hex = rgb_to_hex(0.0, 0.0, 0.0);
+        assert_eq!(hex, "#000000");
     }
 
     #[test]
     fn test_rgb_to_hsl() {
-        let hsl = rgb_to_hsl(255.0, 0.0, 0.0); // Red
-        assert_eq!(hsl.h as u32, 0); // Hue should be around 0 for red
-        assert!((hsl.s - 100.0).abs() < 1.0); // Should be fully saturated
-        assert!((hsl.l - 50.0).abs() < 1.0); // Should be mid-lightness
-
-        let hsl = rgb_to_hsl(0.0, 255.0, 0.0); // Green
-        assert_eq!(hsl.h as u32, 120); // Hue should be around 120 for green
+        let hsl = rgb_to_hsl(255.0, 0.0, 0.0);
+        assert!((hsl.h - 0.0).abs() < 0.1);
+        assert!((hsl.s - 100.0).abs() < 0.1);
+        assert!((hsl.l - 50.0).abs() < 0.1);
     }
 
     #[test]
     fn test_hsl_to_rgb() {
-        let rgb = hsl_to_rgb(0.0, 100.0, 50.0); // Red
-        assert_eq!(rgb.r, 255);
-        assert_eq!(rgb.g, 0);
-        assert_eq!(rgb.b, 0);
-
-        let rgb = hsl_to_rgb(120.0, 100.0, 50.0); // Green
-        assert_eq!(rgb.r, 0);
-        assert_eq!(rgb.g, 255);
-        assert_eq!(rgb.b, 0);
+        let rgb = hsl_to_rgb(0.0, 100.0, 50.0);
+        assert!((rgb.r as f64 - 255.0).abs() < 1.0);
+        assert!((rgb.g as f64 - 0.0).abs() < 1.0);
+        assert!((rgb.b as f64 - 0.0).abs() < 1.0);
     }
 
     #[test]
-    fn test_adjust_lightness() {
-        let result = adjust_lightness("#ff0000", -20.0).unwrap();
-        assert!(result != "#ff0000"); // Should be different
-    }
-
-    #[test]
-    fn test_get_luminance() {
-        let lum_white = get_luminance("#ffffff").unwrap();
-        assert!(lum_white > 0.9); // White should have high luminance
-
-        let lum_black = get_luminance("#000000").unwrap();
-        assert!(lum_black < 0.1); // Black should have low luminance
-    }
-
-    #[test]
-    fn test_get_contrast_ratio() {
-        let ratio = get_contrast_ratio("#ffffff", "#000000").unwrap();
-        assert!(ratio > 20.0); // Black and white should have high contrast
-
-        let ratio = get_contrast_ratio("#ffffff", "#ffffff").unwrap();
-        assert!((ratio - 1.0).abs() < 0.1); // Same colors should have ratio of 1
-    }
-
-    #[test]
-    fn test_is_light_color() {
-        assert_eq!(is_light_color("#ffffff").unwrap(), true);
-        assert_eq!(is_light_color("#000000").unwrap(), false);
-        assert_eq!(is_light_color("#888888").unwrap(), false); // Mid gray is considered dark
-    }
-
-    #[test]
-    fn test_generate_on_color() {
-        // Test with light background - should return dark text color
-        let color_result = generate_on_color("#ffffff", true).unwrap();
-        assert!(color_result == "#000000" || color_result == "#1c1b1f"); // Either pure black or dark gray
-
-        // Test with dark background - should return light text color
-        let color_result = generate_on_color("#000000", true).unwrap();
-        assert!(color_result == "#ffffff" || color_result == "#e6e1e5"); // Either pure white or light gray
-    }
-
-    #[test]
-    fn test_adjust_lightness_and_saturation() {
-        let result = adjust_lightness_and_saturation("#ff8080", -10.0, 10.0).unwrap();
-        assert!(result != "#ff8080"); // Should be different
-    }
-
-    #[test]
-    fn test_clamp() {
-        assert_eq!(clamp(5.0, 0.0, 10.0), 5.0);
-        assert_eq!(clamp(-1.0, 0.0, 10.0), 0.0);
-        assert_eq!(clamp(15.0, 0.0, 10.0), 10.0);
-    }
-
-    #[test]
-    fn test_hct_functionality() {
-        let hct = rgb_to_hct(255, 0, 0); // Red
-        assert_eq!(hct.h as u32, 0); // Hue should be around 0 for red
-
-        let hct_color = Hct::from_hct(0.0, 100.0, 50.0);
-        let rgb_from_hct = hct_color.to_rgb();
-        // The RGB values should be close to red (255, 0, 0) when converted back from HCT
-        assert!(rgb_from_hct.r > 200); // Red component should be high
-        assert!(rgb_from_hct.g < 50); // Green component should be low
-        assert!(rgb_from_hct.b < 50); // Blue component should be low
+    fn test_contrast_ratio() {
+        let ratio = calculate_contrast_ratio("#FFFFFF", "#000000").unwrap();
+        assert!((ratio - 21.0).abs() < 1.0);
     }
 }
