@@ -143,3 +143,53 @@ pub mod general {
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_logger_creation() {
+        let logger = Logger::new(LogLevel::Normal);
+        assert_eq!(logger.level, LogLevel::Normal);
+    }
+
+    #[test]
+    fn test_logger_verbose_level() {
+        let logger = Logger::new(LogLevel::Verbose);
+        assert_eq!(logger.level, LogLevel::Verbose);
+    }
+
+    #[test]
+    fn test_log_level_ordering() {
+        // Verify all log levels exist and are distinct
+        assert_ne!(LogLevel::Quiet, LogLevel::Normal);
+        assert_ne!(LogLevel::Normal, LogLevel::Verbose);
+        assert_ne!(LogLevel::Quiet, LogLevel::Verbose);
+    }
+
+    #[test]
+    fn test_is_verbose_default() {
+        // Without initialization, is_verbose should return false
+        assert!(!is_verbose());
+    }
+
+    #[test]
+    fn test_init_logger() {
+        // Should not panic when initializing logger
+        init_logger(LogLevel::Quiet);
+        init_logger(LogLevel::Normal);
+        init_logger(LogLevel::Verbose);
+    }
+
+    #[test]
+    fn test_logger_traits() {
+        // Verify Debug, Clone, Copy, PartialEq traits work
+        let level1 = LogLevel::Quiet;
+        let level2 = level1;
+        assert_eq!(level1, level2);
+
+        let cloned = level1.clone();
+        assert_eq!(level1, cloned);
+    }
+}

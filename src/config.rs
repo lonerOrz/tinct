@@ -73,7 +73,14 @@ impl ConfigRoot {
             toml::from_str(config_content).map_err(|e| format!("Invalid TOML format: {}", e))?;
 
         // Extract algorithm config if present
-        let mut algorithm = AlgorithmConfig::default();
+        // Use serde defaults by deserializing, fallback to hardcoded defaults
+        let mut algorithm = AlgorithmConfig {
+            contrast_threshold: default_contrast_threshold(),
+            saturation_adjustment: default_saturation_adjustment(),
+            lightness_adjustment: default_lightness_adjustment(),
+            hue_shift: default_hue_shift(),
+            min_contrast_ratio: default_min_contrast_ratio(),
+        };
         if let Some(table) = value.get("algorithm").and_then(|v| v.as_table()) {
             if let Some(v) = table.get("contrast_threshold").and_then(|v| v.as_float()) {
                 algorithm.contrast_threshold = v;
@@ -149,5 +156,126 @@ pub type Config = HashMap<String, HashMap<String, ConfigSection>>;
 impl ConfigRoot {
     pub fn to_flat_config(self) -> Config {
         self.groups
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_parse_minimal() {
+        let config_content = r#"
+[templates.test]
+input_path = "input.css"
+output_path = "output.css"
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.groups.contains_key("templates"));
+    }
+
+    #[test]
+    fn test_config_parse_with_algorithm() {
+        let config_content = r#"
+[algorithm]
+contrast_threshold = 0.2
+saturation_adjustment = 10
+lightness_adjustment = -5
+hue_shift = 15
+min_contrast_ratio = 4.0
+
+[templates.test]
+input_path = "input.css"
+output_path = "output.css"
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.algorithm.contrast_threshold, 0.2);
+        assert_eq!(config.algorithm.saturation_adjustment, 10);
+        assert_eq!(config.algorithm.lightness_adjustment, -5);
+        assert_eq!(config.algorithm.hue_shift, 15);
+        assert_eq!(config.algorithm.min_contrast_ratio, 4.0);
+    }
+
+    #[test]
+    fn test_config_parse_multiple_sections() {
+        let config_content = r#"
+[section1.test]
+input_path = "input1.css"
+output_path = "output1.css"
+
+[section2.production]
+input_path = "input2.css"
+output_path = "output2.css"
+post_hook = "./script.sh"
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.groups.contains_key("section1"));
+        assert!(config.groups.contains_key("section2"));
+    }
+
+    #[test]
+    fn test_algorithm_config_defaults() {
+        let config_content = r#"
+[algorithm]
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        // Check default values
+        assert!((config.algorithm.contrast_threshold - 0.15).abs() < 0.001);
+        assert_eq!(config.algorithm.saturation_adjustment, 0);
+        assert_eq!(config.algorithm.lightness_adjustment, 0);
+        assert_eq!(config.algorithm.hue_shift, 0);
+        assert!((config.algorithm.min_contrast_ratio - 4.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_config_parse_missing_required_fields() {
+        let config_content = r#"
+[incomplete.test]
+some_field = "value"
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(!config.groups.contains_key("incomplete"));
+    }
+
+    #[test]
+    fn test_config_to_flat_config() {
+        let config_content = r#"
+[templates.test]
+input_path = "input.css"
+output_path = "output.css"
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config_root = result.unwrap();
+        let flat = config_root.to_flat_config();
+        assert!(flat.contains_key("templates"));
+    }
+
+    #[test]
+    fn test_config_parse_with_nested_groups() {
+        let config_content = r#"
+[frontend.templates]
+input_path = "src/templates/*.hbs"
+output_path = "dist/"
+
+[backend.templates]
+input_path = "server/**/*.tmpl"
+output_path = "generated/"
+"#;
+        let result = ConfigRoot::parse(config_content);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.groups.contains_key("frontend"));
+        assert!(config.groups.contains_key("backend"));
     }
 }

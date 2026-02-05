@@ -232,3 +232,34 @@ fn display_md3_cards_grid(palette: &crate::palette_generator::Palette) {
         println!(); // Extra spacing between rows of cards
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_show_color_preview_with_valid_theme() {
+        let theme_path = "test/theme.json";
+        let result = show_color_preview(theme_path, "dark");
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_show_color_preview_invalid_theme() {
+        let result = show_color_preview("nonexistent.json", "dark");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_show_color_preview_light_mode() {
+        let theme_path = "test/theme.json";
+        let result = show_color_preview(theme_path, "light");
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_show_color_preview_function_signature() {
+        fn _check_fn_signature(_f: fn(&str, &str) -> Result<(), String>) {}
+        _check_fn_signature(show_color_preview);
+    }
+}

@@ -33,7 +33,7 @@ pub struct CliArgs {
     pub log_level: LogLevel,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
 pub enum ThemeMode {
     Dark,
     Light,
@@ -246,5 +246,96 @@ pub fn process_section(
             crate::log::error::theme_error(section_name, &e.to_string());
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ConfigSection;
+
+    #[test]
+    fn test_validate_config_section_valid() {
+        let section = ConfigSection {
+            input_path: "input.css".to_string(),
+            output_path: "output.css".to_string(),
+            post_hook: None,
+        };
+        assert!(validate_config_section(&section, "test"));
+    }
+
+    #[test]
+    fn test_validate_config_section_missing_input() {
+        let section = ConfigSection {
+            input_path: "".to_string(),
+            output_path: "output.css".to_string(),
+            post_hook: None,
+        };
+        assert!(!validate_config_section(&section, "test"));
+    }
+
+    #[test]
+    fn test_validate_config_section_missing_output() {
+        let section = ConfigSection {
+            input_path: "input.css".to_string(),
+            output_path: "".to_string(),
+            post_hook: None,
+        };
+        assert!(!validate_config_section(&section, "test"));
+    }
+
+    #[test]
+    fn test_validate_config_section_both_missing() {
+        let section = ConfigSection {
+            input_path: "".to_string(),
+            output_path: "".to_string(),
+            post_hook: None,
+        };
+        assert!(!validate_config_section(&section, "test"));
+    }
+
+    #[test]
+    fn test_theme_mode_display() {
+        assert_eq!(ThemeMode::Dark.to_string(), "dark");
+        assert_eq!(ThemeMode::Light.to_string(), "light");
+    }
+
+    #[test]
+    fn test_log_level_variants() {
+        // Verify all log levels exist
+        let _ = LogLevel::Quiet;
+        let _ = LogLevel::Normal;
+        let _ = LogLevel::Verbose;
+    }
+
+    #[test]
+    fn test_cli_args_derive() {
+        // Verify CliArgs can be created with derive
+        let args = CliArgs {
+            config: Some("custom.toml".to_string()),
+            theme: "mytheme".to_string(),
+            mode: ThemeMode::Light,
+            preview: true,
+            skip_sequences: false,
+            log_level: LogLevel::Verbose,
+        };
+        assert_eq!(args.theme, "mytheme");
+        assert_eq!(args.mode, ThemeMode::Light);
+        assert!(args.preview);
+    }
+
+    #[test]
+    fn test_run_post_hook_empty() {
+        assert!(run_post_hook("", "output.css", None, LogLevel::Quiet));
+    }
+
+    #[test]
+    fn test_is_executable_function_exists() {
+        // Test that the platform-specific is_executable function exists
+        let path = Path::new("/nonexistent/path");
+        #[cfg(unix)]
+        assert!(!is_executable(path));
+        #[cfg(not(unix))]
+        assert!(is_executable(path));
     }
 }
