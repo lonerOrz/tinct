@@ -24,9 +24,11 @@ pub struct ColorFormat {
     pub original_lightness: Option<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ColorEntry {
     pub default: ColorFormat,
+    pub dark: ColorFormat,
+    pub light: ColorFormat,
 }
 
 #[derive(Debug)]
@@ -219,14 +221,95 @@ pub struct AlgorithmParameters {
     pub min_contrast_ratio: f64,
 }
 
-/// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space with algorithm parameters
-pub fn generate_palette_with_params(
+/// Helper struct to store single-mode palette data
+#[derive(Debug, Clone)]
+struct SingleModePalette {
+    primary: ColorFormat,
+    on_primary: ColorFormat,
+    primary_container: ColorFormat,
+    on_primary_container: ColorFormat,
+    primary_fixed: ColorFormat,
+    primary_fixed_dim: ColorFormat,
+    on_primary_fixed: ColorFormat,
+    on_primary_fixed_variant: ColorFormat,
+
+    secondary: ColorFormat,
+    on_secondary: ColorFormat,
+    secondary_container: ColorFormat,
+    on_secondary_container: ColorFormat,
+    secondary_fixed: ColorFormat,
+    secondary_fixed_dim: ColorFormat,
+    on_secondary_fixed: ColorFormat,
+    on_secondary_fixed_variant: ColorFormat,
+
+    tertiary: ColorFormat,
+    on_tertiary: ColorFormat,
+    tertiary_container: ColorFormat,
+    on_tertiary_container: ColorFormat,
+    tertiary_fixed: ColorFormat,
+    tertiary_fixed_dim: ColorFormat,
+    on_tertiary_fixed: ColorFormat,
+    on_tertiary_fixed_variant: ColorFormat,
+
+    error: ColorFormat,
+    on_error: ColorFormat,
+    error_container: ColorFormat,
+    on_error_container: ColorFormat,
+
+    background: ColorFormat,
+    on_background: ColorFormat,
+    surface: ColorFormat,
+    on_surface: ColorFormat,
+    surface_variant: ColorFormat,
+    on_surface_variant: ColorFormat,
+
+    surface_container_lowest: ColorFormat,
+    surface_container_low: ColorFormat,
+    surface_container: ColorFormat,
+    surface_container_high: ColorFormat,
+    surface_container_highest: ColorFormat,
+
+    inverse_surface: ColorFormat,
+    inverse_on_surface: ColorFormat,
+    inverse_primary: ColorFormat,
+
+    surface_dim: ColorFormat,
+    surface_bright: ColorFormat,
+
+    outline: ColorFormat,
+    outline_variant: ColorFormat,
+
+    shadow: ColorFormat,
+    scrim: ColorFormat,
+
+    // Terminal colors
+    black: ColorFormat,
+    red: ColorFormat,
+    green: ColorFormat,
+    yellow: ColorFormat,
+    blue: ColorFormat,
+    magenta: ColorFormat,
+    cyan: ColorFormat,
+    white: ColorFormat,
+    bright_black: ColorFormat,
+    bright_red: ColorFormat,
+    bright_green: ColorFormat,
+    bright_yellow: ColorFormat,
+    bright_blue: ColorFormat,
+    bright_magenta: ColorFormat,
+    bright_cyan: ColorFormat,
+    bright_white: ColorFormat,
+}
+
+/// Generate single-mode palette from theme data
+/// This is an internal helper function that generates colors for one mode (dark or light)
+fn generate_single_mode_palette(
     theme: &Value,
     is_dark_mode: bool,
-    params: AlgorithmParameters,
-) -> Result<Palette, String> {
+    params: &AlgorithmParameters,
+) -> Result<SingleModePalette, String> {
     if crate::log::is_verbose() {
-        eprintln!("Generating color palette with algorithm parameters...");
+        eprintln!("Generating single-mode palette (is_dark_mode={})...", is_dark_mode);
     }
 
     // Get colors from theme - try both standard and m-prefixed keys
@@ -269,23 +352,23 @@ pub fn generate_palette_with_params(
     let primary_rgb = color::hex_to_rgb(primary_hex)?;
     let mut primary_hct = color::rgb_to_hct(primary_rgb.r, primary_rgb.g, primary_rgb.b);
     // Apply algorithm parameters to primary
-    primary_hct = apply_algorithm_params(primary_hct, &params);
+    primary_hct = apply_algorithm_params(primary_hct, params);
 
     // Convert hex to HCT for secondary and tertiary
     let secondary_rgb = color::hex_to_rgb(secondary_hex)?;
     let mut secondary_hct = color::rgb_to_hct(secondary_rgb.r, secondary_rgb.g, secondary_rgb.b);
     // Apply algorithm parameters to secondary
-    secondary_hct = apply_algorithm_params(secondary_hct, &params);
+    secondary_hct = apply_algorithm_params(secondary_hct, params);
 
     let tertiary_rgb = color::hex_to_rgb(tertiary_hex)?;
     let mut tertiary_hct = color::rgb_to_hct(tertiary_rgb.r, tertiary_rgb.g, tertiary_rgb.b);
     // Apply algorithm parameters to tertiary
-    tertiary_hct = apply_algorithm_params(tertiary_hct, &params);
+    tertiary_hct = apply_algorithm_params(tertiary_hct, params);
 
     let error_rgb = color::hex_to_rgb(error_hex)?;
     let mut error_hct = color::rgb_to_hct(error_rgb.r, error_rgb.g, error_rgb.b);
     // Apply algorithm parameters to error
-    error_hct = apply_algorithm_params(error_hct, &params);
+    error_hct = apply_algorithm_params(error_hct, params);
 
     // Create primary colors using HCT
     let primary = create_color_format(&primary_hct.to_hex())?;
@@ -752,201 +835,427 @@ pub fn generate_palette_with_params(
     };
     let scrim = create_color_format(scrim_hex)?;
 
+    // Build and return single-mode palette
+    Ok(SingleModePalette {
+        primary: primary.clone(),
+        on_primary: on_primary.clone(),
+        primary_container: primary_container.clone(),
+        on_primary_container: on_primary_container.clone(),
+        primary_fixed: primary_fixed.clone(),
+        primary_fixed_dim: primary_fixed_dim.clone(),
+        on_primary_fixed: on_primary_fixed.clone(),
+        on_primary_fixed_variant: on_primary_fixed_variant.clone(),
+
+        secondary: secondary.clone(),
+        on_secondary: on_secondary.clone(),
+        secondary_container: secondary_container.clone(),
+        on_secondary_container: on_secondary_container.clone(),
+        secondary_fixed: secondary_fixed.clone(),
+        secondary_fixed_dim: secondary_fixed_dim.clone(),
+        on_secondary_fixed: on_secondary_fixed.clone(),
+        on_secondary_fixed_variant: on_secondary_fixed_variant.clone(),
+
+        tertiary: tertiary.clone(),
+        on_tertiary: on_tertiary.clone(),
+        tertiary_container: tertiary_container.clone(),
+        on_tertiary_container: on_tertiary_container.clone(),
+        tertiary_fixed: tertiary_fixed.clone(),
+        tertiary_fixed_dim: tertiary_fixed_dim.clone(),
+        on_tertiary_fixed: on_tertiary_fixed.clone(),
+        on_tertiary_fixed_variant: on_tertiary_fixed_variant.clone(),
+
+        error: error.clone(),
+        on_error: on_error.clone(),
+        error_container: error_container.clone(),
+        on_error_container: on_error_container.clone(),
+
+        background: background.clone(),
+        on_background: on_background.clone(),
+        surface: surface.clone(),
+        on_surface: on_surface.clone(),
+        surface_variant: surface_variant.clone(),
+        on_surface_variant: on_surface_variant.clone(),
+
+        surface_container_lowest,
+        surface_container_low,
+        surface_container,
+        surface_container_high,
+        surface_container_highest,
+
+        inverse_surface: inverse_surface.clone(),
+        inverse_on_surface,
+        inverse_primary,
+
+        surface_dim,
+        surface_bright,
+
+        outline,
+        outline_variant,
+
+        shadow,
+        scrim,
+
+        // Terminal colors
+        black: surface.clone(),
+        red: error.clone(),
+        green: tertiary.clone(),
+        yellow: primary.clone(),
+        blue: secondary.clone(),
+        magenta: primary_container.clone(),
+        cyan: secondary_container.clone(),
+        white: on_surface.clone(),
+        bright_black: surface_variant.clone(),
+        bright_red: error_container.clone(),
+        bright_green: tertiary_container.clone(),
+        bright_yellow: primary_fixed.clone(),
+        bright_blue: secondary_fixed.clone(),
+        bright_magenta: primary_fixed_dim.clone(),
+        bright_cyan: secondary_fixed_dim.clone(),
+        bright_white: inverse_surface.clone(),
+    })
+}
+
+/// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space with algorithm parameters
+pub fn generate_palette_with_params(
+    theme: &Value,
+    is_dark_mode: bool,
+    params: AlgorithmParameters,
+) -> Result<Palette, String> {
+    if crate::log::is_verbose() {
+        eprintln!("Generating color palette with algorithm parameters...");
+    }
+
+    // Generate palettes for both dark and light modes
+    let dark_palette = generate_single_mode_palette(theme, true, &params)?;
+    let light_palette = generate_single_mode_palette(theme, false, &params)?;
+
+    // Build the final palette with both modes
     let palette = Palette {
         primary: ColorEntry {
-            default: primary.clone(),
+            default: if is_dark_mode { dark_palette.primary.clone() } else { light_palette.primary.clone() },
+            dark: dark_palette.primary.clone(),
+            light: light_palette.primary.clone(),
         },
         on_primary: ColorEntry {
-            default: on_primary.clone(),
+            default: if is_dark_mode { dark_palette.on_primary.clone() } else { light_palette.on_primary.clone() },
+            dark: dark_palette.on_primary.clone(),
+            light: light_palette.on_primary.clone(),
         },
         primary_container: ColorEntry {
-            default: primary_container.clone(),
+            default: if is_dark_mode { dark_palette.primary_container.clone() } else { light_palette.primary_container.clone() },
+            dark: dark_palette.primary_container.clone(),
+            light: light_palette.primary_container.clone(),
         },
         on_primary_container: ColorEntry {
-            default: on_primary_container.clone(),
+            default: if is_dark_mode { dark_palette.on_primary_container.clone() } else { light_palette.on_primary_container.clone() },
+            dark: dark_palette.on_primary_container.clone(),
+            light: light_palette.on_primary_container.clone(),
         },
         primary_fixed: ColorEntry {
-            default: primary_fixed.clone(),
+            default: if is_dark_mode { dark_palette.primary_fixed.clone() } else { light_palette.primary_fixed.clone() },
+            dark: dark_palette.primary_fixed.clone(),
+            light: light_palette.primary_fixed.clone(),
         },
         primary_fixed_dim: ColorEntry {
-            default: primary_fixed_dim.clone(),
+            default: if is_dark_mode { dark_palette.primary_fixed_dim.clone() } else { light_palette.primary_fixed_dim.clone() },
+            dark: dark_palette.primary_fixed_dim.clone(),
+            light: light_palette.primary_fixed_dim.clone(),
         },
         on_primary_fixed: ColorEntry {
-            default: on_primary_fixed.clone(),
+            default: if is_dark_mode { dark_palette.on_primary_fixed.clone() } else { light_palette.on_primary_fixed.clone() },
+            dark: dark_palette.on_primary_fixed.clone(),
+            light: light_palette.on_primary_fixed.clone(),
         },
         on_primary_fixed_variant: ColorEntry {
-            default: on_primary_fixed_variant.clone(),
-        },
-        secondary: ColorEntry {
-            default: secondary.clone(),
-        },
-        on_secondary: ColorEntry {
-            default: on_secondary.clone(),
-        },
-        secondary_container: ColorEntry {
-            default: secondary_container.clone(),
-        },
-        on_secondary_container: ColorEntry {
-            default: on_secondary_container.clone(),
-        },
-        secondary_fixed: ColorEntry {
-            default: secondary_fixed.clone(),
-        },
-        secondary_fixed_dim: ColorEntry {
-            default: secondary_fixed_dim.clone(),
-        },
-        on_secondary_fixed: ColorEntry {
-            default: on_secondary_fixed.clone(),
-        },
-        on_secondary_fixed_variant: ColorEntry {
-            default: on_secondary_fixed_variant.clone(),
-        },
-        tertiary: ColorEntry {
-            default: tertiary.clone(),
-        },
-        on_tertiary: ColorEntry {
-            default: on_tertiary.clone(),
-        },
-        tertiary_container: ColorEntry {
-            default: tertiary_container.clone(),
-        },
-        on_tertiary_container: ColorEntry {
-            default: on_tertiary_container.clone(),
-        },
-        tertiary_fixed: ColorEntry {
-            default: tertiary_fixed.clone(),
-        },
-        tertiary_fixed_dim: ColorEntry {
-            default: tertiary_fixed_dim.clone(),
-        },
-        on_tertiary_fixed: ColorEntry {
-            default: on_tertiary_fixed.clone(),
-        },
-        on_tertiary_fixed_variant: ColorEntry {
-            default: on_tertiary_fixed_variant.clone(),
-        },
-        error: ColorEntry {
-            default: error.clone(),
-        },
-        on_error: ColorEntry {
-            default: on_error.clone(),
-        },
-        error_container: ColorEntry {
-            default: error_container.clone(),
-        },
-        on_error_container: ColorEntry {
-            default: on_error_container.clone(),
-        },
-        background: ColorEntry {
-            default: background.clone(),
-        },
-        on_background: ColorEntry {
-            default: on_background.clone(),
-        },
-        surface: ColorEntry {
-            default: surface.clone(),
-        },
-        on_surface: ColorEntry {
-            default: on_surface.clone(),
-        },
-        surface_variant: ColorEntry {
-            default: surface_variant.clone(),
-        },
-        on_surface_variant: ColorEntry {
-            default: on_surface_variant.clone(),
-        },
-        surface_container_lowest: ColorEntry {
-            default: surface_container_lowest.clone(),
-        },
-        surface_container_low: ColorEntry {
-            default: surface_container_low.clone(),
-        },
-        surface_container: ColorEntry {
-            default: surface_container.clone(),
-        },
-        surface_container_high: ColorEntry {
-            default: surface_container_high.clone(),
-        },
-        surface_container_highest: ColorEntry {
-            default: surface_container_highest.clone(),
-        },
-        inverse_surface: ColorEntry {
-            default: inverse_surface.clone(),
-        },
-        inverse_on_surface: ColorEntry {
-            default: inverse_on_surface.clone(),
-        },
-        inverse_primary: ColorEntry {
-            default: inverse_primary.clone(),
-        },
-        surface_dim: ColorEntry {
-            default: surface_dim.clone(),
-        },
-        surface_bright: ColorEntry {
-            default: surface_bright.clone(),
-        },
-        outline: ColorEntry {
-            default: outline.clone(),
-        },
-        outline_variant: ColorEntry {
-            default: outline_variant.clone(),
-        },
-        shadow: ColorEntry {
-            default: shadow.clone(),
-        },
-        scrim: ColorEntry {
-            default: scrim.clone(),
+            default: if is_dark_mode { dark_palette.on_primary_fixed_variant.clone() } else { light_palette.on_primary_fixed_variant.clone() },
+            dark: dark_palette.on_primary_fixed_variant.clone(),
+            light: light_palette.on_primary_fixed_variant.clone(),
         },
 
-        // Terminal colors - mapping MD3 colors to terminal equivalents
+        secondary: ColorEntry {
+            default: if is_dark_mode { dark_palette.secondary.clone() } else { light_palette.secondary.clone() },
+            dark: dark_palette.secondary.clone(),
+            light: light_palette.secondary.clone(),
+        },
+        on_secondary: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_secondary.clone() } else { light_palette.on_secondary.clone() },
+            dark: dark_palette.on_secondary.clone(),
+            light: light_palette.on_secondary.clone(),
+        },
+        secondary_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.secondary_container.clone() } else { light_palette.secondary_container.clone() },
+            dark: dark_palette.secondary_container.clone(),
+            light: light_palette.secondary_container.clone(),
+        },
+        on_secondary_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_secondary_container.clone() } else { light_palette.on_secondary_container.clone() },
+            dark: dark_palette.on_secondary_container.clone(),
+            light: light_palette.on_secondary_container.clone(),
+        },
+        secondary_fixed: ColorEntry {
+            default: if is_dark_mode { dark_palette.secondary_fixed.clone() } else { light_palette.secondary_fixed.clone() },
+            dark: dark_palette.secondary_fixed.clone(),
+            light: light_palette.secondary_fixed.clone(),
+        },
+        secondary_fixed_dim: ColorEntry {
+            default: if is_dark_mode { dark_palette.secondary_fixed_dim.clone() } else { light_palette.secondary_fixed_dim.clone() },
+            dark: dark_palette.secondary_fixed_dim.clone(),
+            light: light_palette.secondary_fixed_dim.clone(),
+        },
+        on_secondary_fixed: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_secondary_fixed.clone() } else { light_palette.on_secondary_fixed.clone() },
+            dark: dark_palette.on_secondary_fixed.clone(),
+            light: light_palette.on_secondary_fixed.clone(),
+        },
+        on_secondary_fixed_variant: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_secondary_fixed_variant.clone() } else { light_palette.on_secondary_fixed_variant.clone() },
+            dark: dark_palette.on_secondary_fixed_variant.clone(),
+            light: light_palette.on_secondary_fixed_variant.clone(),
+        },
+
+        tertiary: ColorEntry {
+            default: if is_dark_mode { dark_palette.tertiary.clone() } else { light_palette.tertiary.clone() },
+            dark: dark_palette.tertiary.clone(),
+            light: light_palette.tertiary.clone(),
+        },
+        on_tertiary: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_tertiary.clone() } else { light_palette.on_tertiary.clone() },
+            dark: dark_palette.on_tertiary.clone(),
+            light: light_palette.on_tertiary.clone(),
+        },
+        tertiary_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.tertiary_container.clone() } else { light_palette.tertiary_container.clone() },
+            dark: dark_palette.tertiary_container.clone(),
+            light: light_palette.tertiary_container.clone(),
+        },
+        on_tertiary_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_tertiary_container.clone() } else { light_palette.on_tertiary_container.clone() },
+            dark: dark_palette.on_tertiary_container.clone(),
+            light: light_palette.on_tertiary_container.clone(),
+        },
+        tertiary_fixed: ColorEntry {
+            default: if is_dark_mode { dark_palette.tertiary_fixed.clone() } else { light_palette.tertiary_fixed.clone() },
+            dark: dark_palette.tertiary_fixed.clone(),
+            light: light_palette.tertiary_fixed.clone(),
+        },
+        tertiary_fixed_dim: ColorEntry {
+            default: if is_dark_mode { dark_palette.tertiary_fixed_dim.clone() } else { light_palette.tertiary_fixed_dim.clone() },
+            dark: dark_palette.tertiary_fixed_dim.clone(),
+            light: light_palette.tertiary_fixed_dim.clone(),
+        },
+        on_tertiary_fixed: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_tertiary_fixed.clone() } else { light_palette.on_tertiary_fixed.clone() },
+            dark: dark_palette.on_tertiary_fixed.clone(),
+            light: light_palette.on_tertiary_fixed.clone(),
+        },
+        on_tertiary_fixed_variant: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_tertiary_fixed_variant.clone() } else { light_palette.on_tertiary_fixed_variant.clone() },
+            dark: dark_palette.on_tertiary_fixed_variant.clone(),
+            light: light_palette.on_tertiary_fixed_variant.clone(),
+        },
+
+        error: ColorEntry {
+            default: if is_dark_mode { dark_palette.error.clone() } else { light_palette.error.clone() },
+            dark: dark_palette.error.clone(),
+            light: light_palette.error.clone(),
+        },
+        on_error: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_error.clone() } else { light_palette.on_error.clone() },
+            dark: dark_palette.on_error.clone(),
+            light: light_palette.on_error.clone(),
+        },
+        error_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.error_container.clone() } else { light_palette.error_container.clone() },
+            dark: dark_palette.error_container.clone(),
+            light: light_palette.error_container.clone(),
+        },
+        on_error_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_error_container.clone() } else { light_palette.on_error_container.clone() },
+            dark: dark_palette.on_error_container.clone(),
+            light: light_palette.on_error_container.clone(),
+        },
+        background: ColorEntry {
+            default: if is_dark_mode { dark_palette.background.clone() } else { light_palette.background.clone() },
+            dark: dark_palette.background.clone(),
+            light: light_palette.background.clone(),
+        },
+        on_background: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_background.clone() } else { light_palette.on_background.clone() },
+            dark: dark_palette.on_background.clone(),
+            light: light_palette.on_background.clone(),
+        },
+        surface: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface.clone() } else { light_palette.surface.clone() },
+            dark: dark_palette.surface.clone(),
+            light: light_palette.surface.clone(),
+        },
+        on_surface: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_surface.clone() } else { light_palette.on_surface.clone() },
+            dark: dark_palette.on_surface.clone(),
+            light: light_palette.on_surface.clone(),
+        },
+        surface_variant: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_variant.clone() } else { light_palette.surface_variant.clone() },
+            dark: dark_palette.surface_variant.clone(),
+            light: light_palette.surface_variant.clone(),
+        },
+        on_surface_variant: ColorEntry {
+            default: if is_dark_mode { dark_palette.on_surface_variant.clone() } else { light_palette.on_surface_variant.clone() },
+            dark: dark_palette.on_surface_variant.clone(),
+            light: light_palette.on_surface_variant.clone(),
+        },
+        surface_container_lowest: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_container_lowest.clone() } else { light_palette.surface_container_lowest.clone() },
+            dark: dark_palette.surface_container_lowest.clone(),
+            light: light_palette.surface_container_lowest.clone(),
+        },
+        surface_container_low: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_container_low.clone() } else { light_palette.surface_container_low.clone() },
+            dark: dark_palette.surface_container_low.clone(),
+            light: light_palette.surface_container_low.clone(),
+        },
+        surface_container: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_container.clone() } else { light_palette.surface_container.clone() },
+            dark: dark_palette.surface_container.clone(),
+            light: light_palette.surface_container.clone(),
+        },
+        surface_container_high: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_container_high.clone() } else { light_palette.surface_container_high.clone() },
+            dark: dark_palette.surface_container_high.clone(),
+            light: light_palette.surface_container_high.clone(),
+        },
+        surface_container_highest: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_container_highest.clone() } else { light_palette.surface_container_highest.clone() },
+            dark: dark_palette.surface_container_highest.clone(),
+            light: light_palette.surface_container_highest.clone(),
+        },
+        inverse_surface: ColorEntry {
+            default: if is_dark_mode { dark_palette.inverse_surface.clone() } else { light_palette.inverse_surface.clone() },
+            dark: dark_palette.inverse_surface.clone(),
+            light: light_palette.inverse_surface.clone(),
+        },
+        inverse_on_surface: ColorEntry {
+            default: if is_dark_mode { dark_palette.inverse_on_surface.clone() } else { light_palette.inverse_on_surface.clone() },
+            dark: dark_palette.inverse_on_surface.clone(),
+            light: light_palette.inverse_on_surface.clone(),
+        },
+        inverse_primary: ColorEntry {
+            default: if is_dark_mode { dark_palette.inverse_primary.clone() } else { light_palette.inverse_primary.clone() },
+            dark: dark_palette.inverse_primary.clone(),
+            light: light_palette.inverse_primary.clone(),
+        },
+        surface_dim: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_dim.clone() } else { light_palette.surface_dim.clone() },
+            dark: dark_palette.surface_dim.clone(),
+            light: light_palette.surface_dim.clone(),
+        },
+        surface_bright: ColorEntry {
+            default: if is_dark_mode { dark_palette.surface_bright.clone() } else { light_palette.surface_bright.clone() },
+            dark: dark_palette.surface_bright.clone(),
+            light: light_palette.surface_bright.clone(),
+        },
+        outline: ColorEntry {
+            default: if is_dark_mode { dark_palette.outline.clone() } else { light_palette.outline.clone() },
+            dark: dark_palette.outline.clone(),
+            light: light_palette.outline.clone(),
+        },
+        outline_variant: ColorEntry {
+            default: if is_dark_mode { dark_palette.outline_variant.clone() } else { light_palette.outline_variant.clone() },
+            dark: dark_palette.outline_variant.clone(),
+            light: light_palette.outline_variant.clone(),
+        },
+        shadow: ColorEntry {
+            default: if is_dark_mode { dark_palette.shadow.clone() } else { light_palette.shadow.clone() },
+            dark: dark_palette.shadow.clone(),
+            light: light_palette.shadow.clone(),
+        },
+        scrim: ColorEntry {
+            default: if is_dark_mode { dark_palette.scrim.clone() } else { light_palette.scrim.clone() },
+            dark: dark_palette.scrim.clone(),
+            light: light_palette.scrim.clone(),
+        },
+
+        // Terminal colors
         black: ColorEntry {
-            default: surface.clone(),
-        }, // Use surface as black
+            default: if is_dark_mode { dark_palette.black.clone() } else { light_palette.black.clone() },
+            dark: dark_palette.black.clone(),
+            light: light_palette.black.clone(),
+        },
         red: ColorEntry {
-            default: error.clone(),
-        }, // Use error as red
+            default: if is_dark_mode { dark_palette.red.clone() } else { light_palette.red.clone() },
+            dark: dark_palette.red.clone(),
+            light: light_palette.red.clone(),
+        },
         green: ColorEntry {
-            default: tertiary.clone(),
-        }, // Use tertiary as green
+            default: if is_dark_mode { dark_palette.green.clone() } else { light_palette.green.clone() },
+            dark: dark_palette.green.clone(),
+            light: light_palette.green.clone(),
+        },
         yellow: ColorEntry {
-            default: primary.clone(),
-        }, // Use primary as yellow
+            default: if is_dark_mode { dark_palette.yellow.clone() } else { light_palette.yellow.clone() },
+            dark: dark_palette.yellow.clone(),
+            light: light_palette.yellow.clone(),
+        },
         blue: ColorEntry {
-            default: secondary.clone(),
-        }, // Use secondary as blue
+            default: if is_dark_mode { dark_palette.blue.clone() } else { light_palette.blue.clone() },
+            dark: dark_palette.blue.clone(),
+            light: light_palette.blue.clone(),
+        },
         magenta: ColorEntry {
-            default: primary_container.clone(),
-        }, // Use primary container as magenta
+            default: if is_dark_mode { dark_palette.magenta.clone() } else { light_palette.magenta.clone() },
+            dark: dark_palette.magenta.clone(),
+            light: light_palette.magenta.clone(),
+        },
         cyan: ColorEntry {
-            default: secondary_container.clone(),
-        }, // Use secondary container as cyan
+            default: if is_dark_mode { dark_palette.cyan.clone() } else { light_palette.cyan.clone() },
+            dark: dark_palette.cyan.clone(),
+            light: light_palette.cyan.clone(),
+        },
         white: ColorEntry {
-            default: on_surface.clone(),
-        }, // Use on_surface as white
+            default: if is_dark_mode { dark_palette.white.clone() } else { light_palette.white.clone() },
+            dark: dark_palette.white.clone(),
+            light: light_palette.white.clone(),
+        },
         bright_black: ColorEntry {
-            default: surface_variant.clone(),
-        }, // Use surface variant as bright black
+            default: if is_dark_mode { dark_palette.bright_black.clone() } else { light_palette.bright_black.clone() },
+            dark: dark_palette.bright_black.clone(),
+            light: light_palette.bright_black.clone(),
+        },
         bright_red: ColorEntry {
-            default: error_container.clone(),
-        }, // Use error container as bright red
+            default: if is_dark_mode { dark_palette.bright_red.clone() } else { light_palette.bright_red.clone() },
+            dark: dark_palette.bright_red.clone(),
+            light: light_palette.bright_red.clone(),
+        },
         bright_green: ColorEntry {
-            default: tertiary_container.clone(),
-        }, // Use tertiary container as bright green
+            default: if is_dark_mode { dark_palette.bright_green.clone() } else { light_palette.bright_green.clone() },
+            dark: dark_palette.bright_green.clone(),
+            light: light_palette.bright_green.clone(),
+        },
         bright_yellow: ColorEntry {
-            default: primary_fixed.clone(),
-        }, // Use primary fixed as bright yellow
+            default: if is_dark_mode { dark_palette.bright_yellow.clone() } else { light_palette.bright_yellow.clone() },
+            dark: dark_palette.bright_yellow.clone(),
+            light: light_palette.bright_yellow.clone(),
+        },
         bright_blue: ColorEntry {
-            default: secondary_fixed.clone(),
-        }, // Use secondary fixed as bright blue
+            default: if is_dark_mode { dark_palette.bright_blue.clone() } else { light_palette.bright_blue.clone() },
+            dark: dark_palette.bright_blue.clone(),
+            light: light_palette.bright_blue.clone(),
+        },
         bright_magenta: ColorEntry {
-            default: primary_fixed_dim.clone(),
-        }, // Use primary fixed dim as bright magenta
+            default: if is_dark_mode { dark_palette.bright_magenta.clone() } else { light_palette.bright_magenta.clone() },
+            dark: dark_palette.bright_magenta.clone(),
+            light: light_palette.bright_magenta.clone(),
+        },
         bright_cyan: ColorEntry {
-            default: secondary_fixed_dim.clone(),
-        }, // Use secondary fixed dim as bright cyan
+            default: if is_dark_mode { dark_palette.bright_cyan.clone() } else { light_palette.bright_cyan.clone() },
+            dark: dark_palette.bright_cyan.clone(),
+            light: light_palette.bright_cyan.clone(),
+        },
         bright_white: ColorEntry {
-            default: inverse_surface.clone(),
-        }, // Use inverse surface as bright white
+            default: if is_dark_mode { dark_palette.bright_white.clone() } else { light_palette.bright_white.clone() },
+            dark: dark_palette.bright_white.clone(),
+            light: light_palette.bright_white.clone(),
+        },
     };
 
     if crate::log::is_verbose() {

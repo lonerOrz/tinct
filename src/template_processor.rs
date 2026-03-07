@@ -42,94 +42,126 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
         },
     );
 
-    // Create a mapping of color names to color entries
-    let color_map: HashMap<&str, &ColorFormat> = [
-        ("primary", &palette.primary.default),
-        ("on_primary", &palette.on_primary.default),
-        ("primary_container", &palette.primary_container.default),
-        (
-            "on_primary_container",
-            &palette.on_primary_container.default,
-        ),
-        ("secondary", &palette.secondary.default),
-        ("on_secondary", &palette.on_secondary.default),
-        ("secondary_container", &palette.secondary_container.default),
-        (
-            "on_secondary_container",
-            &palette.on_secondary_container.default,
-        ),
-        ("tertiary", &palette.tertiary.default),
-        ("on_tertiary", &palette.on_tertiary.default),
-        ("tertiary_container", &palette.tertiary_container.default),
-        (
-            "on_tertiary_container",
-            &palette.on_tertiary_container.default,
-        ),
-        ("error", &palette.error.default),
-        ("on_error", &palette.on_error.default),
-        ("error_container", &palette.error_container.default),
-        ("on_error_container", &palette.on_error_container.default),
-        ("background", &palette.background.default),
-        ("on_background", &palette.on_background.default),
-        ("surface", &palette.surface.default),
-        ("on_surface", &palette.on_surface.default),
-        ("surface_variant", &palette.surface_variant.default),
-        ("on_surface_variant", &palette.on_surface_variant.default),
-        (
-            "surface_container_lowest",
-            &palette.surface_container_lowest.default,
-        ),
-        (
-            "surface_container_low",
-            &palette.surface_container_low.default,
-        ),
-        ("surface_container", &palette.surface_container.default),
-        (
-            "surface_container_high",
-            &palette.surface_container_high.default,
-        ),
-        (
-            "surface_container_highest",
-            &palette.surface_container_highest.default,
-        ),
-        ("inverse_surface", &palette.inverse_surface.default),
-        ("inverse_on_surface", &palette.inverse_on_surface.default),
-        ("inverse_primary", &palette.inverse_primary.default),
-        ("surface_dim", &palette.surface_dim.default),
-        ("surface_bright", &palette.surface_bright.default),
-        ("scrim", &palette.scrim.default),
-        ("primary_fixed", &palette.primary_fixed.default),
-        ("primary_fixed_dim", &palette.primary_fixed_dim.default),
-        ("on_primary_fixed", &palette.on_primary_fixed.default),
-        (
-            "on_primary_fixed_variant",
-            &palette.on_primary_fixed_variant.default,
-        ),
-        ("secondary_fixed", &palette.secondary_fixed.default),
-        ("secondary_fixed_dim", &palette.secondary_fixed_dim.default),
-        ("on_secondary_fixed", &palette.on_secondary_fixed.default),
-        (
-            "on_secondary_fixed_variant",
-            &palette.on_secondary_fixed_variant.default,
-        ),
-        ("tertiary_fixed", &palette.tertiary_fixed.default),
-        ("tertiary_fixed_dim", &palette.tertiary_fixed_dim.default),
-        ("on_tertiary_fixed", &palette.on_tertiary_fixed.default),
-        (
-            "on_tertiary_fixed_variant",
-            &palette.on_tertiary_fixed_variant.default,
-        ),
-        ("outline", &palette.outline.default),
-        ("outline_variant", &palette.outline_variant.default),
-        ("shadow", &palette.shadow.default),
+    // Create a mapping of color names to color entries for dark mode
+    let dark_color_map: HashMap<&str, &ColorFormat> = [
+        ("primary", &palette.primary.dark),
+        ("on_primary", &palette.on_primary.dark),
+        ("primary_container", &palette.primary_container.dark),
+        ("on_primary_container", &palette.on_primary_container.dark),
+        ("secondary", &palette.secondary.dark),
+        ("on_secondary", &palette.on_secondary.dark),
+        ("secondary_container", &palette.secondary_container.dark),
+        ("on_secondary_container", &palette.on_secondary_container.dark),
+        ("tertiary", &palette.tertiary.dark),
+        ("on_tertiary", &palette.on_tertiary.dark),
+        ("tertiary_container", &palette.tertiary_container.dark),
+        ("on_tertiary_container", &palette.on_tertiary_container.dark),
+        ("error", &palette.error.dark),
+        ("on_error", &palette.on_error.dark),
+        ("error_container", &palette.error_container.dark),
+        ("on_error_container", &palette.on_error_container.dark),
+        ("background", &palette.background.dark),
+        ("on_background", &palette.on_background.dark),
+        ("surface", &palette.surface.dark),
+        ("on_surface", &palette.on_surface.dark),
+        ("surface_variant", &palette.surface_variant.dark),
+        ("on_surface_variant", &palette.on_surface_variant.dark),
+        ("surface_container_lowest", &palette.surface_container_lowest.dark),
+        ("surface_container_low", &palette.surface_container_low.dark),
+        ("surface_container", &palette.surface_container.dark),
+        ("surface_container_high", &palette.surface_container_high.dark),
+        ("surface_container_highest", &palette.surface_container_highest.dark),
+        ("inverse_surface", &palette.inverse_surface.dark),
+        ("inverse_on_surface", &palette.inverse_on_surface.dark),
+        ("inverse_primary", &palette.inverse_primary.dark),
+        ("surface_dim", &palette.surface_dim.dark),
+        ("surface_bright", &palette.surface_bright.dark),
+        ("scrim", &palette.scrim.dark),
+        ("primary_fixed", &palette.primary_fixed.dark),
+        ("primary_fixed_dim", &palette.primary_fixed_dim.dark),
+        ("on_primary_fixed", &palette.on_primary_fixed.dark),
+        ("on_primary_fixed_variant", &palette.on_primary_fixed_variant.dark),
+        ("secondary_fixed", &palette.secondary_fixed.dark),
+        ("secondary_fixed_dim", &palette.secondary_fixed_dim.dark),
+        ("on_secondary_fixed", &palette.on_secondary_fixed.dark),
+        ("on_secondary_fixed_variant", &palette.on_secondary_fixed_variant.dark),
+        ("tertiary_fixed", &palette.tertiary_fixed.dark),
+        ("tertiary_fixed_dim", &palette.tertiary_fixed_dim.dark),
+        ("on_tertiary_fixed", &palette.on_tertiary_fixed.dark),
+        ("on_tertiary_fixed_variant", &palette.on_tertiary_fixed_variant.dark),
+        ("outline", &palette.outline.dark),
+        ("outline_variant", &palette.outline_variant.dark),
+        ("shadow", &palette.shadow.dark),
     ]
     .iter()
     .cloned()
     .collect();
 
+    // Create a mapping of color names to color entries for light mode
+    let light_color_map: HashMap<&str, &ColorFormat> = [
+        ("primary", &palette.primary.light),
+        ("on_primary", &palette.on_primary.light),
+        ("primary_container", &palette.primary_container.light),
+        ("on_primary_container", &palette.on_primary_container.light),
+        ("secondary", &palette.secondary.light),
+        ("on_secondary", &palette.on_secondary.light),
+        ("secondary_container", &palette.secondary_container.light),
+        ("on_secondary_container", &palette.on_secondary_container.light),
+        ("tertiary", &palette.tertiary.light),
+        ("on_tertiary", &palette.on_tertiary.light),
+        ("tertiary_container", &palette.tertiary_container.light),
+        ("on_tertiary_container", &palette.on_tertiary_container.light),
+        ("error", &palette.error.light),
+        ("on_error", &palette.on_error.light),
+        ("error_container", &palette.error_container.light),
+        ("on_error_container", &palette.on_error_container.light),
+        ("background", &palette.background.light),
+        ("on_background", &palette.on_background.light),
+        ("surface", &palette.surface.light),
+        ("on_surface", &palette.on_surface.light),
+        ("surface_variant", &palette.surface_variant.light),
+        ("on_surface_variant", &palette.on_surface_variant.light),
+        ("surface_container_lowest", &palette.surface_container_lowest.light),
+        ("surface_container_low", &palette.surface_container_low.light),
+        ("surface_container", &palette.surface_container.light),
+        ("surface_container_high", &palette.surface_container_high.light),
+        ("surface_container_highest", &palette.surface_container_highest.light),
+        ("inverse_surface", &palette.inverse_surface.light),
+        ("inverse_on_surface", &palette.inverse_on_surface.light),
+        ("inverse_primary", &palette.inverse_primary.light),
+        ("surface_dim", &palette.surface_dim.light),
+        ("surface_bright", &palette.surface_bright.light),
+        ("scrim", &palette.scrim.light),
+        ("primary_fixed", &palette.primary_fixed.light),
+        ("primary_fixed_dim", &palette.primary_fixed_dim.light),
+        ("on_primary_fixed", &palette.on_primary_fixed.light),
+        ("on_primary_fixed_variant", &palette.on_primary_fixed_variant.light),
+        ("secondary_fixed", &palette.secondary_fixed.light),
+        ("secondary_fixed_dim", &palette.secondary_fixed_dim.light),
+        ("on_secondary_fixed", &palette.on_secondary_fixed.light),
+        ("on_secondary_fixed_variant", &palette.on_secondary_fixed_variant.light),
+        ("tertiary_fixed", &palette.tertiary_fixed.light),
+        ("tertiary_fixed_dim", &palette.tertiary_fixed_dim.light),
+        ("on_tertiary_fixed", &palette.on_tertiary_fixed.light),
+        ("on_tertiary_fixed_variant", &palette.on_tertiary_fixed_variant.light),
+        ("outline", &palette.outline.light),
+        ("outline_variant", &palette.outline_variant.light),
+        ("shadow", &palette.shadow.light),
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
+    // Create a mapping of color names to color entries for default mode (based on effective_mode)
+    let default_color_map: HashMap<&str, &ColorFormat> = if effective_mode == "dark" {
+        dark_color_map.clone()
+    } else {
+        light_color_map.clone()
+    };
+
     // Process filters in template
     let filter_registry = FilterRegistry::new();
-    content = process_filters(content, &color_map, &filter_registry);
+    content = process_filters(content, &default_color_map, &filter_registry);
 
     // Replace all color property placeholders (without filters)
     let color_properties = [
@@ -150,53 +182,61 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
         "lightness",
     ];
 
-    for prop in &color_properties {
-        let pattern = format!(
-            r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.default\.{}\s*\}}\}}",
-            regex::escape(prop)
-        );
-        let re = Regex::new(&pattern).unwrap();
+    // Process templates for different mode suffixes: .default, .dark, .light
+    for (mode_suffix, color_map) in [
+        (".default", &default_color_map),
+        (".dark", &dark_color_map),
+        (".light", &light_color_map),
+    ] {
+        for prop in &color_properties {
+            let pattern = format!(
+                r"\{{\{{\s*colors\.([a-zA-Z0-9_]+){}\.{}\s*\}}\}}",
+                regex::escape(mode_suffix),
+                regex::escape(prop)
+            );
+            let re = Regex::new(&pattern).unwrap();
 
-        content = re
-            .replace_all(&content, |caps: &regex::Captures| {
-                let key = &caps[1];
-                if let Some(color_format) = color_map.get(key) {
-                    match *prop {
-                        "hex" => color_format.hex.clone(),
-                        "hex_stripped" => color_format.hex_stripped.clone(),
-                        "hex8" => color_format.hex8.clone(),
-                        "hex8_stripped" => color_format.hex8_stripped.clone(),
-                        "rgb" => color_format.rgb.clone(),
-                        "rgba" => color_format.rgba.clone(),
-                        "hsl" => color_format.hsl.clone(),
-                        "hsla" => color_format.hsla.clone(),
-                        "red" => color_format.red.to_string(),
-                        "green" => color_format.green.to_string(),
-                        "blue" => color_format.blue.to_string(),
-                        "alpha" => color_format.alpha.to_string(),
-                        "hue" => format!("{:.0}", color_format.hue),
-                        "saturation" => format!("{:.0}", color_format.saturation),
-                        "lightness" => format!("{:.0}", color_format.lightness),
-                        _ => "#000000".to_string(), // default fallback
+            content = re
+                .replace_all(&content, |caps: &regex::Captures| {
+                    let key = &caps[1];
+                    if let Some(color_format) = color_map.get(key) {
+                        match *prop {
+                            "hex" => color_format.hex.clone(),
+                            "hex_stripped" => color_format.hex_stripped.clone(),
+                            "hex8" => color_format.hex8.clone(),
+                            "hex8_stripped" => color_format.hex8_stripped.clone(),
+                            "rgb" => color_format.rgb.clone(),
+                            "rgba" => color_format.rgba.clone(),
+                            "hsl" => color_format.hsl.clone(),
+                            "hsla" => color_format.hsla.clone(),
+                            "red" => color_format.red.to_string(),
+                            "green" => color_format.green.to_string(),
+                            "blue" => color_format.blue.to_string(),
+                            "alpha" => color_format.alpha.to_string(),
+                            "hue" => format!("{:.0}", color_format.hue),
+                            "saturation" => format!("{:.0}", color_format.saturation),
+                            "lightness" => format!("{:.0}", color_format.lightness),
+                            _ => "#000000".to_string(), // default fallback
+                        }
+                    } else {
+                        // Return default value if color key is not found
+                        match *prop {
+                            "hex" => "#000000".to_string(),
+                            "hex_stripped" => "000000".to_string(),
+                            "hex8" => "#00000000".to_string(),
+                            "hex8_stripped" => "00000000".to_string(),
+                            "red" | "green" | "blue" | "alpha" => "0".to_string(),
+                            "hue" | "saturation" | "lightness" => "0".to_string(),
+                            "rgb" => "rgb(0, 0, 0)".to_string(),
+                            "rgba" => "rgba(0, 0, 0, 0)".to_string(),
+                            "hsl" => "hsl(0, 0%, 0%)".to_string(),
+                            "hsla" => "hsla(0, 0%, 0%, 1.0)".to_string(),
+                            _ => "#000000".to_string(),
+                        }
                     }
-                } else {
-                    // Return default value if color key is not found
-                    match *prop {
-                        "hex" => "#000000".to_string(),
-                        "hex_stripped" => "000000".to_string(),
-                        "hex8" => "#00000000".to_string(),
-                        "hex8_stripped" => "00000000".to_string(),
-                        "red" | "green" | "blue" | "alpha" => "0".to_string(),
-                        "hue" | "saturation" | "lightness" => "0".to_string(),
-                        "rgb" => "rgb(0, 0, 0)".to_string(),
-                        "rgba" => "rgba(0, 0, 0, 0)".to_string(),
-                        "hsl" => "hsl(0, 0%, 0%)".to_string(),
-                        "hsla" => "hsla(0, 0%, 0%, 1.0)".to_string(),
-                        _ => "#000000".to_string(),
-                    }
-                }
-            })
-            .to_string();
+                })
+                .to_string();
+        }
     }
 
     if crate::log::is_verbose() {
@@ -208,23 +248,25 @@ pub fn process_template(template_content: &str, palette: &Palette, effective_mod
 /// Process filters in template content
 fn process_filters(
     content: String,
-    color_map: &HashMap<&str, &ColorFormat>,
+    default_color_map: &HashMap<&str, &ColorFormat>,
     filter_registry: &FilterRegistry,
 ) -> String {
-    // Pattern for filters: {{ colors.color_name.default.property | filter_name: param }}
-    let filter_pattern = r"\{\{\s*colors\.([a-zA-Z0-9_]+)\.default\.([a-zA-Z0-9_]+)\s*\|\s*([a-zA-Z0-9_]+)(?::\s*([^}]+))?\s*\}\}";
+    // Pattern for filters: {{ colors.color_name.(default|dark|light).property | filter_name: param }}
+    let filter_pattern = r"\{\{\s*colors\.([a-zA-Z0-9_]+)\.(default|dark|light)\.([a-zA-Z0-9_]+)\s*\|\s*([a-zA-Z0-9_]+)(?::\s*([^}]+))?\s*\}\}";
     let re = Regex::new(filter_pattern).unwrap();
 
     re.replace_all(&content, |caps: &regex::Captures| {
         let color_name = &caps[1];
-        let property = &caps[2];
-        let filter_name = &caps[3];
-        let filter_param = caps.get(4).map(|m| m.as_str().trim());
+        let _mode_suffix = &caps[2];
+        let property = &caps[3];
+        let filter_name = &caps[4];
+        let filter_param = caps.get(5).map(|m| m.as_str().trim());
 
-        if let Some(color_format) = color_map.get(color_name) {
-            // Determine the format type based on the property
-            let format_type = crate::filter::ColorFormatType::from_property(property);
+        // For filters, we use the default_color_map which is already selected based on effective_mode
+        // This maintains backward compatibility with existing filter usage
+        let color_format = default_color_map.get(color_name);
 
+        if let Some(color_format) = color_format {
             let original_value = match property {
                 "hex" => color_format.hex.clone(),
                 "hex_stripped" => color_format.hex_stripped.clone(),
@@ -244,6 +286,8 @@ fn process_filters(
                 _ => "#000000".to_string(), // default fallback
             };
 
+            let format_type = crate::filter::ColorFormatType::from_property(property);
+
             if let Some(format_type) = format_type {
                 filter_registry.apply_filter(
                     &original_value,
@@ -253,7 +297,6 @@ fn process_filters(
                     format_type,
                 )
             } else {
-                // If format type is unknown, apply filter anyway
                 filter_registry.apply_filter(
                     &original_value,
                     filter_name,
@@ -278,7 +321,6 @@ fn process_filters(
                 _ => "#000000".to_string(),
             };
 
-            // Determine the format type based on the property for default value
             let format_type = crate::filter::ColorFormatType::from_property(property);
 
             if let Some(format_type) = format_type {
@@ -309,7 +351,6 @@ fn process_filters(
                     format_type,
                 )
             } else {
-                // If format type is unknown, apply filter anyway
                 filter_registry.apply_filter(
                     &default_value,
                     filter_name,
@@ -388,196 +429,324 @@ mod tests {
         let palette = Palette {
             primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             error: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_error: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             error_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_error_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             background: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_background: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_surface_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_lowest: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_low: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_high: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_highest: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_on_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_bright: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             outline: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             outline_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             shadow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             scrim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             // Terminal colors - using the same color format for all in tests
             black: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             red: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             green: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             yellow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             blue: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             magenta: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             cyan: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             white: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_black: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_red: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_green: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_yellow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_blue: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_magenta: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_cyan: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_white: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
         };
 
@@ -615,196 +784,324 @@ mod tests {
         let palette = Palette {
             primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             error: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_error: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             error_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_error_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             background: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_background: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_surface_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_lowest: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_low: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_high: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_highest: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_on_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_bright: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             outline: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             outline_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             shadow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             scrim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             // Terminal colors - using the same color format for all in tests
             black: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             red: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             green: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             yellow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             blue: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             magenta: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             cyan: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             white: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_black: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_red: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_green: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_yellow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_blue: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_magenta: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_cyan: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_white: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
         };
 

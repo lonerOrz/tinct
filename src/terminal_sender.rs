@@ -202,196 +202,324 @@ mod tests {
         let palette = Palette {
             primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             primary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_primary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             secondary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_secondary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             tertiary_fixed_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_fixed: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_tertiary_fixed_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             error: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_error: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             error_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_error_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             background: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_background: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             on_surface_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_lowest: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_low: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_high: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_container_highest: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_on_surface: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             inverse_primary: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_dim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             surface_bright: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             outline: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             outline_variant: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             shadow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             scrim: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             // Terminal colors
             black: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             red: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             green: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             yellow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             blue: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             magenta: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             cyan: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             white: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_black: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_red: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_green: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_yellow: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_blue: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_magenta: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_cyan: ColorEntry {
                 default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
             bright_white: ColorEntry {
-                default: color_format,
+                default: color_format.clone(),
+                dark: color_format.clone(),
+                light: color_format.clone(),
             },
         };
 
