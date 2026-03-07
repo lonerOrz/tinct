@@ -30,6 +30,7 @@ env_logger = "0.10"
 shellexpand = "3.1"
 colored = "2.1"
 glob = "0.3"
+thiserror = "1.0"
 
 [dev-dependencies]
 tempfile = "3.0"

@@ -221,6 +221,18 @@ pub struct AlgorithmParameters {
     pub min_contrast_ratio: f64,
 }
 
+impl Default for AlgorithmParameters {
+    fn default() -> Self {
+        Self {
+            contrast_threshold: 0.15,
+            saturation_adjustment: 0,
+            lightness_adjustment: 0,
+            hue_shift: 0,
+            min_contrast_ratio: 4.5,
+        }
+    }
+}
+
 /// Helper struct to store single-mode palette data
 #[derive(Debug, Clone)]
 struct SingleModePalette {
@@ -1345,36 +1357,4 @@ mod tests {
         let palette = generate_palette_with_params(&theme, false, params).unwrap();
         assert!(!palette.primary.default.hex.is_empty());
     }
-}
-
-/// Process a theme workflow: load theme, apply to template, and write output
-pub fn process_theme_workflow(
-    theme_file: &str,
-    input_path: &str,
-    output_path: &str,
-    mode: &str,
-    _skip_terminal_sequences: bool,
-    _alg_params: AlgorithmParameters,
-) -> Result<(), String> {
-    // Load the theme
-    let theme = crate::theme_loader::load_theme(theme_file)?;
-
-    // Select theme mode
-    let (theme_value, selected_mode) = crate::theme_loader::select_theme_mode(&theme, mode)?;
-
-    let palette = generate_palette_with_params(&theme_value, mode == "dark", _alg_params)?;
-
-    // Read template content
-    let template_content = std::fs::read_to_string(input_path)
-        .map_err(|e| format!("Failed to read template file: {}", e))?;
-
-    // Apply template processing
-    let processed_content =
-        crate::template_processor::process_template(&template_content, &palette, &selected_mode);
-
-    // Write output
-    std::fs::write(output_path, processed_content)
-        .map_err(|e| format!("Failed to write output file: {}", e))?;
-
-    Ok(())
 }

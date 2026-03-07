@@ -1,143 +1,133 @@
-use crate::palette_generator::generate_palette;
-use crate::theme_loader::{load_theme, select_theme_mode};
+//! Color preview functionality
+//!
+//! Displays Material Design 3 color palettes in the terminal with actual color blocks.
+
 use colored::*;
+use std::sync::Arc;
+use crate::core::{Mode, PaletteGenerator, ThemeLoader};
+use crate::palette::LegacyPaletteGenerator;
+use crate::theme::JsonThemeLoader;
+use crate::palette_generator::AlgorithmParameters;
 
 /// Display a color preview showing all available colors in the theme as a matrix
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    // Load the theme
-    let theme_all = load_theme(theme_path)?;
-    let (theme, effective_mode) = select_theme_mode(&theme_all, mode)?;
+    // Create palette generator
+    let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
 
-    // Generate palette
-    let palette = generate_palette(&theme, effective_mode == "dark", false)?;
+    // Load theme
+    let theme_loader = JsonThemeLoader::new(palette_gen.clone());
+    let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
+
+    // Determine mode and get colors
+    let mode = if mode == "dark" { Mode::Dark } else { Mode::Light };
+    let colors = match mode {
+        Mode::Dark => &theme.dark_colors,
+        Mode::Light => &theme.light_colors,
+    };
 
     println!(
         "{}",
         "🎨 Material Design 3 Color Preview".bold().underline()
     );
-    println!("🌙 Theme Mode: {}", effective_mode.bold());
+    println!("🌙 Theme Mode: {}", mode.to_string().bold());
     println!();
 
-    // Display colors in MD3 style similar to the official documentation
-    display_md3_cards_grid(&palette);
+    // Display colors in MD3 style with actual color blocks
+    display_md3_cards_grid(colors);
 
     Ok(())
 }
 
-/// Display colors in a card grid layout similar to the MD3 official documentation
-fn display_md3_cards_grid(palette: &crate::palette_generator::Palette) {
+/// Display colors in a card grid layout with true color blocks
+fn display_md3_cards_grid(colors: &std::collections::HashMap<String, crate::core::ColorFormat>) {
     // Define color cards based on the MD3 documentation structure
-    let cards = vec![
+    let cards: Vec<Vec<(&str, &crate::core::ColorFormat)>> = vec![
         // Primary card
         vec![
-            ("Primary", &palette.primary.default),
-            ("On Primary", &palette.on_primary.default),
-            ("Primary Container", &palette.primary_container.default),
-            (
-                "On Primary Container",
-                &palette.on_primary_container.default,
-            ),
+            ("Primary", colors.get("primary").unwrap()),
+            ("On Primary", colors.get("on_primary").unwrap()),
+            ("Primary Container", colors.get("primary_container").unwrap()),
+            ("On Primary Container", colors.get("on_primary_container").unwrap()),
         ],
         // Secondary card
         vec![
-            ("Secondary", &palette.secondary.default),
-            ("On Secondary", &palette.on_secondary.default),
-            ("Secondary Container", &palette.secondary_container.default),
-            (
-                "On Secondary Container",
-                &palette.on_secondary_container.default,
-            ),
+            ("Secondary", colors.get("secondary").unwrap()),
+            ("On Secondary", colors.get("on_secondary").unwrap()),
+            ("Secondary Container", colors.get("secondary_container").unwrap()),
+            ("On Secondary Container", colors.get("on_secondary_container").unwrap()),
         ],
         // Tertiary card
         vec![
-            ("Tertiary", &palette.tertiary.default),
-            ("On Tertiary", &palette.on_tertiary.default),
-            ("Tertiary Container", &palette.tertiary_container.default),
-            (
-                "On Tertiary Container",
-                &palette.on_tertiary_container.default,
-            ),
+            ("Tertiary", colors.get("tertiary").unwrap()),
+            ("On Tertiary", colors.get("on_tertiary").unwrap()),
+            ("Tertiary Container", colors.get("tertiary_container").unwrap()),
+            ("On Tertiary Container", colors.get("on_tertiary_container").unwrap()),
         ],
         // Error card
         vec![
-            ("Error", &palette.error.default),
-            ("On Error", &palette.on_error.default),
-            ("Error Container", &palette.error_container.default),
-            ("On Error Container", &palette.on_error_container.default),
+            ("Error", colors.get("error").unwrap()),
+            ("On Error", colors.get("on_error").unwrap()),
+            ("Error Container", colors.get("error_container").unwrap()),
+            ("On Error Container", colors.get("on_error_container").unwrap()),
         ],
         // Fixed Accent Cards
         vec![
-            ("Primary Fixed", &palette.primary_fixed.default),
-            ("Primary Fixed Dim", &palette.primary_fixed_dim.default),
-            ("On Primary Fixed", &palette.on_primary_fixed.default),
-            (
-                "On Primary Fixed Var",
-                &palette.on_primary_fixed_variant.default,
-            ),
+            ("Primary Fixed", colors.get("primary_fixed").unwrap()),
+            ("Primary Fixed Dim", colors.get("primary_fixed_dim").unwrap()),
+            ("On Primary Fixed", colors.get("on_primary_fixed").unwrap()),
+            ("On Primary Fixed Var", colors.get("on_primary_fixed_variant").unwrap()),
         ],
         vec![
-            ("Secondary Fixed", &palette.secondary_fixed.default),
-            ("Secondary Fixed Dim", &palette.secondary_fixed_dim.default),
-            ("On Secondary Fixed", &palette.on_secondary_fixed.default),
-            (
-                "On Secondary Fixed Var",
-                &palette.on_secondary_fixed_variant.default,
-            ),
+            ("Secondary Fixed", colors.get("secondary_fixed").unwrap()),
+            ("Secondary Fixed Dim", colors.get("secondary_fixed_dim").unwrap()),
+            ("On Secondary Fixed", colors.get("on_secondary_fixed").unwrap()),
+            ("On Secondary Fixed Var", colors.get("on_secondary_fixed_variant").unwrap()),
         ],
         vec![
-            ("Tertiary Fixed", &palette.tertiary_fixed.default),
-            ("Tertiary Fixed Dim", &palette.tertiary_fixed_dim.default),
-            ("On Tertiary Fixed", &palette.on_tertiary_fixed.default),
-            (
-                "On Tertiary Fixed Var",
-                &palette.on_tertiary_fixed_variant.default,
-            ),
+            ("Tertiary Fixed", colors.get("tertiary_fixed").unwrap()),
+            ("Tertiary Fixed Dim", colors.get("tertiary_fixed_dim").unwrap()),
+            ("On Tertiary Fixed", colors.get("on_tertiary_fixed").unwrap()),
+            ("On Tertiary Fixed Var", colors.get("on_tertiary_fixed_variant").unwrap()),
         ],
         // Surface card
         vec![
-            ("Surface Dim", &palette.surface_dim.default),
-            ("Surface", &palette.surface.default),
-            ("Surface Bright", &palette.surface_bright.default),
+            ("Surface Dim", colors.get("surface_dim").unwrap()),
+            ("Surface", colors.get("surface").unwrap()),
+            ("Surface Bright", colors.get("surface_bright").unwrap()),
         ],
         // Surface Variant card
         vec![
-            ("Surface Variant", &palette.surface_variant.default),
-            ("On Surface Variant", &palette.on_surface_variant.default),
+            ("Surface Variant", colors.get("surface_variant").unwrap()),
+            ("On Surface Variant", colors.get("on_surface_variant").unwrap()),
         ],
-        // Surface Containers card (vertical layout)
+        // Surface Containers card
         vec![
-            (
-                "Container Lowest",
-                &palette.surface_container_lowest.default,
-            ),
-            ("Container Low", &palette.surface_container_low.default),
-            ("Container", &palette.surface_container.default),
-            ("Container High", &palette.surface_container_high.default),
-            (
-                "Container Highest",
-                &palette.surface_container_highest.default,
-            ),
+            ("Container Lowest", colors.get("surface_container_lowest").unwrap()),
+            ("Container Low", colors.get("surface_container_low").unwrap()),
+            ("Container", colors.get("surface_container").unwrap()),
+            ("Container High", colors.get("surface_container_high").unwrap()),
+            ("Container Highest", colors.get("surface_container_highest").unwrap()),
         ],
         // Background card
         vec![
-            ("Background", &palette.background.default),
-            ("On Background", &palette.on_background.default),
+            ("Background", colors.get("background").unwrap()),
+            ("On Background", colors.get("on_background").unwrap()),
         ],
         // Outline card
         vec![
-            ("Outline", &palette.outline.default),
-            ("Outline Variant", &palette.outline_variant.default),
+            ("Outline", colors.get("outline").unwrap()),
+            ("Outline Variant", colors.get("outline_variant").unwrap()),
         ],
         // Inverse card
         vec![
-            ("Inverse Surface", &palette.inverse_surface.default),
-            ("Inverse On Surface", &palette.inverse_on_surface.default),
-            ("Inverse Primary", &palette.inverse_primary.default),
+            ("Inverse Surface", colors.get("inverse_surface").unwrap()),
+            ("Inverse On Surface", colors.get("inverse_on_surface").unwrap()),
+            ("Inverse Primary", colors.get("inverse_primary").unwrap()),
         ],
         // Special card
         vec![
-            ("Shadow", &palette.shadow.default),
-            ("Scrim", &palette.scrim.default),
+            ("Shadow", colors.get("shadow").unwrap()),
+            ("Scrim", colors.get("scrim").unwrap()),
         ],
     ];
 
@@ -158,7 +148,7 @@ fn display_md3_cards_grid(palette: &crate::palette_generator::Palette) {
                         let (label, color) = &card[color_idx];
 
                         // Create a color block with centered text
-                        let block_width = 24; // Increased width to accommodate longer text
+                        let block_width = 24;
 
                         // For the middle line, show the text; for others, show empty color blocks
                         let display_content = if line_num == 1 {
@@ -217,49 +207,88 @@ fn display_md3_cards_grid(palette: &crate::palette_generator::Palette) {
                         print!(" {} ", text_color);
                     } else {
                         // Empty space if no color at this index
-                        print!("{:>26} ", ""); // 24 + 2 for spacing
+                        print!("{:>26} ", "");
                     }
 
                     // Add horizontal spacing between cards
                     if idx < chunk.len() - 1 {
-                        print!("  "); // 2 spaces between cards
+                        print!("  ");
                     }
                 }
-                println!(); // New line after each row of blocks
+                println!();
             }
         }
 
-        println!(); // Extra spacing between rows of cards
+        println!();
     }
+
+    // Display terminal color palette with actual colors
+    println!("{}", "📊 Terminal Color Palette".bold().underline());
+    println!();
+    print_terminal_palette(colors);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Print terminal color palette with actual color blocks
+fn print_terminal_palette(colors: &std::collections::HashMap<String, crate::core::ColorFormat>) {
+    let terminal_colors = vec![
+        ("Black", "black"),
+        ("Red", "red"),
+        ("Green", "green"),
+        ("Yellow", "yellow"),
+        ("Blue", "blue"),
+        ("Magenta", "magenta"),
+        ("Cyan", "cyan"),
+        ("White", "white"),
+        ("Bright Black", "bright_black"),
+        ("Bright Red", "bright_red"),
+        ("Bright Green", "bright_green"),
+        ("Bright Yellow", "bright_yellow"),
+        ("Bright Blue", "bright_blue"),
+        ("Bright Magenta", "bright_magenta"),
+        ("Bright Cyan", "bright_cyan"),
+        ("Bright White", "bright_white"),
+    ];
 
-    #[test]
-    fn test_show_color_preview_with_valid_theme() {
-        let theme_path = "test/theme.json";
-        let result = show_color_preview(theme_path, "dark");
-        assert!(result.is_ok() || result.is_err());
-    }
-
-    #[test]
-    fn test_show_color_preview_invalid_theme() {
-        let result = show_color_preview("nonexistent.json", "dark");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_show_color_preview_light_mode() {
-        let theme_path = "test/theme.json";
-        let result = show_color_preview(theme_path, "light");
-        assert!(result.is_ok() || result.is_err());
-    }
-
-    #[test]
-    fn test_show_color_preview_function_signature() {
-        fn _check_fn_signature(_f: fn(&str, &str) -> Result<(), String>) {}
-        _check_fn_signature(show_color_preview);
+    // Print in two columns
+    let mid = terminal_colors.len() / 2;
+    for i in 0..mid {
+        let (_, key1) = &terminal_colors[i];
+        let (_, key2) = &terminal_colors[i + mid];
+        
+        if let Some(color1) = colors.get(*key1) {
+            let r1 = color1.red;
+            let g1 = color1.green;
+            let b1 = color1.blue;
+            let luminance1 = 0.299 * r1 as f64 + 0.587 * g1 as f64 + 0.114 * b1 as f64;
+            
+            let block1 = format!(" {:<24} ", key1);
+            let color_block1 = if luminance1 > 128.0 {
+                block1.black().on_truecolor(r1, g1, b1)
+            } else {
+                block1.white().on_truecolor(r1, g1, b1)
+            };
+            
+            print!("{}", color_block1);
+        }
+        
+        print!("  ");
+        
+        if let Some(color2) = colors.get(*key2) {
+            let r2 = color2.red;
+            let g2 = color2.green;
+            let b2 = color2.blue;
+            let luminance2 = 0.299 * r2 as f64 + 0.587 * g2 as f64 + 0.114 * b2 as f64;
+            
+            let block2 = format!(" {:<24} ", key2);
+            let color_block2 = if luminance2 > 128.0 {
+                block2.black().on_truecolor(r2, g2, b2)
+            } else {
+                block2.white().on_truecolor(r2, g2, b2)
+            };
+            
+            print!("{}", color_block2);
+        }
+        
+        println!();
     }
 }

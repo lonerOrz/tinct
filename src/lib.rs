@@ -1,24 +1,41 @@
-pub mod color;
-pub mod config;
-pub mod log;
-pub mod preview;
+//! tinct - A theme injector tool that applies Material Design 3 color palettes
+//!
+//! This library provides a modular architecture for:
+//! - Loading themes from various sources
+//! - Generating Material Design 3 color palettes
+//! - Processing templates with theme data
+//! - Outputting to various formats
 
-// Module re-exports for backward compatibility
-pub use color::*;
-pub use config::*;
-pub use log::*;
+// Core abstractions
+pub mod core;
 
 // New modular architecture
-pub mod filter;
-pub mod output_handler;
-pub mod palette_generator;
-pub mod template_processor;
-pub mod terminal_sender;
-pub mod theme_loader;
+pub mod output;
+pub mod palette;
+pub mod template;
+pub mod theme;
 
+// Core utilities (kept for backward compatibility and shared functionality)
+pub mod color;
+pub mod config;
+pub mod filter;
+pub mod log;
+pub mod palette_generator;
+pub mod preview;
+
+// Re-exports
+pub use color::*;
+pub use config::*;
 pub use filter::*;
-pub use output_handler::*;
-pub use palette_generator::*;
-pub use template_processor::*;
-pub use terminal_sender::*;
-pub use theme_loader::*;
+pub use log::*;
+pub use palette_generator::{AlgorithmParameters, ColorEntry, ColorFormat, Palette};
+pub use preview::*;
+
+// Core trait re-exports
+pub use core::{ColorFormat as CoreColorFormat, ColorSpace, Error, Mode, OutputFormat, PaletteGenerator, Result, TemplateEngine, Theme, ThemeLoader};
+
+// New module re-exports
+pub use output::{FileOutput, OutputRegistry, TerminalOutput};
+pub use template::{Filter, TemplateEngineRegistry, TemplateProcessor};
+pub use theme::{JsonThemeLoader, ThemeLoaderRegistry};
+pub use palette::LegacyPaletteGenerator;
