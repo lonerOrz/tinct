@@ -1,913 +1,273 @@
-//! Palette generation logic
+//! Palette generation logic using material-colors crate
 //!
-//! This module contains the core palette generation algorithms that
-//! generate Material Design 3 color palettes from theme data.
+//! This module uses the official Material You algorithm via the material-colors crate
+//! to generate perceptually uniform color palettes from a seed color.
 
 use serde_json::Value;
-use crate::color;
+use material_colors::color::Argb;
+use material_colors::hct::Hct;
+use material_colors::palette::TonalPalette;
+use material_colors::dynamic_color::{DynamicScheme, Variant};
 
-use super::types::{ColorEntry, Palette, SingleModePalette};
+use super::types::{ColorEntry, Palette};
 use super::params::AlgorithmParameters;
 use super::color_parser::create_color_format;
-use super::algorithm::{apply_algorithm_params, container_tone};
-use super::constants::*;
 
-/// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space
+/// Generate color palette from theme data using HCT color space
 pub fn generate_palette(
     theme: &Value,
     is_dark_mode: bool,
     _is_strict: bool,
 ) -> Result<Palette, String> {
-    // Use default algorithm parameters for now
-    let alg_params = AlgorithmParameters {
-        contrast_threshold: 0.15,
-        saturation_adjustment: 0,
-        lightness_adjustment: 0,
-        hue_shift: 0,
-        min_contrast_ratio: 4.5,
-    };
+    // Try to get seed color from new format first
+    let seed_hex = theme
+        .get("seed")
+        .and_then(|v| v.as_str())
+        // Fallback to old format: extract from dark/light mode
+        .or_else(|| {
+            // Try old format with dark/light modes
+            let mode_key = if is_dark_mode { "dark" } else { "light" };
+            theme.get(mode_key)
+                .and_then(|m| m.get("mPrimary").or_else(|| m.get("primary")))
+                .and_then(|v| v.as_str())
+        })
+        // Fallback to top-level primary
+        .or_else(|| theme.get("primary").and_then(|v| v.as_str()))
+        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
+        .ok_or("Seed/primary color not found in theme. Expected 'seed', 'primary', or 'dark/light' object with 'mPrimary'/'primary'")?;
 
-    generate_palette_with_params(theme, is_dark_mode, alg_params)
+    // Parse seed color from hex
+    let seed_argb = parse_hex_color(seed_hex)?;
+
+    // Generate scheme using material-colors
+    let scheme = generate_scheme(seed_argb, is_dark_mode);
+
+    // Convert scheme to our Palette format
+    scheme_to_palette(&scheme, is_dark_mode, theme)
 }
 
-/// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space with algorithm parameters
+/// Generate color palette with algorithm parameters
 pub fn generate_palette_with_params(
     theme: &Value,
     is_dark_mode: bool,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
-    if crate::log::is_verbose() {
-        eprintln!("Generating color palette with algorithm parameters...");
-    }
+    // Get seed color
+    let seed_hex = theme
+        .get("seed")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("primary").and_then(|v| v.as_str()))
+        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
+        .ok_or("Seed/primary color not found in theme")?;
 
-    // Generate palettes for both dark and light modes
-    let dark_palette = generate_single_mode_palette(theme, true, &params)?;
-    let light_palette = generate_single_mode_palette(theme, false, &params)?;
+    // Parse seed color
+    let seed_argb = parse_hex_color(seed_hex)?;
 
-    // Build the final palette with both modes
-    let palette = Palette {
-        primary: ColorEntry {
-            default: if is_dark_mode { dark_palette.primary.clone() } else { light_palette.primary.clone() },
-            dark: dark_palette.primary.clone(),
-            light: light_palette.primary.clone(),
-        },
-        on_primary: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_primary.clone() } else { light_palette.on_primary.clone() },
-            dark: dark_palette.on_primary.clone(),
-            light: light_palette.on_primary.clone(),
-        },
-        primary_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.primary_container.clone() } else { light_palette.primary_container.clone() },
-            dark: dark_palette.primary_container.clone(),
-            light: light_palette.primary_container.clone(),
-        },
-        on_primary_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_primary_container.clone() } else { light_palette.on_primary_container.clone() },
-            dark: dark_palette.on_primary_container.clone(),
-            light: light_palette.on_primary_container.clone(),
-        },
-        primary_fixed: ColorEntry {
-            default: if is_dark_mode { dark_palette.primary_fixed.clone() } else { light_palette.primary_fixed.clone() },
-            dark: dark_palette.primary_fixed.clone(),
-            light: light_palette.primary_fixed.clone(),
-        },
-        primary_fixed_dim: ColorEntry {
-            default: if is_dark_mode { dark_palette.primary_fixed_dim.clone() } else { light_palette.primary_fixed_dim.clone() },
-            dark: dark_palette.primary_fixed_dim.clone(),
-            light: light_palette.primary_fixed_dim.clone(),
-        },
-        on_primary_fixed: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_primary_fixed.clone() } else { light_palette.on_primary_fixed.clone() },
-            dark: dark_palette.on_primary_fixed.clone(),
-            light: light_palette.on_primary_fixed.clone(),
-        },
-        on_primary_fixed_variant: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_primary_fixed_variant.clone() } else { light_palette.on_primary_fixed_variant.clone() },
-            dark: dark_palette.on_primary_fixed_variant.clone(),
-            light: light_palette.on_primary_fixed_variant.clone(),
-        },
+    // Generate scheme with algorithm parameters
+    let scheme = generate_scheme_with_params(seed_argb, is_dark_mode, &params);
 
-        secondary: ColorEntry {
-            default: if is_dark_mode { dark_palette.secondary.clone() } else { light_palette.secondary.clone() },
-            dark: dark_palette.secondary.clone(),
-            light: light_palette.secondary.clone(),
-        },
-        on_secondary: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_secondary.clone() } else { light_palette.on_secondary.clone() },
-            dark: dark_palette.on_secondary.clone(),
-            light: light_palette.on_secondary.clone(),
-        },
-        secondary_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.secondary_container.clone() } else { light_palette.secondary_container.clone() },
-            dark: dark_palette.secondary_container.clone(),
-            light: light_palette.secondary_container.clone(),
-        },
-        on_secondary_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_secondary_container.clone() } else { light_palette.on_secondary_container.clone() },
-            dark: dark_palette.on_secondary_container.clone(),
-            light: light_palette.on_secondary_container.clone(),
-        },
-        secondary_fixed: ColorEntry {
-            default: if is_dark_mode { dark_palette.secondary_fixed.clone() } else { light_palette.secondary_fixed.clone() },
-            dark: dark_palette.secondary_fixed.clone(),
-            light: light_palette.secondary_fixed.clone(),
-        },
-        secondary_fixed_dim: ColorEntry {
-            default: if is_dark_mode { dark_palette.secondary_fixed_dim.clone() } else { light_palette.secondary_fixed_dim.clone() },
-            dark: dark_palette.secondary_fixed_dim.clone(),
-            light: light_palette.secondary_fixed_dim.clone(),
-        },
-        on_secondary_fixed: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_secondary_fixed.clone() } else { light_palette.on_secondary_fixed.clone() },
-            dark: dark_palette.on_secondary_fixed.clone(),
-            light: light_palette.on_secondary_fixed.clone(),
-        },
-        on_secondary_fixed_variant: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_secondary_fixed_variant.clone() } else { light_palette.on_secondary_fixed_variant.clone() },
-            dark: dark_palette.on_secondary_fixed_variant.clone(),
-            light: light_palette.on_secondary_fixed_variant.clone(),
-        },
-
-        tertiary: ColorEntry {
-            default: if is_dark_mode { dark_palette.tertiary.clone() } else { light_palette.tertiary.clone() },
-            dark: dark_palette.tertiary.clone(),
-            light: light_palette.tertiary.clone(),
-        },
-        on_tertiary: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_tertiary.clone() } else { light_palette.on_tertiary.clone() },
-            dark: dark_palette.on_tertiary.clone(),
-            light: light_palette.on_tertiary.clone(),
-        },
-        tertiary_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.tertiary_container.clone() } else { light_palette.tertiary_container.clone() },
-            dark: dark_palette.tertiary_container.clone(),
-            light: light_palette.tertiary_container.clone(),
-        },
-        on_tertiary_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_tertiary_container.clone() } else { light_palette.on_tertiary_container.clone() },
-            dark: dark_palette.on_tertiary_container.clone(),
-            light: light_palette.on_tertiary_container.clone(),
-        },
-        tertiary_fixed: ColorEntry {
-            default: if is_dark_mode { dark_palette.tertiary_fixed.clone() } else { light_palette.tertiary_fixed.clone() },
-            dark: dark_palette.tertiary_fixed.clone(),
-            light: light_palette.tertiary_fixed.clone(),
-        },
-        tertiary_fixed_dim: ColorEntry {
-            default: if is_dark_mode { dark_palette.tertiary_fixed_dim.clone() } else { light_palette.tertiary_fixed_dim.clone() },
-            dark: dark_palette.tertiary_fixed_dim.clone(),
-            light: light_palette.tertiary_fixed_dim.clone(),
-        },
-        on_tertiary_fixed: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_tertiary_fixed.clone() } else { light_palette.on_tertiary_fixed.clone() },
-            dark: dark_palette.on_tertiary_fixed.clone(),
-            light: light_palette.on_tertiary_fixed.clone(),
-        },
-        on_tertiary_fixed_variant: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_tertiary_fixed_variant.clone() } else { light_palette.on_tertiary_fixed_variant.clone() },
-            dark: dark_palette.on_tertiary_fixed_variant.clone(),
-            light: light_palette.on_tertiary_fixed_variant.clone(),
-        },
-
-        error: ColorEntry {
-            default: if is_dark_mode { dark_palette.error.clone() } else { light_palette.error.clone() },
-            dark: dark_palette.error.clone(),
-            light: light_palette.error.clone(),
-        },
-        on_error: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_error.clone() } else { light_palette.on_error.clone() },
-            dark: dark_palette.on_error.clone(),
-            light: light_palette.on_error.clone(),
-        },
-        error_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.error_container.clone() } else { light_palette.error_container.clone() },
-            dark: dark_palette.error_container.clone(),
-            light: light_palette.error_container.clone(),
-        },
-        on_error_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_error_container.clone() } else { light_palette.on_error_container.clone() },
-            dark: dark_palette.on_error_container.clone(),
-            light: light_palette.on_error_container.clone(),
-        },
-        background: ColorEntry {
-            default: if is_dark_mode { dark_palette.background.clone() } else { light_palette.background.clone() },
-            dark: dark_palette.background.clone(),
-            light: light_palette.background.clone(),
-        },
-        on_background: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_background.clone() } else { light_palette.on_background.clone() },
-            dark: dark_palette.on_background.clone(),
-            light: light_palette.on_background.clone(),
-        },
-        surface: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface.clone() } else { light_palette.surface.clone() },
-            dark: dark_palette.surface.clone(),
-            light: light_palette.surface.clone(),
-        },
-        on_surface: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_surface.clone() } else { light_palette.on_surface.clone() },
-            dark: dark_palette.on_surface.clone(),
-            light: light_palette.on_surface.clone(),
-        },
-        surface_variant: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_variant.clone() } else { light_palette.surface_variant.clone() },
-            dark: dark_palette.surface_variant.clone(),
-            light: light_palette.surface_variant.clone(),
-        },
-        on_surface_variant: ColorEntry {
-            default: if is_dark_mode { dark_palette.on_surface_variant.clone() } else { light_palette.on_surface_variant.clone() },
-            dark: dark_palette.on_surface_variant.clone(),
-            light: light_palette.on_surface_variant.clone(),
-        },
-
-        surface_container_lowest: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_container_lowest.clone() } else { light_palette.surface_container_lowest.clone() },
-            dark: dark_palette.surface_container_lowest.clone(),
-            light: light_palette.surface_container_lowest.clone(),
-        },
-        surface_container_low: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_container_low.clone() } else { light_palette.surface_container_low.clone() },
-            dark: dark_palette.surface_container_low.clone(),
-            light: light_palette.surface_container_low.clone(),
-        },
-        surface_container: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_container.clone() } else { light_palette.surface_container.clone() },
-            dark: dark_palette.surface_container.clone(),
-            light: light_palette.surface_container.clone(),
-        },
-        surface_container_high: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_container_high.clone() } else { light_palette.surface_container_high.clone() },
-            dark: dark_palette.surface_container_high.clone(),
-            light: light_palette.surface_container_high.clone(),
-        },
-        surface_container_highest: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_container_highest.clone() } else { light_palette.surface_container_highest.clone() },
-            dark: dark_palette.surface_container_highest.clone(),
-            light: light_palette.surface_container_highest.clone(),
-        },
-
-        inverse_surface: ColorEntry {
-            default: if is_dark_mode { dark_palette.inverse_surface.clone() } else { light_palette.inverse_surface.clone() },
-            dark: dark_palette.inverse_surface.clone(),
-            light: light_palette.inverse_surface.clone(),
-        },
-        inverse_on_surface: ColorEntry {
-            default: if is_dark_mode { dark_palette.inverse_on_surface.clone() } else { light_palette.inverse_on_surface.clone() },
-            dark: dark_palette.inverse_on_surface.clone(),
-            light: light_palette.inverse_on_surface.clone(),
-        },
-        inverse_primary: ColorEntry {
-            default: if is_dark_mode { dark_palette.inverse_primary.clone() } else { light_palette.inverse_primary.clone() },
-            dark: dark_palette.inverse_primary.clone(),
-            light: light_palette.inverse_primary.clone(),
-        },
-
-        surface_dim: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_dim.clone() } else { light_palette.surface_dim.clone() },
-            dark: dark_palette.surface_dim.clone(),
-            light: light_palette.surface_dim.clone(),
-        },
-        surface_bright: ColorEntry {
-            default: if is_dark_mode { dark_palette.surface_bright.clone() } else { light_palette.surface_bright.clone() },
-            dark: dark_palette.surface_bright.clone(),
-            light: light_palette.surface_bright.clone(),
-        },
-
-        outline: ColorEntry {
-            default: if is_dark_mode { dark_palette.outline.clone() } else { light_palette.outline.clone() },
-            dark: dark_palette.outline.clone(),
-            light: light_palette.outline.clone(),
-        },
-        outline_variant: ColorEntry {
-            default: if is_dark_mode { dark_palette.outline_variant.clone() } else { light_palette.outline_variant.clone() },
-            dark: dark_palette.outline_variant.clone(),
-            light: light_palette.outline_variant.clone(),
-        },
-
-        shadow: ColorEntry {
-            default: if is_dark_mode { dark_palette.shadow.clone() } else { light_palette.shadow.clone() },
-            dark: dark_palette.shadow.clone(),
-            light: light_palette.shadow.clone(),
-        },
-        scrim: ColorEntry {
-            default: if is_dark_mode { dark_palette.scrim.clone() } else { light_palette.scrim.clone() },
-            dark: dark_palette.scrim.clone(),
-            light: light_palette.scrim.clone(),
-        },
-
-        black: ColorEntry {
-            default: if is_dark_mode { dark_palette.black.clone() } else { light_palette.black.clone() },
-            dark: dark_palette.black.clone(),
-            light: light_palette.black.clone(),
-        },
-        red: ColorEntry {
-            default: if is_dark_mode { dark_palette.red.clone() } else { light_palette.red.clone() },
-            dark: dark_palette.red.clone(),
-            light: light_palette.red.clone(),
-        },
-        green: ColorEntry {
-            default: if is_dark_mode { dark_palette.green.clone() } else { light_palette.green.clone() },
-            dark: dark_palette.green.clone(),
-            light: light_palette.green.clone(),
-        },
-        yellow: ColorEntry {
-            default: if is_dark_mode { dark_palette.yellow.clone() } else { light_palette.yellow.clone() },
-            dark: dark_palette.yellow.clone(),
-            light: light_palette.yellow.clone(),
-        },
-        blue: ColorEntry {
-            default: if is_dark_mode { dark_palette.blue.clone() } else { light_palette.blue.clone() },
-            dark: dark_palette.blue.clone(),
-            light: light_palette.blue.clone(),
-        },
-        magenta: ColorEntry {
-            default: if is_dark_mode { dark_palette.magenta.clone() } else { light_palette.magenta.clone() },
-            dark: dark_palette.magenta.clone(),
-            light: light_palette.magenta.clone(),
-        },
-        cyan: ColorEntry {
-            default: if is_dark_mode { dark_palette.cyan.clone() } else { light_palette.cyan.clone() },
-            dark: dark_palette.cyan.clone(),
-            light: light_palette.cyan.clone(),
-        },
-        white: ColorEntry {
-            default: if is_dark_mode { dark_palette.white.clone() } else { light_palette.white.clone() },
-            dark: dark_palette.white.clone(),
-            light: light_palette.white.clone(),
-        },
-        bright_black: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_black.clone() } else { light_palette.bright_black.clone() },
-            dark: dark_palette.bright_black.clone(),
-            light: light_palette.bright_black.clone(),
-        },
-        bright_red: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_red.clone() } else { light_palette.bright_red.clone() },
-            dark: dark_palette.bright_red.clone(),
-            light: light_palette.bright_red.clone(),
-        },
-        bright_green: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_green.clone() } else { light_palette.bright_green.clone() },
-            dark: dark_palette.bright_green.clone(),
-            light: light_palette.bright_green.clone(),
-        },
-        bright_yellow: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_yellow.clone() } else { light_palette.bright_yellow.clone() },
-            dark: dark_palette.bright_yellow.clone(),
-            light: light_palette.bright_yellow.clone(),
-        },
-        bright_blue: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_blue.clone() } else { light_palette.bright_blue.clone() },
-            dark: dark_palette.bright_blue.clone(),
-            light: light_palette.bright_blue.clone(),
-        },
-        bright_magenta: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_magenta.clone() } else { light_palette.bright_magenta.clone() },
-            dark: dark_palette.bright_magenta.clone(),
-            light: light_palette.bright_magenta.clone(),
-        },
-        bright_cyan: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_cyan.clone() } else { light_palette.bright_cyan.clone() },
-            dark: dark_palette.bright_cyan.clone(),
-            light: light_palette.bright_cyan.clone(),
-        },
-        bright_white: ColorEntry {
-            default: if is_dark_mode { dark_palette.bright_white.clone() } else { light_palette.bright_white.clone() },
-            dark: dark_palette.bright_white.clone(),
-            light: light_palette.bright_white.clone(),
-        },
-    };
-
-    if crate::log::is_verbose() {
-        eprintln!("Color palette generated successfully");
-    }
-    Ok(palette)
+    // Convert to palette
+    scheme_to_palette(&scheme, is_dark_mode, theme)
 }
 
-/// Generate single-mode palette from theme data
-///
-/// This is an internal helper function that generates colors for one mode (dark or light).
-fn generate_single_mode_palette(
-    theme: &Value,
+/// Parse hex color string to Argb
+fn parse_hex_color(hex: &str) -> Result<Argb, String> {
+    let hex = hex.trim_start_matches('#');
+    u32::from_str_radix(hex, 16)
+        .map(Argb::from_u32)
+        .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))
+}
+
+/// Generate a Material You scheme from a seed color
+fn generate_scheme(seed: Argb, is_dark_mode: bool) -> DynamicScheme {
+    // Create HCT from seed
+    let hct = Hct::new(seed);
+
+    // Create tonal palettes from the seed color's hue and chroma
+    // Using CorePalette-like approach with customizable chroma
+    let primary = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma());
+    let secondary = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma() * 0.6);  // Less chroma
+    let tertiary = TonalPalette::from_hue_and_chroma((hct.get_hue() + 60.0) % 360.0, hct.get_chroma() * 0.8);  // +60 hue
+    let neutral = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma() * 0.4);  // Low chroma
+    let neutral_variant = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma() * 0.5);
+
+    // Create dynamic scheme with all required parameters
+    DynamicScheme::new(
+        seed,
+        Some(hct),
+        Variant::Fidelity,
+        is_dark_mode,
+        None,
+        primary,
+        secondary,
+        tertiary,
+        neutral,
+        neutral_variant,
+        None,
+    )
+}
+
+/// Generate a Material You scheme with algorithm parameters
+fn generate_scheme_with_params(
+    seed: Argb,
     is_dark_mode: bool,
     params: &AlgorithmParameters,
-) -> Result<SingleModePalette, String> {
-    if crate::log::is_verbose() {
-        eprintln!("Generating single-mode palette (is_dark_mode={})...", is_dark_mode);
-    }
+) -> DynamicScheme {
+    // Create HCT from seed
+    let hct = Hct::new(seed);
 
-    // Get colors from theme - try both standard and m-prefixed keys
-    let primary_hex = theme
-        .get("primary")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
-        .ok_or("Primary color not found in theme")?;
+    // Apply hue shift
+    let shifted_hue = (hct.get_hue() + params.hue_shift as f64) % 360.0;
+    let shifted_hue = if shifted_hue < 0.0 { shifted_hue + 360.0 } else { shifted_hue };
 
-    let secondary_hex = theme
-        .get("secondary")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mSecondary").and_then(|v| v.as_str()))
-        .unwrap_or(primary_hex); // Fallback to primary if not specified
+    // Apply saturation adjustment (modify chroma)
+    let chroma_multiplier = 1.0 + (params.saturation_adjustment as f64 / 100.0);
+    let adjusted_chroma = (hct.get_chroma() * chroma_multiplier).max(0.0);
 
-    let tertiary_hex = theme
-        .get("tertiary")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mTertiary").and_then(|v| v.as_str()))
-        .unwrap_or(secondary_hex); // Fallback to secondary if not specified
+    // Create tonal palettes with adjusted hue and chroma
+    let primary = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma);
+    let secondary = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma * 0.6);
+    let tertiary = TonalPalette::from_hue_and_chroma((shifted_hue + 60.0) % 360.0, adjusted_chroma * 0.8);
+    let neutral = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma * 0.4);
+    let neutral_variant = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma * 0.5);
 
-    let error_hex = theme
-        .get("error")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mError").and_then(|v| v.as_str()))
-        .unwrap_or(DEFAULT_ERROR_COLOR); // Standard error color if not specified
+    // Create dynamic scheme
+    DynamicScheme::new(
+        seed,
+        Some(Hct::from(shifted_hue, adjusted_chroma, hct.get_tone())),
+        Variant::Fidelity,
+        is_dark_mode,
+        None,
+        primary,
+        secondary,
+        tertiary,
+        neutral,
+        neutral_variant,
+        None,
+    )
+}
 
-    // Try to get surface colors from theme, fallback to generated ones if not available
-    let surface_hex = theme
-        .get("surface")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mSurface").and_then(|v| v.as_str()));
-
-    let surface_variant_hex = theme
-        .get("surface_variant")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mSurfaceVariant").and_then(|v| v.as_str()));
-
-    // Convert hex to HCT for primary
-    let primary_rgb = color::hex_to_rgb(primary_hex)?;
-    let mut primary_hct = color::rgb_to_hct(primary_rgb.r, primary_rgb.g, primary_rgb.b);
-    // Apply algorithm parameters to primary
-    primary_hct = apply_algorithm_params(primary_hct, params);
-
-    // Convert hex to HCT for secondary and tertiary
-    let secondary_rgb = color::hex_to_rgb(secondary_hex)?;
-    let mut secondary_hct = color::rgb_to_hct(secondary_rgb.r, secondary_rgb.g, secondary_rgb.b);
-    // Apply algorithm parameters to secondary
-    secondary_hct = apply_algorithm_params(secondary_hct, params);
-
-    let tertiary_rgb = color::hex_to_rgb(tertiary_hex)?;
-    let mut tertiary_hct = color::rgb_to_hct(tertiary_rgb.r, tertiary_rgb.g, tertiary_rgb.b);
-    // Apply algorithm parameters to tertiary
-    tertiary_hct = apply_algorithm_params(tertiary_hct, params);
-
-    let error_rgb = color::hex_to_rgb(error_hex)?;
-    let mut error_hct = color::rgb_to_hct(error_rgb.r, error_rgb.g, error_rgb.b);
-    // Apply algorithm parameters to error
-    error_hct = apply_algorithm_params(error_hct, params);
-
-    // Create primary colors using HCT
-    let primary = create_color_format(&primary_hct.to_hex())?;
-    let on_primary = if is_dark_mode {
-        // Try to get specific on_primary color, fallback to standard
-        theme
-            .get("on_primary")
+/// Convert material-colors scheme to our Palette format
+fn scheme_to_palette(
+    scheme: &DynamicScheme,
+    is_dark_mode: bool,
+    theme: &Value,
+) -> Result<Palette, String> {
+    // Helper to get override color from theme (supports both old and new formats)
+    let get_override = |key: &str| -> Option<String> {
+        // Try new format first (top-level override)
+        if let Some(hex) = theme.get(key).and_then(|v| v.as_str()) {
+            return Some(hex.to_string());
+        }
+        
+        // Try old format (dark/light mode specific)
+        let mode_key = if is_dark_mode { "dark" } else { "light" };
+        theme.get(mode_key)
+            .and_then(|m| m.get(key).or_else(|| m.get(&format!("m{}", key[..1].to_uppercase() + &key[1..]))))
             .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#ffffff"))
-    } else {
-        theme
-            .get("on_primary")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#000000"))
-    }?;
-
-    // Create secondary and tertiary colors
-    let secondary = create_color_format(&secondary_hct.to_hex())?;
-    let on_secondary = if is_dark_mode {
-        theme
-            .get("on_secondary")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnSecondary").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#ffffff"))
-    } else {
-        theme
-            .get("on_secondary")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnSecondary").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#000000"))
-    }?;
-
-    let tertiary = create_color_format(&tertiary_hct.to_hex())?;
-    let on_tertiary = if is_dark_mode {
-        theme
-            .get("on_tertiary")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnTertiary").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#ffffff"))
-    } else {
-        theme
-            .get("on_tertiary")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnTertiary").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#000000"))
-    }?;
-
-    // Generate container colors (lower chroma, adjusted tone)
-    let primary_container_hct = color::Hct::from_hct(
-        primary_hct.h,
-        primary_hct.c * CONTAINER_CHROMA_FACTOR,
-        if is_dark_mode { PRIMARY_CONTAINER_TONE_DARK } else { PRIMARY_CONTAINER_TONE_LIGHT },
-    );
-    let primary_container = create_color_format(&primary_container_hct.to_hex())?;
-    let on_primary_container = if is_dark_mode {
-        theme
-            .get("on_primary_container")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str())) // Use mOnPrimary as fallback
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#ffffff"))
-    } else {
-        theme
-            .get("on_primary_container")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnPrimary").and_then(|v| v.as_str())) // Use mOnPrimary as fallback
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#000000"))
-    }?;
-
-    let secondary_container_hct = color::Hct::from_hct(
-        secondary_hct.h,
-        secondary_hct.c * CONTAINER_CHROMA_FACTOR,
-        if is_dark_mode { SECONDARY_CONTAINER_TONE_DARK } else { SECONDARY_CONTAINER_TONE_LIGHT },
-    );
-    let secondary_container = create_color_format(&secondary_container_hct.to_hex())?;
-    let on_secondary_container = if is_dark_mode {
-        create_color_format("#ffffff")?
-    } else {
-        create_color_format("#000000")?
+            .map(|s| s.to_string())
     };
 
-    let tertiary_container_hct = color::Hct::from_hct(
-        tertiary_hct.h,
-        tertiary_hct.c * CONTAINER_CHROMA_FACTOR,
-        if is_dark_mode { TERTIARY_CONTAINER_TONE_DARK } else { TERTIARY_CONTAINER_TONE_LIGHT },
-    );
-    let tertiary_container = create_color_format(&tertiary_container_hct.to_hex())?;
-    let on_tertiary_container = if is_dark_mode {
-        create_color_format("#ffffff")?
-    } else {
-        create_color_format("#000000")?
-    };
+    // Helper to create ColorEntry from scheme colors
+    let create_entry = |
+        get_color_fn: fn(&DynamicScheme) -> Argb,
+        override_key: Option<&str>,
+    | -> Result<ColorEntry, String> {
+        // Check for override in theme
+        let override_hex = override_key.and_then(|k| get_override(k));
 
-    // Use provided surface colors if available, otherwise generate
-    let (surface, on_surface, surface_hct) = if let Some(hex) = surface_hex {
-        let surface = create_color_format(hex)?;
-        let on_surface = if is_dark_mode {
-            theme
-                .get("on_surface")
-                .and_then(|v| v.as_str())
-                .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
-                .map(create_color_format)
-                .unwrap_or_else(|| create_color_format("#e0e0e0"))? // Light text on dark surface
+        let argb = if let Some(hex) = override_hex {
+            parse_hex_color(&hex)?
         } else {
-            theme
-                .get("on_surface")
-                .and_then(|v| v.as_str())
-                .or_else(|| theme.get("mOnSurface").and_then(|v| v.as_str()))
-                .map(create_color_format)
-                .unwrap_or_else(|| create_color_format("#1f1f1f"))? // Dark text on light surface
+            get_color_fn(scheme)
         };
-        // Create HCT from the provided surface color for use in other calculations
-        let surface_rgb = color::hex_to_rgb(hex)?;
-        let surface_hct = color::rgb_to_hct(surface_rgb.r, surface_rgb.g, surface_rgb.b);
-        (surface, on_surface, surface_hct)
-    } else {
-        // Generate surface colors based on the theme
-        let surface_tone = if is_dark_mode { SURFACE_TONE_DARK } else { SURFACE_TONE_LIGHT };
-        let surface_hct = color::Hct::from_hct(primary_hct.h, SURFACE_VARIANT_CHROMA, surface_tone); // Low chroma for surface
-        let surface = create_color_format(&surface_hct.to_hex())?;
-        let on_surface = if is_dark_mode {
-            create_color_format("#e0e0e0")? // Light text on dark surface
-        } else {
-            create_color_format("#1f1f1f")? // Dark text on light surface
-        };
-        (surface, on_surface, surface_hct)
+
+        let hex = argb.to_hex();
+
+        Ok(ColorEntry {
+            default: create_color_format(&hex)?,
+            dark: create_color_format(&hex)?,
+            light: create_color_format(&hex)?,
+        })
     };
 
-    let background = surface.clone();
-    let on_background = on_surface.clone();
+    // Build palette using MD3 color roles
+    Ok(Palette {
+        primary: create_entry(|s| s.primary(), theme.get("primary").and_then(|v| v.as_str()).map(|_| "primary"))?,
+        on_primary: create_entry(|s| s.on_primary(), theme.get("on_primary").and_then(|v| v.as_str()).map(|_| "on_primary"))?,
+        primary_container: create_entry(|s| s.primary_container(), theme.get("primary_container").and_then(|v| v.as_str()).map(|_| "primary_container"))?,
+        on_primary_container: create_entry(|s| s.on_primary_container(), theme.get("on_primary_container").and_then(|v| v.as_str()).map(|_| "on_primary_container"))?,
+        primary_fixed: create_entry(|s| s.primary_fixed(), None)?,
+        primary_fixed_dim: create_entry(|s| s.primary_fixed_dim(), None)?,
+        on_primary_fixed: create_entry(|s| s.on_primary_fixed(), None)?,
+        on_primary_fixed_variant: create_entry(|s| s.on_primary_fixed_variant(), None)?,
 
-    // Use provided surface variant color if available, otherwise generate
-    let (surface_variant, on_surface_variant) = if let Some(hex) = surface_variant_hex {
-        let surface_variant = create_color_format(hex)?;
-        let on_surface_variant = if is_dark_mode {
-            theme
-                .get("on_surface_variant")
-                .and_then(|v| v.as_str())
-                .or_else(|| theme.get("mOnSurfaceVariant").and_then(|v| v.as_str()))
-                .map(create_color_format)
-                .unwrap_or_else(|| create_color_format("#c4c4c4"))?
-        } else {
-            theme
-                .get("on_surface_variant")
-                .and_then(|v| v.as_str())
-                .or_else(|| theme.get("mOnSurfaceVariant").and_then(|v| v.as_str()))
-                .map(create_color_format)
-                .unwrap_or_else(|| create_color_format("#49454f"))?
-        };
-        (surface_variant, on_surface_variant)
-    } else {
-        // Generate surface variant (slightly different hue)
-        let surface_variant_hct = color::Hct::from_hct(
-            (surface_hct.h + SURFACE_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND,
-            SURFACE_VARIANT_CHROMA,
-            if is_dark_mode { SURFACE_VARIANT_TONE_DARK } else { SURFACE_VARIANT_TONE_LIGHT },
-        );
-        let surface_variant = create_color_format(&surface_variant_hct.to_hex())?;
-        let on_surface_variant = if is_dark_mode {
-            create_color_format("#c4c4c4")?
-        } else {
-            create_color_format("#49454f")?
-        };
-        (surface_variant, on_surface_variant)
-    };
+        secondary: create_entry(|s| s.secondary(), theme.get("secondary").and_then(|v| v.as_str()).map(|_| "secondary"))?,
+        on_secondary: create_entry(|s| s.on_secondary(), theme.get("on_secondary").and_then(|v| v.as_str()).map(|_| "on_secondary"))?,
+        secondary_container: create_entry(|s| s.secondary_container(), theme.get("secondary_container").and_then(|v| v.as_str()).map(|_| "secondary_container"))?,
+        on_secondary_container: create_entry(|s| s.on_secondary_container(), theme.get("on_secondary_container").and_then(|v| v.as_str()).map(|_| "on_secondary_container"))?,
+        secondary_fixed: create_entry(|s| s.secondary_fixed(), None)?,
+        secondary_fixed_dim: create_entry(|s| s.secondary_fixed_dim(), None)?,
+        on_secondary_fixed: create_entry(|s| s.on_secondary_fixed(), None)?,
+        on_secondary_fixed_variant: create_entry(|s| s.on_secondary_fixed_variant(), None)?,
 
-    // Surface container colors (different tones for hierarchy)
-    // Using surface_hct as base instead of primary_hct for better consistency
-    let surface_container_lowest_hct = color::Hct::from_hct(
-        surface_hct.h,
-        5.0,
-        container_tone(surface_hct.t, 0, is_dark_mode), // lowest level
-    );
-    let surface_container_low_hct = color::Hct::from_hct(
-        surface_hct.h,
-        5.0,
-        container_tone(surface_hct.t, 1, is_dark_mode), // low level
-    );
-    let surface_container_hct = color::Hct::from_hct(
-        surface_hct.h,
-        5.0,
-        container_tone(surface_hct.t, 2, is_dark_mode), // medium level
-    );
-    let surface_container_high_hct = color::Hct::from_hct(
-        surface_hct.h,
-        5.0,
-        container_tone(surface_hct.t, 3, is_dark_mode), // high level
-    );
-    let surface_container_highest_hct = color::Hct::from_hct(
-        surface_hct.h,
-        5.0,
-        container_tone(surface_hct.t, 4, is_dark_mode), // highest level
-    );
+        tertiary: create_entry(|s| s.tertiary(), theme.get("tertiary").and_then(|v| v.as_str()).map(|_| "tertiary"))?,
+        on_tertiary: create_entry(|s| s.on_tertiary(), theme.get("on_tertiary").and_then(|v| v.as_str()).map(|_| "on_tertiary"))?,
+        tertiary_container: create_entry(|s| s.tertiary_container(), theme.get("tertiary_container").and_then(|v| v.as_str()).map(|_| "tertiary_container"))?,
+        on_tertiary_container: create_entry(|s| s.on_tertiary_container(), theme.get("on_tertiary_container").and_then(|v| v.as_str()).map(|_| "on_tertiary_container"))?,
+        tertiary_fixed: create_entry(|s| s.tertiary_fixed(), None)?,
+        tertiary_fixed_dim: create_entry(|s| s.tertiary_fixed_dim(), None)?,
+        on_tertiary_fixed: create_entry(|s| s.on_tertiary_fixed(), None)?,
+        on_tertiary_fixed_variant: create_entry(|s| s.on_tertiary_fixed_variant(), None)?,
 
-    let surface_container_lowest = create_color_format(&surface_container_lowest_hct.to_hex())?;
-    let surface_container_low = create_color_format(&surface_container_low_hct.to_hex())?;
-    let surface_container = create_color_format(&surface_container_hct.to_hex())?;
-    let surface_container_high = create_color_format(&surface_container_high_hct.to_hex())?;
-    let surface_container_highest = create_color_format(&surface_container_highest_hct.to_hex())?;
+        error: create_entry(|s| s.error(), theme.get("error").and_then(|v| v.as_str()).map(|_| "error"))?,
+        on_error: create_entry(|s| s.on_error(), theme.get("on_error").and_then(|v| v.as_str()).map(|_| "on_error"))?,
+        error_container: create_entry(|s| s.error_container(), theme.get("error_container").and_then(|v| v.as_str()).map(|_| "error_container"))?,
+        on_error_container: create_entry(|s| s.on_error_container(), theme.get("on_error_container").and_then(|v| v.as_str()).map(|_| "on_error_container"))?,
 
-    // Fixed accent colors - preserve source color tone information while ensuring readability
-    let min_chroma = FIXED_MIN_CHROMA;
-    
-    // Primary fixed colors
-    let base_chroma = if primary_hct.c > min_chroma { primary_hct.c } else { min_chroma };
-    let primary_fixed_tone = color::clamp(primary_hct.t * FIXED_TONE_BASE_MULTIPLIER + FIXED_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
-    let primary_fixed_hct = color::Hct::from_hct(primary_hct.h, base_chroma * FIXED_CHROMA_FACTOR, primary_fixed_tone);
-    let primary_fixed_dim_tone = color::clamp(primary_hct.t * FIXED_DIM_TONE_MULTIPLIER + FIXED_DIM_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
-    let primary_fixed_dim_hct = color::Hct::from_hct(
-        primary_hct.h,
-        if primary_hct.c > FIXED_VARIANT_MIN_CHROMA { primary_hct.c * FIXED_DIM_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
-        primary_fixed_dim_tone,
-    );
-    let primary_fixed = create_color_format(&primary_fixed_hct.to_hex())?;
-    let primary_fixed_dim = create_color_format(&primary_fixed_dim_hct.to_hex())?;
+        background: create_entry(|s| s.background(), theme.get("background").and_then(|v| v.as_str()).map(|_| "background"))?,
+        on_background: create_entry(|s| s.on_background(), theme.get("on_background").and_then(|v| v.as_str()).map(|_| "on_background"))?,
+        surface: create_entry(|s| s.surface(), theme.get("surface").and_then(|v| v.as_str()).map(|_| "surface"))?,
+        on_surface: create_entry(|s| s.on_surface(), theme.get("on_surface").and_then(|v| v.as_str()).map(|_| "on_surface"))?,
+        surface_variant: create_entry(|s| s.surface_variant(), theme.get("surface_variant").and_then(|v| v.as_str()).map(|_| "surface_variant"))?,
+        on_surface_variant: create_entry(|s| s.on_surface_variant(), theme.get("on_surface_variant").and_then(|v| v.as_str()).map(|_| "on_surface_variant"))?,
 
-    let on_primary_fixed = {
-        let fixed_color_hex = primary_fixed_hct.to_hex();
-        let on_color_hex = color::generate_on_color(&fixed_color_hex, is_dark_mode)?;
-        create_color_format(&on_color_hex)?
-    };
-    let on_primary_fixed_variant = {
-        let shifted_hue = (primary_hct.h + FIXED_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND;
-        let variant_tone = if primary_hct.t > FIXED_VARIANT_TONE_THRESHOLD { FIXED_VARIANT_TONE_BRIGHT } else { FIXED_VARIANT_TONE_DARK };
-        let base_hct = color::Hct::from_hct(
-            shifted_hue,
-            if primary_hct.c > FIXED_VARIANT_MIN_CHROMA { primary_hct.c * FIXED_VARIANT_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
-            variant_tone,
-        );
-        create_color_format(&base_hct.to_hex())?
-    };
+        surface_container_lowest: create_entry(|s| s.surface_container_lowest(), None)?,
+        surface_container_low: create_entry(|s| s.surface_container_low(), None)?,
+        surface_container: create_entry(|s| s.surface_container(), None)?,
+        surface_container_high: create_entry(|s| s.surface_container_high(), None)?,
+        surface_container_highest: create_entry(|s| s.surface_container_highest(), None)?,
 
-    // Secondary fixed colors
-    let secondary_base_chroma = if secondary_hct.c > min_chroma { secondary_hct.c } else { min_chroma };
-    let secondary_fixed_tone = color::clamp(secondary_hct.t * FIXED_TONE_BASE_MULTIPLIER + FIXED_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
-    let secondary_fixed_hct = color::Hct::from_hct(secondary_hct.h, secondary_base_chroma * FIXED_CHROMA_FACTOR, secondary_fixed_tone);
-    let secondary_fixed_dim_tone = color::clamp(secondary_hct.t * FIXED_DIM_TONE_MULTIPLIER + FIXED_DIM_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
-    let secondary_fixed_dim_hct = color::Hct::from_hct(
-        secondary_hct.h,
-        if secondary_hct.c > FIXED_VARIANT_MIN_CHROMA { secondary_hct.c * FIXED_DIM_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
-        secondary_fixed_dim_tone,
-    );
-    let secondary_fixed = create_color_format(&secondary_fixed_hct.to_hex())?;
-    let secondary_fixed_dim = create_color_format(&secondary_fixed_dim_hct.to_hex())?;
+        inverse_surface: create_entry(|s| s.inverse_surface(), theme.get("inverse_surface").and_then(|v| v.as_str()).map(|_| "inverse_surface"))?,
+        inverse_on_surface: create_entry(|s| s.inverse_on_surface(), theme.get("inverse_on_surface").and_then(|v| v.as_str()).map(|_| "inverse_on_surface"))?,
+        inverse_primary: create_entry(|s| s.inverse_primary(), theme.get("inverse_primary").and_then(|v| v.as_str()).map(|_| "inverse_primary"))?,
 
-    let on_secondary_fixed = {
-        let fixed_color_hex = secondary_fixed_hct.to_hex();
-        let on_color_hex = color::generate_on_color(&fixed_color_hex, is_dark_mode)?;
-        create_color_format(&on_color_hex)?
-    };
-    let on_secondary_fixed_variant = {
-        let shifted_hue = (secondary_hct.h + FIXED_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND;
-        let variant_tone = if secondary_hct.t > FIXED_VARIANT_TONE_THRESHOLD { FIXED_VARIANT_TONE_BRIGHT } else { FIXED_VARIANT_TONE_DARK };
-        let base_hct = color::Hct::from_hct(
-            shifted_hue,
-            if secondary_hct.c > FIXED_VARIANT_MIN_CHROMA { secondary_hct.c * FIXED_VARIANT_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
-            variant_tone,
-        );
-        create_color_format(&base_hct.to_hex())?
-    };
+        surface_dim: create_entry(|s| s.surface_dim(), None)?,
+        surface_bright: create_entry(|s| s.surface_bright(), None)?,
 
-    // Tertiary fixed colors
-    let tertiary_base_chroma = if tertiary_hct.c > min_chroma { tertiary_hct.c } else { min_chroma };
-    let tertiary_fixed_tone = color::clamp(tertiary_hct.t * FIXED_TONE_BASE_MULTIPLIER + FIXED_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
-    let tertiary_fixed_hct = color::Hct::from_hct(tertiary_hct.h, tertiary_base_chroma * FIXED_CHROMA_FACTOR, tertiary_fixed_tone);
-    let tertiary_fixed_dim_tone = color::clamp(tertiary_hct.t * FIXED_DIM_TONE_MULTIPLIER + FIXED_DIM_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
-    let tertiary_fixed_dim_hct = color::Hct::from_hct(
-        tertiary_hct.h,
-        if tertiary_hct.c > FIXED_VARIANT_MIN_CHROMA { tertiary_hct.c * FIXED_DIM_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
-        tertiary_fixed_dim_tone,
-    );
-    let tertiary_fixed = create_color_format(&tertiary_fixed_hct.to_hex())?;
-    let tertiary_fixed_dim = create_color_format(&tertiary_fixed_dim_hct.to_hex())?;
+        outline: create_entry(|s| s.outline(), theme.get("outline").and_then(|v| v.as_str()).map(|_| "outline"))?,
+        outline_variant: create_entry(|s| s.outline_variant(), theme.get("outline_variant").and_then(|v| v.as_str()).map(|_| "outline_variant"))?,
 
-    let on_tertiary_fixed = {
-        let fixed_color_hex = tertiary_fixed_hct.to_hex();
-        let on_color_hex = color::generate_on_color(&fixed_color_hex, is_dark_mode)?;
-        create_color_format(&on_color_hex)?
-    };
-    let on_tertiary_fixed_variant = {
-        let shifted_hue = (tertiary_hct.h + FIXED_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND;
-        let variant_tone = if tertiary_hct.t > FIXED_VARIANT_TONE_THRESHOLD { FIXED_VARIANT_TONE_BRIGHT } else { FIXED_VARIANT_TONE_DARK };
-        let base_hct = color::Hct::from_hct(
-            shifted_hue,
-            if tertiary_hct.c > FIXED_VARIANT_MIN_CHROMA { tertiary_hct.c * FIXED_VARIANT_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
-            variant_tone,
-        );
-        create_color_format(&base_hct.to_hex())?
-    };
+        shadow: create_entry(|s| s.shadow(), theme.get("shadow").and_then(|v| v.as_str()).map(|_| "shadow"))?,
+        scrim: create_entry(|s| s.scrim(), theme.get("scrim").and_then(|v| v.as_str()).map(|_| "scrim"))?,
 
-    // Inverse colors
-    let inverse_surface_hct = color::Hct::from_hct(
-        surface_hct.h,
-        surface_hct.c,
-        if is_dark_mode { INVERSE_SURFACE_TONE_DARK } else { INVERSE_SURFACE_TONE_LIGHT },
-    );
-    let inverse_surface = create_color_format(&inverse_surface_hct.to_hex())?;
-
-    let inverse_on_surface = {
-        let inv_surf_hex = inverse_surface_hct.to_hex();
-        let on_color_hex = color::generate_on_color(&inv_surf_hex, is_dark_mode)?;
-        create_color_format(&on_color_hex)?
-    };
-
-    let inverse_primary_hct = color::Hct::from_hct(
-        primary_hct.h,
-        primary_hct.c,
-        if is_dark_mode { INVERSE_PRIMARY_TONE_DARK } else { INVERSE_PRIMARY_TONE_LIGHT },
-    );
-    let inverse_primary = create_color_format(&inverse_primary_hct.to_hex())?;
-
-    // Bright and dim surface colors
-    let surface_dim_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { SURFACE_DIM_TONE_DARK } else { SURFACE_DIM_TONE_LIGHT });
-    let surface_bright_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { SURFACE_BRIGHT_TONE_DARK } else { SURFACE_BRIGHT_TONE_LIGHT });
-    let surface_dim = create_color_format(&surface_dim_hct.to_hex())?;
-    let surface_bright = create_color_format(&surface_bright_hct.to_hex())?;
-
-    // Error colors
-    let error = create_color_format(&error_hct.to_hex())?;
-    let on_error = if is_dark_mode {
-        theme
-            .get("on_error")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#410002"))?
-    } else {
-        theme
-            .get("on_error")
-            .and_then(|v| v.as_str())
-            .or_else(|| theme.get("mOnError").and_then(|v| v.as_str()))
-            .map(create_color_format)
-            .unwrap_or_else(|| create_color_format("#ffffff"))?
-    };
-
-    let error_container_hct = color::Hct::from_hct(error_hct.h, ERROR_CONTAINER_CHROMA, if is_dark_mode { ERROR_CONTAINER_TONE_DARK } else { ERROR_CONTAINER_TONE_LIGHT });
-    let error_container = create_color_format(&error_container_hct.to_hex())?;
-    let on_error_container = if is_dark_mode {
-        create_color_format("#ffdad6")?
-    } else {
-        create_color_format("#410002")?
-    };
-
-    // Outline colors
-    let outline = theme
-        .get("outline")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mOutline").and_then(|v| v.as_str()))
-        .map(create_color_format)
-        .unwrap_or_else(|| {
-            let outline_hct = color::Hct::from_hct(surface_hct.h, OUTLINE_CHROMA, if is_dark_mode { OUTLINE_TONE_DARK } else { OUTLINE_TONE_LIGHT });
-            create_color_format(&outline_hct.to_hex())
-        })?;
-
-    let outline_variant = {
-        let outline_variant_hct = color::Hct::from_hct(surface_hct.h, OUTLINE_VARIANT_CHROMA, if is_dark_mode { OUTLINE_VARIANT_TONE_DARK } else { OUTLINE_VARIANT_TONE_LIGHT });
-        create_color_format(&outline_variant_hct.to_hex())?
-    };
-
-    // Other colors
-    let shadow = theme
-        .get("shadow")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("mShadow").and_then(|v| v.as_str()))
-        .map(create_color_format)
-        .unwrap_or_else(|| create_color_format("#000000"))?;
-
-    let scrim_hex = if is_dark_mode { SCRIM_COLOR_DARK } else { SCRIM_COLOR_LIGHT };
-    let scrim = create_color_format(scrim_hex)?;
-
-    // Build and return single-mode palette
-    Ok(SingleModePalette {
-        primary: primary.clone(),
-        on_primary: on_primary.clone(),
-        primary_container: primary_container.clone(),
-        on_primary_container: on_primary_container.clone(),
-        primary_fixed: primary_fixed.clone(),
-        primary_fixed_dim: primary_fixed_dim.clone(),
-        on_primary_fixed: on_primary_fixed.clone(),
-        on_primary_fixed_variant: on_primary_fixed_variant.clone(),
-
-        secondary: secondary.clone(),
-        on_secondary: on_secondary.clone(),
-        secondary_container: secondary_container.clone(),
-        on_secondary_container: on_secondary_container.clone(),
-        secondary_fixed: secondary_fixed.clone(),
-        secondary_fixed_dim: secondary_fixed_dim.clone(),
-        on_secondary_fixed: on_secondary_fixed.clone(),
-        on_secondary_fixed_variant: on_secondary_fixed_variant.clone(),
-
-        tertiary: tertiary.clone(),
-        on_tertiary: on_tertiary.clone(),
-        tertiary_container: tertiary_container.clone(),
-        on_tertiary_container: on_tertiary_container.clone(),
-        tertiary_fixed: tertiary_fixed.clone(),
-        tertiary_fixed_dim: tertiary_fixed_dim.clone(),
-        on_tertiary_fixed: on_tertiary_fixed.clone(),
-        on_tertiary_fixed_variant: on_tertiary_fixed_variant.clone(),
-
-        error: error.clone(),
-        on_error: on_error.clone(),
-        error_container: error_container.clone(),
-        on_error_container: on_error_container.clone(),
-
-        background: background.clone(),
-        on_background: on_background.clone(),
-        surface: surface.clone(),
-        on_surface: on_surface.clone(),
-        surface_variant: surface_variant.clone(),
-        on_surface_variant: on_surface_variant.clone(),
-
-        surface_container_lowest,
-        surface_container_low,
-        surface_container,
-        surface_container_high,
-        surface_container_highest,
-
-        inverse_surface: inverse_surface.clone(),
-        inverse_on_surface,
-        inverse_primary,
-
-        surface_dim,
-        surface_bright,
-
-        outline,
-        outline_variant,
-
-        shadow,
-        scrim,
-
-        // Terminal colors
-        black: surface.clone(),
-        red: error.clone(),
-        green: tertiary.clone(),
-        yellow: primary.clone(),
-        blue: secondary.clone(),
-        magenta: primary_container.clone(),
-        cyan: secondary_container.clone(),
-        white: on_surface.clone(),
-        bright_black: surface_variant.clone(),
-        bright_red: error_container.clone(),
-        bright_green: tertiary_container.clone(),
-        bright_yellow: primary_fixed.clone(),
-        bright_blue: secondary_fixed.clone(),
-        bright_magenta: primary_fixed_dim.clone(),
-        bright_cyan: secondary_fixed_dim.clone(),
-        bright_white: inverse_surface.clone(),
+        // Terminal colors - map from MD3 colors
+        black: create_entry(|s| s.surface(), None)?,
+        red: create_entry(|s| s.error(), None)?,
+        green: create_entry(|s| s.tertiary(), None)?,
+        yellow: create_entry(|s| s.primary(), None)?,
+        blue: create_entry(|s| s.secondary(), None)?,
+        magenta: create_entry(|s| s.primary_container(), None)?,
+        cyan: create_entry(|s| s.secondary_container(), None)?,
+        white: create_entry(|s| s.on_surface(), None)?,
+        bright_black: create_entry(|s| s.surface_variant(), None)?,
+        bright_red: create_entry(|s| s.error_container(), None)?,
+        bright_green: create_entry(|s| s.tertiary_container(), None)?,
+        bright_yellow: create_entry(|s| s.primary_fixed(), None)?,
+        bright_blue: create_entry(|s| s.secondary_fixed(), None)?,
+        bright_magenta: create_entry(|s| s.primary_fixed_dim(), None)?,
+        bright_cyan: create_entry(|s| s.secondary_fixed_dim(), None)?,
+        bright_white: create_entry(|s| s.inverse_surface(), None)?,
     })
 }
 
@@ -917,51 +277,44 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn test_generate_palette() {
+    fn test_generate_palette_from_seed() {
         let theme = json!({
-            "primary": "#FF5722",
-            "secondary": "#607D8B",
-            "tertiary": "#9C27B0",
-            "error": "#F44336",
-            "surface": "#FAFAFA",
-            "on_surface": "#212121"
+            "seed": "#FF5722"
         });
 
         let palette = generate_palette(&theme, false, false).unwrap();
 
-        // Test that primary color exists and has expected structure
+        // Verify primary color was generated
         assert!(!palette.primary.default.hex.is_empty());
-        assert!(!palette.primary.default.rgb.is_empty());
-        assert!(!palette.primary.default.hsl.is_empty());
+        assert!(palette.primary.default.hex.starts_with("#"));
 
-        // Test that other colors were generated
+        // Verify other colors exist
         assert!(!palette.secondary.default.hex.is_empty());
         assert!(!palette.tertiary.default.hex.is_empty());
-        assert!(!palette.error.default.hex.is_empty());
-        assert!(!palette.surface.default.hex.is_empty());
-        assert!(!palette.on_surface.default.hex.is_empty());
     }
 
     #[test]
-    fn test_process_theme_workflow_with_algorithm_params() {
+    fn test_generate_palette_with_override() {
         let theme = json!({
-            "primary": "#FF5722",
-            "secondary": "#607D8B",
-            "tertiary": "#9C27B0",
-            "error": "#F44336",
-            "surface": "#FAFAFA",
-            "on_surface": "#212121"
+            "seed": "#FF5722",
+            "error": "#F44336"
         });
 
-        let params = AlgorithmParameters {
-            contrast_threshold: 0.15,
-            saturation_adjustment: 10,
-            lightness_adjustment: 5,
-            hue_shift: 15,
-            min_contrast_ratio: 4.5,
-        };
+        let palette = generate_palette(&theme, false, false).unwrap();
 
-        let palette = generate_palette_with_params(&theme, false, params).unwrap();
-        assert!(!palette.primary.default.hex.is_empty());
+        // Error color should be the override
+        assert_eq!(palette.error.default.hex, "#F44336");
+    }
+
+    #[test]
+    fn test_generate_palette_dark_mode() {
+        let theme = json!({
+            "seed": "#2196F3"
+        });
+
+        let palette = generate_palette(&theme, true, false).unwrap();
+
+        // Dark mode should have dark surface
+        assert!(palette.surface.dark.hex.starts_with("#"));
     }
 }

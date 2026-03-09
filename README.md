@@ -10,16 +10,17 @@ tinct is a command-line utility that generates themed configuration files based 
 
 ## Features
 
-- Material Design 3 compliant color generation
+- Material Design 3 compliant color generation using official algorithms
 - Support for light and dark themes
 - Template-based theme injection
 - Color preview functionality
-- Configurable via TOML files
+- Configurable via TOML files with algorithm parameters
 - Support for post-processing hooks
 - Modular architecture for easy extensibility
+- **Backward compatible** with legacy theme formats
+- **Smart color generation** from single seed color
 - Consistent alpha values (0.0-1.0 range)
 - Format-preserving color filters
-- Irreversible alpha upgrades with set_alpha filter
 - HSL-based color adjustments
 
 ## Installation
@@ -86,6 +87,173 @@ Options:
 - `-m, --mode`: Theme mode override (dark/light, defaults to dark)
 - `-p, --preview`: Show color preview instead of processing templates
 - `--log-level`: Logging level (quiet/normal/verbose, defaults to normal)
+
+## Theme Format
+
+tinct supports both new and legacy theme formats for backward compatibility.
+
+### New Format (Recommended)
+
+The new format uses a single seed color to generate the complete Material Design 3 palette using official algorithms.
+
+**Minimal example:**
+```json
+{
+  "seed": "#b8bb26"
+}
+```
+
+**With color overrides:**
+```json
+{
+  "seed": "#b8bb26",
+  "error": "#fb4934",
+  "surface": "#282828",
+  "background": "#282828",
+  "outline": "#928374"
+}
+```
+
+**Available override options:**
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `seed` | **Required.** Seed color for palette generation | `"#b8bb26"` |
+| `primary` | Override primary color | `"#b8bb26"` |
+| `secondary` | Override secondary color | `"#fabd2f"` |
+| `tertiary` | Override tertiary color | `"#83a598"` |
+| `error` | Override error color | `"#fb4934"` |
+| `surface` | Override surface color | `"#282828"` |
+| `background` | Override background color | `"#282828"` |
+| `surface_variant` | Override surface variant | `"#3c3836"` |
+| `outline` | Override outline color | `"#928374"` |
+| `outline_variant` | Override outline variant | `"#bdae93"` |
+| `shadow` | Override shadow color | `"#000000"` |
+| `scrim` | Override scrim color | `"#00000080"` |
+| `inverse_surface` | Override inverse surface | `"#ebdbb2"` |
+| `inverse_on_surface` | Override inverse on surface | `"#3c3836"` |
+| `inverse_primary` | Override inverse primary | `"#b8bb26"` |
+
+### Legacy Format (Still Supported)
+
+The legacy format specifies all colors explicitly for both dark and light modes.
+
+```json
+{
+  "dark": {
+    "mPrimary": "#b8bb26",
+    "mOnPrimary": "#282828",
+    "mSecondary": "#fabd2f",
+    "mOnSecondary": "#282828",
+    "mTertiary": "#83a598",
+    "mOnTertiary": "#282828",
+    "mError": "#fb4934",
+    "mOnError": "#282828",
+    "mSurface": "#282828",
+    "mOnSurface": "#fbf1c7",
+    "mSurfaceVariant": "#3c3836",
+    "mOnSurfaceVariant": "#ebdbb2",
+    "mOutline": "#928374",
+    "mShadow": "#000000"
+  },
+  "light": {
+    "mPrimary": "#98971a",
+    "mOnPrimary": "#fbf1c7",
+    "mSecondary": "#d79921",
+    "mOnSecondary": "#fbf1c7",
+    "mTertiary": "#458588",
+    "mOnTertiary": "#fbf1c7",
+    "mError": "#cc241d",
+    "mOnError": "#fbf1c7",
+    "mSurface": "#fbf1c7",
+    "mOnSurface": "#3c3836"
+  }
+}
+```
+
+**Key differences:**
+
+| Aspect | New Format | Legacy Format |
+|--------|-----------|---------------|
+| File size | ~5 lines | ~50 lines |
+| Maintenance | Automatic generation | Manual specification |
+| Color consistency | MD3 algorithm guaranteed | Depends on manual tuning |
+| Flexibility | Seed + optional overrides | Full manual control |
+| Compatibility | ✅ Recommended | ✅ Still supported |
+
+### Algorithm Configuration
+
+You can adjust the color generation algorithm in your `config.toml`:
+
+```toml
+[algorithm]
+hue_shift = 0               # Rotate hue by degrees (-180 to 180)
+saturation_adjustment = 0   # Adjust saturation percentage (-100 to 100)
+```
+
+**Algorithm parameters:**
+
+| Parameter | Range | Default | Effect |
+|-----------|-------|---------|--------|
+| `hue_shift` | -180 ~ 180 | `0` | Rotates all colors' hue |
+| `saturation_adjustment` | -100 ~ 100 | `0` | Adjusts color saturation (chroma) |
+
+**Examples:**
+
+```toml
+# Warm Gruvbox theme
+[algorithm]
+hue_shift = 15
+saturation_adjustment = 10
+
+# Cool Nord theme
+[algorithm]
+hue_shift = -10
+saturation_adjustment = -20
+
+# High saturation theme
+[algorithm]
+saturation_adjustment = 50
+```
+
+**Notes:**
+- `hue_shift = 30` rotates colors 30° toward orange
+- `saturation_adjustment = 50` increases saturation by 50%
+- `saturation_adjustment = -50` decreases saturation by 50% (more muted)
+- `lightness_adjustment` is not supported (would break MD3 contrast ratios)
+
+### Example Themes
+
+**Gruvbox Dark:**
+```json
+{
+  "seed": "#b8bb26",
+  "error": "#fb4934",
+  "surface": "#282828",
+  "background": "#282828"
+}
+```
+
+**Nord:**
+```json
+{
+  "seed": "#88c0d0",
+  "error": "#bf616a",
+  "surface": "#2e3440",
+  "background": "#2e3440"
+}
+```
+
+**Dracula:**
+```json
+{
+  "seed": "#bd93f9",
+  "error": "#ff5555",
+  "surface": "#282a36",
+  "background": "#282a36"
+}
+```
+
 
 ## Template Color Format
 

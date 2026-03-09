@@ -23,20 +23,21 @@ pub fn resolve_theme_path(theme_name: &str) -> String {
         return theme_name.to_string();
     }
 
-    // Check relative path
-    if Path::new(theme_name).exists() {
-        return Path::new(theme_name)
+    // Check relative path (must be a file, not a directory)
+    let relative_path = Path::new(theme_name);
+    if relative_path.exists() && relative_path.is_file() {
+        return relative_path
             .canonicalize()
             .unwrap_or_else(|_| PathBuf::from(theme_name))
             .to_string_lossy()
             .to_string();
     }
 
-    // Check project themes directory
+    // Check project themes directory (only if it's a file, not a directory)
     let project_themes_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("themes")
         .join(format!("{}.json", theme_name));
-    if project_themes_path.exists() {
+    if project_themes_path.is_file() {
         return project_themes_path.to_string_lossy().to_string();
     }
 

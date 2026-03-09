@@ -31,6 +31,7 @@ shellexpand = "3.1"
 colored = "2.1"
 glob = "0.3"
 thiserror = "1.0"
+material-colors = "0.4.2"
 
 [dev-dependencies]
 tempfile = "3.0"
