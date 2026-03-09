@@ -1,7 +1,7 @@
-//! Adapter for the legacy palette_generator module
+//! Adapter for the legacy palette generator module
 
 use crate::core::{ColorFormat, Error, Mode, PaletteGenerator, Result};
-use crate::palette_generator::{generate_palette_with_params, AlgorithmParameters};
+use crate::palette::{generate_palette_with_params, AlgorithmParameters, ColorEntry};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -41,7 +41,7 @@ impl PaletteGenerator for LegacyPaletteGenerator {
             .map_err(|e| Error::Palette(e))?;
 
         // Helper to get color from entry based on mode
-        let get_color = |entry: &crate::palette_generator::ColorEntry| -> ColorFormat {
+        let get_color = |entry: &ColorEntry| -> ColorFormat {
             let src = if mode.is_dark() { &entry.dark } else { &entry.light };
             ColorFormat {
                 hex: src.hex.clone(),

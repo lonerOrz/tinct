@@ -20,7 +20,6 @@ pub mod color;
 pub mod config;
 pub mod filter;
 pub mod log;
-pub mod palette_generator;
 pub mod preview;
 
 // Re-exports
@@ -28,7 +27,6 @@ pub use color::*;
 pub use config::*;
 pub use filter::*;
 pub use log::*;
-pub use palette_generator::{AlgorithmParameters, ColorEntry, ColorFormat, Palette};
 pub use preview::*;
 
 // Core trait re-exports
@@ -38,4 +36,4 @@ pub use core::{ColorFormat as CoreColorFormat, ColorSpace, Error, Mode, OutputFo
 pub use output::{FileOutput, OutputRegistry, TerminalOutput};
 pub use template::{Filter, TemplateEngineRegistry, TemplateProcessor};
 pub use theme::{JsonThemeLoader, ThemeLoaderRegistry};
-pub use palette::LegacyPaletteGenerator;
+pub use palette::{LegacyPaletteGenerator, AlgorithmParameters, ColorEntry, ColorFormat, Palette};

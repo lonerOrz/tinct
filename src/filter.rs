@@ -1,4 +1,4 @@
-use crate::palette_generator::ColorFormat;
+use crate::palette::ColorFormat;
 
 /// Enum representing different color output formats
 #[derive(Debug, Clone, PartialEq)]
@@ -701,7 +701,7 @@ impl Filter for DesaturateFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::palette_generator::ColorFormat;
+    use crate::palette::ColorFormat;
 
     #[test]
     fn test_set_alpha_filter() {

@@ -4,10 +4,9 @@
 
 use colored::*;
 use std::sync::Arc;
-use crate::core::{Mode, PaletteGenerator, ThemeLoader};
-use crate::palette::LegacyPaletteGenerator;
+use crate::core::{Mode, ThemeLoader};
+use crate::palette::{LegacyPaletteGenerator, AlgorithmParameters};
 use crate::theme::JsonThemeLoader;
-use crate::palette_generator::AlgorithmParameters;
 
 /// Display a color preview showing all available colors in the theme as a matrix
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
