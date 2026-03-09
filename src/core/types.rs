@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn test_theme_get_color() {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
-        
+
         let color = ColorFormat {
             hex: "#FF5722".to_string(),
             hex_stripped: "FF5722".to_string(),
@@ -180,10 +180,14 @@ mod tests {
             saturation: 100.0,
             lightness: 57.0,
         };
-        
-        theme.dark_colors.insert("primary".to_string(), color.clone());
-        theme.light_colors.insert("primary".to_string(), color.clone());
-        
+
+        theme
+            .dark_colors
+            .insert("primary".to_string(), color.clone());
+        theme
+            .light_colors
+            .insert("primary".to_string(), color.clone());
+
         assert!(theme.get_color("primary", Mode::Dark).is_some());
         assert!(theme.get_color("primary", Mode::Light).is_some());
         assert!(theme.get_color("nonexistent", Mode::Dark).is_none());

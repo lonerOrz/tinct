@@ -113,7 +113,10 @@ fn resolve_output_path(output_path: &Path) -> String {
     if let Some(parent) = output_path.parent() {
         if let Ok(canonical_parent) = fs::canonicalize(parent) {
             let file_name = output_path.file_name().unwrap_or_default();
-            canonical_parent.join(file_name).to_string_lossy().to_string()
+            canonical_parent
+                .join(file_name)
+                .to_string_lossy()
+                .to_string()
         } else {
             output_path.to_string_lossy().to_string()
         }
@@ -156,13 +159,13 @@ mod tests {
     fn test_resolve_output_path_with_parent() {
         let temp_dir = std::env::temp_dir();
         let test_path = temp_dir.join("subdir").join("output.txt");
-        
+
         // Create parent directory
         let _ = fs::create_dir_all(&test_path.parent().unwrap());
-        
+
         let result = resolve_output_path(&test_path);
         assert!(result.ends_with("output.txt"));
-        
+
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir.join("subdir"));
     }
@@ -171,13 +174,13 @@ mod tests {
     fn test_resolve_hook_path_existing() {
         let temp_dir = std::env::temp_dir();
         let hook_file = temp_dir.join("test_hook.sh");
-        
+
         // Create a temporary file
         let _ = fs::write(&hook_file, "#!/bin/bash");
-        
+
         let result = resolve_hook_path("./test_hook.sh", &hook_file);
         assert!(Path::new(&result).is_absolute());
-        
+
         // Cleanup
         let _ = fs::remove_file(&hook_file);
     }
@@ -196,9 +199,9 @@ mod tests {
             output_path: "~/output.css".to_string(),
             post_hook: None,
         };
-        
+
         resolve_config_paths(&mut section, "/config");
-        
+
         // Tilde should be expanded
         assert!(!section.input_path.starts_with("~"));
         assert!(!section.output_path.starts_with("~"));

@@ -12,13 +12,13 @@
 //! - `constants` - Material Design 3 color constants
 
 mod adapter;
-mod types;
-mod params;
 mod color_parser;
-mod generator;
 pub mod constants;
+mod generator;
+mod params;
+mod types;
 
 pub use adapter::LegacyPaletteGenerator;
-pub use types::{ColorFormat, ColorEntry, Palette};
-pub use params::AlgorithmParameters;
 pub use generator::{generate_palette, generate_palette_with_params};
+pub use params::AlgorithmParameters;
+pub use types::{ColorEntry, ColorFormat, Palette};

@@ -38,11 +38,15 @@ impl PaletteGenerator for LegacyPaletteGenerator {
     fn generate(&self, theme: &Value, mode: Mode) -> Result<HashMap<String, ColorFormat>> {
         // Call the legacy function
         let palette = generate_palette_with_params(theme, mode.is_dark(), self.params.clone())
-            .map_err(|e| Error::Palette(e))?;
+            .map_err(Error::Palette)?;
 
         // Helper to get color from entry based on mode
         let get_color = |entry: &ColorEntry| -> ColorFormat {
-            let src = if mode.is_dark() { &entry.dark } else { &entry.light };
+            let src = if mode.is_dark() {
+                &entry.dark
+            } else {
+                &entry.light
+            };
             ColorFormat {
                 hex: src.hex.clone(),
                 hex_stripped: src.hex_stripped.clone(),
@@ -67,58 +71,157 @@ impl PaletteGenerator for LegacyPaletteGenerator {
 
         colors.insert("primary".to_string(), get_color(&palette.primary));
         colors.insert("on_primary".to_string(), get_color(&palette.on_primary));
-        colors.insert("primary_container".to_string(), get_color(&palette.primary_container));
-        colors.insert("on_primary_container".to_string(), get_color(&palette.on_primary_container));
-        colors.insert("primary_fixed".to_string(), get_color(&palette.primary_fixed));
-        colors.insert("primary_fixed_dim".to_string(), get_color(&palette.primary_fixed_dim));
-        colors.insert("on_primary_fixed".to_string(), get_color(&palette.on_primary_fixed));
-        colors.insert("on_primary_fixed_variant".to_string(), get_color(&palette.on_primary_fixed_variant));
+        colors.insert(
+            "primary_container".to_string(),
+            get_color(&palette.primary_container),
+        );
+        colors.insert(
+            "on_primary_container".to_string(),
+            get_color(&palette.on_primary_container),
+        );
+        colors.insert(
+            "primary_fixed".to_string(),
+            get_color(&palette.primary_fixed),
+        );
+        colors.insert(
+            "primary_fixed_dim".to_string(),
+            get_color(&palette.primary_fixed_dim),
+        );
+        colors.insert(
+            "on_primary_fixed".to_string(),
+            get_color(&palette.on_primary_fixed),
+        );
+        colors.insert(
+            "on_primary_fixed_variant".to_string(),
+            get_color(&palette.on_primary_fixed_variant),
+        );
 
         colors.insert("secondary".to_string(), get_color(&palette.secondary));
         colors.insert("on_secondary".to_string(), get_color(&palette.on_secondary));
-        colors.insert("secondary_container".to_string(), get_color(&palette.secondary_container));
-        colors.insert("on_secondary_container".to_string(), get_color(&palette.on_secondary_container));
-        colors.insert("secondary_fixed".to_string(), get_color(&palette.secondary_fixed));
-        colors.insert("secondary_fixed_dim".to_string(), get_color(&palette.secondary_fixed_dim));
-        colors.insert("on_secondary_fixed".to_string(), get_color(&palette.on_secondary_fixed));
-        colors.insert("on_secondary_fixed_variant".to_string(), get_color(&palette.on_secondary_fixed_variant));
+        colors.insert(
+            "secondary_container".to_string(),
+            get_color(&palette.secondary_container),
+        );
+        colors.insert(
+            "on_secondary_container".to_string(),
+            get_color(&palette.on_secondary_container),
+        );
+        colors.insert(
+            "secondary_fixed".to_string(),
+            get_color(&palette.secondary_fixed),
+        );
+        colors.insert(
+            "secondary_fixed_dim".to_string(),
+            get_color(&palette.secondary_fixed_dim),
+        );
+        colors.insert(
+            "on_secondary_fixed".to_string(),
+            get_color(&palette.on_secondary_fixed),
+        );
+        colors.insert(
+            "on_secondary_fixed_variant".to_string(),
+            get_color(&palette.on_secondary_fixed_variant),
+        );
 
         colors.insert("tertiary".to_string(), get_color(&palette.tertiary));
         colors.insert("on_tertiary".to_string(), get_color(&palette.on_tertiary));
-        colors.insert("tertiary_container".to_string(), get_color(&palette.tertiary_container));
-        colors.insert("on_tertiary_container".to_string(), get_color(&palette.on_tertiary_container));
-        colors.insert("tertiary_fixed".to_string(), get_color(&palette.tertiary_fixed));
-        colors.insert("tertiary_fixed_dim".to_string(), get_color(&palette.tertiary_fixed_dim));
-        colors.insert("on_tertiary_fixed".to_string(), get_color(&palette.on_tertiary_fixed));
-        colors.insert("on_tertiary_fixed_variant".to_string(), get_color(&palette.on_tertiary_fixed_variant));
+        colors.insert(
+            "tertiary_container".to_string(),
+            get_color(&palette.tertiary_container),
+        );
+        colors.insert(
+            "on_tertiary_container".to_string(),
+            get_color(&palette.on_tertiary_container),
+        );
+        colors.insert(
+            "tertiary_fixed".to_string(),
+            get_color(&palette.tertiary_fixed),
+        );
+        colors.insert(
+            "tertiary_fixed_dim".to_string(),
+            get_color(&palette.tertiary_fixed_dim),
+        );
+        colors.insert(
+            "on_tertiary_fixed".to_string(),
+            get_color(&palette.on_tertiary_fixed),
+        );
+        colors.insert(
+            "on_tertiary_fixed_variant".to_string(),
+            get_color(&palette.on_tertiary_fixed_variant),
+        );
 
         colors.insert("error".to_string(), get_color(&palette.error));
         colors.insert("on_error".to_string(), get_color(&palette.on_error));
-        colors.insert("error_container".to_string(), get_color(&palette.error_container));
-        colors.insert("on_error_container".to_string(), get_color(&palette.on_error_container));
+        colors.insert(
+            "error_container".to_string(),
+            get_color(&palette.error_container),
+        );
+        colors.insert(
+            "on_error_container".to_string(),
+            get_color(&palette.on_error_container),
+        );
 
         colors.insert("background".to_string(), get_color(&palette.background));
-        colors.insert("on_background".to_string(), get_color(&palette.on_background));
+        colors.insert(
+            "on_background".to_string(),
+            get_color(&palette.on_background),
+        );
         colors.insert("surface".to_string(), get_color(&palette.surface));
         colors.insert("on_surface".to_string(), get_color(&palette.on_surface));
-        colors.insert("surface_variant".to_string(), get_color(&palette.surface_variant));
-        colors.insert("on_surface_variant".to_string(), get_color(&palette.on_surface_variant));
+        colors.insert(
+            "surface_variant".to_string(),
+            get_color(&palette.surface_variant),
+        );
+        colors.insert(
+            "on_surface_variant".to_string(),
+            get_color(&palette.on_surface_variant),
+        );
 
-        colors.insert("surface_container_lowest".to_string(), get_color(&palette.surface_container_lowest));
-        colors.insert("surface_container_low".to_string(), get_color(&palette.surface_container_low));
-        colors.insert("surface_container".to_string(), get_color(&palette.surface_container));
-        colors.insert("surface_container_high".to_string(), get_color(&palette.surface_container_high));
-        colors.insert("surface_container_highest".to_string(), get_color(&palette.surface_container_highest));
+        colors.insert(
+            "surface_container_lowest".to_string(),
+            get_color(&palette.surface_container_lowest),
+        );
+        colors.insert(
+            "surface_container_low".to_string(),
+            get_color(&palette.surface_container_low),
+        );
+        colors.insert(
+            "surface_container".to_string(),
+            get_color(&palette.surface_container),
+        );
+        colors.insert(
+            "surface_container_high".to_string(),
+            get_color(&palette.surface_container_high),
+        );
+        colors.insert(
+            "surface_container_highest".to_string(),
+            get_color(&palette.surface_container_highest),
+        );
 
-        colors.insert("inverse_surface".to_string(), get_color(&palette.inverse_surface));
-        colors.insert("inverse_on_surface".to_string(), get_color(&palette.inverse_on_surface));
-        colors.insert("inverse_primary".to_string(), get_color(&palette.inverse_primary));
+        colors.insert(
+            "inverse_surface".to_string(),
+            get_color(&palette.inverse_surface),
+        );
+        colors.insert(
+            "inverse_on_surface".to_string(),
+            get_color(&palette.inverse_on_surface),
+        );
+        colors.insert(
+            "inverse_primary".to_string(),
+            get_color(&palette.inverse_primary),
+        );
 
         colors.insert("surface_dim".to_string(), get_color(&palette.surface_dim));
-        colors.insert("surface_bright".to_string(), get_color(&palette.surface_bright));
+        colors.insert(
+            "surface_bright".to_string(),
+            get_color(&palette.surface_bright),
+        );
 
         colors.insert("outline".to_string(), get_color(&palette.outline));
-        colors.insert("outline_variant".to_string(), get_color(&palette.outline_variant));
+        colors.insert(
+            "outline_variant".to_string(),
+            get_color(&palette.outline_variant),
+        );
 
         colors.insert("shadow".to_string(), get_color(&palette.shadow));
         colors.insert("scrim".to_string(), get_color(&palette.scrim));
@@ -135,9 +238,15 @@ impl PaletteGenerator for LegacyPaletteGenerator {
         colors.insert("bright_black".to_string(), get_color(&palette.bright_black));
         colors.insert("bright_red".to_string(), get_color(&palette.bright_red));
         colors.insert("bright_green".to_string(), get_color(&palette.bright_green));
-        colors.insert("bright_yellow".to_string(), get_color(&palette.bright_yellow));
+        colors.insert(
+            "bright_yellow".to_string(),
+            get_color(&palette.bright_yellow),
+        );
         colors.insert("bright_blue".to_string(), get_color(&palette.bright_blue));
-        colors.insert("bright_magenta".to_string(), get_color(&palette.bright_magenta));
+        colors.insert(
+            "bright_magenta".to_string(),
+            get_color(&palette.bright_magenta),
+        );
         colors.insert("bright_cyan".to_string(), get_color(&palette.bright_cyan));
         colors.insert("bright_white".to_string(), get_color(&palette.bright_white));
 

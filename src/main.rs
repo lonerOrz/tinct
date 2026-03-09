@@ -51,8 +51,8 @@ fn main() {
 
     // Read TOML config
     let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
-    let config_root = config::ConfigRoot::parse(&config_content)
-        .expect("Invalid TOML format in config file");
+    let config_root =
+        config::ConfigRoot::parse(&config_content).expect("Invalid TOML format in config file");
 
     let alg_params = config_root.algorithm.clone();
     let mut config = config_root.to_flat_config();
@@ -107,15 +107,13 @@ fn main() {
         };
 
         // Create new architecture components
-        let palette_gen = Arc::new(LegacyPaletteGenerator::new(
-            tinct::AlgorithmParameters {
-                contrast_threshold: alg_params.contrast_threshold,
-                saturation_adjustment: alg_params.saturation_adjustment,
-                lightness_adjustment: alg_params.lightness_adjustment,
-                hue_shift: alg_params.hue_shift,
-                min_contrast_ratio: alg_params.min_contrast_ratio,
-            }
-        ));
+        let palette_gen = Arc::new(LegacyPaletteGenerator::new(tinct::AlgorithmParameters {
+            contrast_threshold: alg_params.contrast_threshold,
+            saturation_adjustment: alg_params.saturation_adjustment,
+            lightness_adjustment: alg_params.lightness_adjustment,
+            hue_shift: alg_params.hue_shift,
+            min_contrast_ratio: alg_params.min_contrast_ratio,
+        }));
         let theme_loader = JsonThemeLoader::new(palette_gen);
         let template_engine = TemplateProcessor::new();
         let output = FileOutput::new();
@@ -242,7 +240,12 @@ fn process_section_new(
     // Run post hook if specified
     if let Some(ref post_hook) = section.post_hook {
         if !post_hook.is_empty() {
-            return cli::run_post_hook(post_hook, output_path, Some(section_name), cli::LogLevel::Normal);
+            return cli::run_post_hook(
+                post_hook,
+                output_path,
+                Some(section_name),
+                cli::LogLevel::Normal,
+            );
         }
     }
 

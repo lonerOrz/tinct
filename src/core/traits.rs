@@ -63,7 +63,11 @@ pub struct Hsl {
 /// Generate color palettes from theme data
 pub trait PaletteGenerator: Send + Sync {
     /// Generate a color palette for the specified mode
-    fn generate(&self, theme: &serde_json::Value, mode: Mode) -> Result<HashMap<String, ColorFormat>>;
+    fn generate(
+        &self,
+        theme: &serde_json::Value,
+        mode: Mode,
+    ) -> Result<HashMap<String, ColorFormat>>;
 }
 
 /// Process templates with theme data

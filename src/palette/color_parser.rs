@@ -3,8 +3,8 @@
 //! This module handles parsing of color strings and conversion between
 //! different color formats (hex, rgb, hsl, etc.)
 
-use crate::color;
 use super::types::ColorFormat;
+use crate::color;
 
 /// Create a color format from a hex string
 ///

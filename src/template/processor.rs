@@ -7,7 +7,10 @@ use std::collections::HashMap;
 /// Default template processor implementation
 pub struct TemplateProcessor {
     #[allow(dead_code)]
-    filters: HashMap<String, Box<dyn Fn(&str, &HashMap<String, String>) -> Result<String> + Send + Sync>>,
+    filters: HashMap<
+        String,
+        Box<dyn Fn(&str, &HashMap<String, String>) -> Result<String> + Send + Sync>,
+    >,
 }
 
 impl TemplateProcessor {
@@ -57,10 +60,7 @@ impl TemplateEngine for TemplateProcessor {
 
         // Process mode placeholders
         content = content.replace("{{mode}}", &mode.to_string());
-        content = content.replace(
-            "{{is_dark}}",
-            if mode.is_dark() { "true" } else { "false" },
-        );
+        content = content.replace("{{is_dark}}", if mode.is_dark() { "true" } else { "false" });
         content = content.replace(
             "{{is_light}}",
             if mode.is_light() { "true" } else { "false" },
@@ -80,17 +80,28 @@ impl TemplateProcessor {
         let mut result = content;
 
         let properties = [
-            "hex", "hex_stripped", "hex8", "hex8_stripped",
-            "rgb", "rgba", "hsl", "hsla",
-            "red", "green", "blue", "alpha",
-            "hue", "saturation", "lightness",
+            "hex",
+            "hex_stripped",
+            "hex8",
+            "hex8_stripped",
+            "rgb",
+            "rgba",
+            "hsl",
+            "hsla",
+            "red",
+            "green",
+            "blue",
+            "alpha",
+            "hue",
+            "saturation",
+            "lightness",
         ];
 
         for prop in &properties {
             // Match {{colors.NAME.SUFFIX.PROP}} where SUFFIX is the mode suffix
             let pattern = format!(
-                r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{}\s*\}}\}}",
-                format!("{}\\.{}", mode_suffix, prop)
+                r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{}\.{}\s*\}}\}}",
+                mode_suffix, prop
             );
             let re = Regex::new(&pattern).map_err(|e| {
                 crate::core::Error::Template(format!("Invalid regex pattern: {}", e))
@@ -164,14 +175,16 @@ mod tests {
     fn test_template_processor_render_basic() {
         let processor = TemplateProcessor::new();
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
-        
+
         let color = create_test_color("#FF5722");
-        theme.dark_colors.insert("primary".to_string(), color.clone());
+        theme
+            .dark_colors
+            .insert("primary".to_string(), color.clone());
         theme.light_colors.insert("primary".to_string(), color);
 
         let template = "Primary: {{colors.primary.default.hex}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
-        
+
         assert!(result.contains("Primary: #FF5722"));
     }
 
@@ -181,7 +194,7 @@ mod tests {
         let theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
         let template = "Mode: {{mode}}, Is Dark: {{is_dark}}, Is Light: {{is_light}}";
-        
+
         let result_dark = processor.render(template, &theme, Mode::Dark).unwrap();
         assert!(result_dark.contains("Mode: dark"));
         assert!(result_dark.contains("Is Dark: true"));
@@ -201,13 +214,26 @@ mod tests {
         let dark_color = create_test_color("#111111");
         let light_color = create_test_color("#EEEEEE");
 
-        theme.dark_colors.insert("background".to_string(), dark_color);
-        theme.light_colors.insert("background".to_string(), light_color);
+        theme
+            .dark_colors
+            .insert("background".to_string(), dark_color);
+        theme
+            .light_colors
+            .insert("background".to_string(), light_color);
 
-        let template = "Dark: {{colors.background.dark.hex}}, Light: {{colors.background.light.hex}}";
+        let template =
+            "Dark: {{colors.background.dark.hex}}, Light: {{colors.background.light.hex}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
 
-        assert!(result.contains("Dark: #111111"), "Expected dark color, got: {}", result);
-        assert!(result.contains("Light: #EEEEEE"), "Expected light color, got: {}", result);
+        assert!(
+            result.contains("Dark: #111111"),
+            "Expected dark color, got: {}",
+            result
+        );
+        assert!(
+            result.contains("Light: #EEEEEE"),
+            "Expected light color, got: {}",
+            result
+        );
     }
 }

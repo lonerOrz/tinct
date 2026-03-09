@@ -188,12 +188,10 @@ pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
         } else {
             Ok("#1c1b1f".to_string())
         }
+    } else if calculate_contrast_ratio(base, "#ffffff")? >= 4.5 {
+        Ok("#ffffff".to_string())
     } else {
-        if calculate_contrast_ratio(base, "#ffffff")? >= 4.5 {
-            Ok("#ffffff".to_string())
-        } else {
-            Ok("#e6e1e5".to_string())
-        }
+        Ok("#e6e1e5".to_string())
     }
 }
 

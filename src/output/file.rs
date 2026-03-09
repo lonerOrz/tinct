@@ -58,10 +58,10 @@ mod tests {
         let output = FileOutput::new();
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_output.txt");
-        
+
         let result = output.write("Hello, World!", output_path.to_str().unwrap());
         assert!(result.is_ok());
-        
+
         let content = std::fs::read_to_string(output_path).unwrap();
         assert_eq!(content, "Hello, World!");
     }
@@ -70,8 +70,12 @@ mod tests {
     fn test_file_output_creates_directories() {
         let output = FileOutput::new();
         let temp_dir = TempDir::new().unwrap();
-        let nested_path = temp_dir.path().join("subdir1").join("subdir2").join("output.txt");
-        
+        let nested_path = temp_dir
+            .path()
+            .join("subdir1")
+            .join("subdir2")
+            .join("output.txt");
+
         let result = output.write("Nested", nested_path.to_str().unwrap());
         assert!(result.is_ok());
         assert!(nested_path.exists());

@@ -26,15 +26,18 @@ pub mod preview;
 // Re-exports
 pub use color::*;
 pub use config::*;
-pub use filter::*;
+pub use filter::{Filter as ColorFilter, FilterContext, FilterRegistry};
 pub use log::*;
 pub use preview::*;
 
 // Core trait re-exports
-pub use core::{ColorFormat as CoreColorFormat, ColorSpace, Error, Mode, OutputFormat, PaletteGenerator, Result, TemplateEngine, Theme, ThemeLoader};
+pub use core::{
+    ColorFormat as CoreColorFormat, ColorSpace, Error, Mode, OutputFormat, PaletteGenerator,
+    Result, TemplateEngine, Theme, ThemeLoader,
+};
 
 // New module re-exports
 pub use output::{FileOutput, OutputRegistry, TerminalOutput};
-pub use template::{Filter, TemplateEngineRegistry, TemplateProcessor};
+pub use palette::{AlgorithmParameters, ColorEntry, ColorFormat, LegacyPaletteGenerator, Palette};
+pub use template::{Filter as TemplateFilter, TemplateEngineRegistry, TemplateProcessor};
 pub use theme::{JsonThemeLoader, ThemeLoaderRegistry};
-pub use palette::{LegacyPaletteGenerator, AlgorithmParameters, ColorEntry, ColorFormat, Palette};
