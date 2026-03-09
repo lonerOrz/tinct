@@ -10,7 +10,7 @@
 //! - `color_parser` - Color parsing and format conversion
 //! - `algorithm` - Algorithm applications for HCT adjustment
 //! - `generator` - Core palette generation logic
-//! - `adapter` - Legacy adapter for backward compatibility
+//! - `constants` - Material Design 3 color constants
 
 mod adapter;
 mod types;
@@ -18,6 +18,7 @@ mod params;
 mod color_parser;
 mod algorithm;
 mod generator;
+pub mod constants;
 
 pub use adapter::LegacyPaletteGenerator;
 pub use types::{ColorFormat, ColorEntry, Palette};

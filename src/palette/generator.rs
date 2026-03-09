@@ -10,6 +10,7 @@ use super::types::{ColorEntry, Palette, SingleModePalette};
 use super::params::AlgorithmParameters;
 use super::color_parser::create_color_format;
 use super::algorithm::{apply_algorithm_params, container_tone};
+use super::constants::*;
 
 /// Generate color palette from theme data using HCT (Hue-Chroma-Tone) color space
 pub fn generate_palette(
@@ -417,7 +418,7 @@ fn generate_single_mode_palette(
         .get("error")
         .and_then(|v| v.as_str())
         .or_else(|| theme.get("mError").and_then(|v| v.as_str()))
-        .unwrap_or("#f44336"); // Standard error color if not specified
+        .unwrap_or(DEFAULT_ERROR_COLOR); // Standard error color if not specified
 
     // Try to get surface colors from theme, fallback to generated ones if not available
     let surface_hex = theme
@@ -509,8 +510,8 @@ fn generate_single_mode_palette(
     // Generate container colors (lower chroma, adjusted tone)
     let primary_container_hct = color::Hct::from_hct(
         primary_hct.h,
-        primary_hct.c * 0.4,                    // Much less chroma
-        if is_dark_mode { 30.0 } else { 90.0 }, // Lower tone for container
+        primary_hct.c * CONTAINER_CHROMA_FACTOR,
+        if is_dark_mode { PRIMARY_CONTAINER_TONE_DARK } else { PRIMARY_CONTAINER_TONE_LIGHT },
     );
     let primary_container = create_color_format(&primary_container_hct.to_hex())?;
     let on_primary_container = if is_dark_mode {
@@ -531,8 +532,8 @@ fn generate_single_mode_palette(
 
     let secondary_container_hct = color::Hct::from_hct(
         secondary_hct.h,
-        secondary_hct.c * 0.4,
-        if is_dark_mode { 20.0 } else { 95.0 },
+        secondary_hct.c * CONTAINER_CHROMA_FACTOR,
+        if is_dark_mode { SECONDARY_CONTAINER_TONE_DARK } else { SECONDARY_CONTAINER_TONE_LIGHT },
     );
     let secondary_container = create_color_format(&secondary_container_hct.to_hex())?;
     let on_secondary_container = if is_dark_mode {
@@ -543,8 +544,8 @@ fn generate_single_mode_palette(
 
     let tertiary_container_hct = color::Hct::from_hct(
         tertiary_hct.h,
-        tertiary_hct.c * 0.4,
-        if is_dark_mode { 25.0 } else { 95.0 },
+        tertiary_hct.c * CONTAINER_CHROMA_FACTOR,
+        if is_dark_mode { TERTIARY_CONTAINER_TONE_DARK } else { TERTIARY_CONTAINER_TONE_LIGHT },
     );
     let tertiary_container = create_color_format(&tertiary_container_hct.to_hex())?;
     let on_tertiary_container = if is_dark_mode {
@@ -577,8 +578,8 @@ fn generate_single_mode_palette(
         (surface, on_surface, surface_hct)
     } else {
         // Generate surface colors based on the theme
-        let surface_tone = if is_dark_mode { 6.0 } else { 98.0 };
-        let surface_hct = color::Hct::from_hct(primary_hct.h, 5.0, surface_tone); // Low chroma for surface
+        let surface_tone = if is_dark_mode { SURFACE_TONE_DARK } else { SURFACE_TONE_LIGHT };
+        let surface_hct = color::Hct::from_hct(primary_hct.h, SURFACE_VARIANT_CHROMA, surface_tone); // Low chroma for surface
         let surface = create_color_format(&surface_hct.to_hex())?;
         let on_surface = if is_dark_mode {
             create_color_format("#e0e0e0")? // Light text on dark surface
@@ -613,9 +614,9 @@ fn generate_single_mode_palette(
     } else {
         // Generate surface variant (slightly different hue)
         let surface_variant_hct = color::Hct::from_hct(
-            (surface_hct.h + 15.0) % 360.0, // Slight hue shift from actual surface
-            5.0,
-            if is_dark_mode { 10.0 } else { 94.0 },
+            (surface_hct.h + SURFACE_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND,
+            SURFACE_VARIANT_CHROMA,
+            if is_dark_mode { SURFACE_VARIANT_TONE_DARK } else { SURFACE_VARIANT_TONE_LIGHT },
         );
         let surface_variant = create_color_format(&surface_variant_hct.to_hex())?;
         let on_surface_variant = if is_dark_mode {
@@ -661,16 +662,16 @@ fn generate_single_mode_palette(
     let surface_container_highest = create_color_format(&surface_container_highest_hct.to_hex())?;
 
     // Fixed accent colors - preserve source color tone information while ensuring readability
-    let min_chroma = 12.0;
+    let min_chroma = FIXED_MIN_CHROMA;
     
     // Primary fixed colors
     let base_chroma = if primary_hct.c > min_chroma { primary_hct.c } else { min_chroma };
-    let primary_fixed_tone = color::clamp(primary_hct.t * 0.8 + 18.0, 20.0, 90.0);
-    let primary_fixed_hct = color::Hct::from_hct(primary_hct.h, base_chroma * 0.9, primary_fixed_tone);
-    let primary_fixed_dim_tone = color::clamp(primary_hct.t * 0.7 + 25.0, 20.0, 90.0);
+    let primary_fixed_tone = color::clamp(primary_hct.t * FIXED_TONE_BASE_MULTIPLIER + FIXED_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
+    let primary_fixed_hct = color::Hct::from_hct(primary_hct.h, base_chroma * FIXED_CHROMA_FACTOR, primary_fixed_tone);
+    let primary_fixed_dim_tone = color::clamp(primary_hct.t * FIXED_DIM_TONE_MULTIPLIER + FIXED_DIM_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
     let primary_fixed_dim_hct = color::Hct::from_hct(
         primary_hct.h,
-        if primary_hct.c > 8.0 { primary_hct.c * 0.7 } else { 8.0 },
+        if primary_hct.c > FIXED_VARIANT_MIN_CHROMA { primary_hct.c * FIXED_DIM_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
         primary_fixed_dim_tone,
     );
     let primary_fixed = create_color_format(&primary_fixed_hct.to_hex())?;
@@ -682,11 +683,11 @@ fn generate_single_mode_palette(
         create_color_format(&on_color_hex)?
     };
     let on_primary_fixed_variant = {
-        let shifted_hue = (primary_hct.h + 20.0) % 360.0;
-        let variant_tone = if primary_hct.t > 60.0 { 45.0 } else { 65.0 };
+        let shifted_hue = (primary_hct.h + FIXED_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND;
+        let variant_tone = if primary_hct.t > FIXED_VARIANT_TONE_THRESHOLD { FIXED_VARIANT_TONE_BRIGHT } else { FIXED_VARIANT_TONE_DARK };
         let base_hct = color::Hct::from_hct(
             shifted_hue,
-            if primary_hct.c > 8.0 { primary_hct.c * 0.6 } else { 8.0 },
+            if primary_hct.c > FIXED_VARIANT_MIN_CHROMA { primary_hct.c * FIXED_VARIANT_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
             variant_tone,
         );
         create_color_format(&base_hct.to_hex())?
@@ -694,12 +695,12 @@ fn generate_single_mode_palette(
 
     // Secondary fixed colors
     let secondary_base_chroma = if secondary_hct.c > min_chroma { secondary_hct.c } else { min_chroma };
-    let secondary_fixed_tone = color::clamp(secondary_hct.t * 0.8 + 18.0, 20.0, 90.0);
-    let secondary_fixed_hct = color::Hct::from_hct(secondary_hct.h, secondary_base_chroma * 0.9, secondary_fixed_tone);
-    let secondary_fixed_dim_tone = color::clamp(secondary_hct.t * 0.7 + 25.0, 20.0, 90.0);
+    let secondary_fixed_tone = color::clamp(secondary_hct.t * FIXED_TONE_BASE_MULTIPLIER + FIXED_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
+    let secondary_fixed_hct = color::Hct::from_hct(secondary_hct.h, secondary_base_chroma * FIXED_CHROMA_FACTOR, secondary_fixed_tone);
+    let secondary_fixed_dim_tone = color::clamp(secondary_hct.t * FIXED_DIM_TONE_MULTIPLIER + FIXED_DIM_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
     let secondary_fixed_dim_hct = color::Hct::from_hct(
         secondary_hct.h,
-        if secondary_hct.c > 8.0 { secondary_hct.c * 0.7 } else { 8.0 },
+        if secondary_hct.c > FIXED_VARIANT_MIN_CHROMA { secondary_hct.c * FIXED_DIM_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
         secondary_fixed_dim_tone,
     );
     let secondary_fixed = create_color_format(&secondary_fixed_hct.to_hex())?;
@@ -711,11 +712,11 @@ fn generate_single_mode_palette(
         create_color_format(&on_color_hex)?
     };
     let on_secondary_fixed_variant = {
-        let shifted_hue = (secondary_hct.h + 20.0) % 360.0;
-        let variant_tone = if secondary_hct.t > 60.0 { 45.0 } else { 65.0 };
+        let shifted_hue = (secondary_hct.h + FIXED_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND;
+        let variant_tone = if secondary_hct.t > FIXED_VARIANT_TONE_THRESHOLD { FIXED_VARIANT_TONE_BRIGHT } else { FIXED_VARIANT_TONE_DARK };
         let base_hct = color::Hct::from_hct(
             shifted_hue,
-            if secondary_hct.c > 8.0 { secondary_hct.c * 0.6 } else { 8.0 },
+            if secondary_hct.c > FIXED_VARIANT_MIN_CHROMA { secondary_hct.c * FIXED_VARIANT_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
             variant_tone,
         );
         create_color_format(&base_hct.to_hex())?
@@ -723,12 +724,12 @@ fn generate_single_mode_palette(
 
     // Tertiary fixed colors
     let tertiary_base_chroma = if tertiary_hct.c > min_chroma { tertiary_hct.c } else { min_chroma };
-    let tertiary_fixed_tone = color::clamp(tertiary_hct.t * 0.8 + 18.0, 20.0, 90.0);
-    let tertiary_fixed_hct = color::Hct::from_hct(tertiary_hct.h, tertiary_base_chroma * 0.9, tertiary_fixed_tone);
-    let tertiary_fixed_dim_tone = color::clamp(tertiary_hct.t * 0.7 + 25.0, 20.0, 90.0);
+    let tertiary_fixed_tone = color::clamp(tertiary_hct.t * FIXED_TONE_BASE_MULTIPLIER + FIXED_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
+    let tertiary_fixed_hct = color::Hct::from_hct(tertiary_hct.h, tertiary_base_chroma * FIXED_CHROMA_FACTOR, tertiary_fixed_tone);
+    let tertiary_fixed_dim_tone = color::clamp(tertiary_hct.t * FIXED_DIM_TONE_MULTIPLIER + FIXED_DIM_TONE_OFFSET, FIXED_TONE_CLAMP_MIN, FIXED_TONE_CLAMP_MAX);
     let tertiary_fixed_dim_hct = color::Hct::from_hct(
         tertiary_hct.h,
-        if tertiary_hct.c > 8.0 { tertiary_hct.c * 0.7 } else { 8.0 },
+        if tertiary_hct.c > FIXED_VARIANT_MIN_CHROMA { tertiary_hct.c * FIXED_DIM_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
         tertiary_fixed_dim_tone,
     );
     let tertiary_fixed = create_color_format(&tertiary_fixed_hct.to_hex())?;
@@ -740,11 +741,11 @@ fn generate_single_mode_palette(
         create_color_format(&on_color_hex)?
     };
     let on_tertiary_fixed_variant = {
-        let shifted_hue = (tertiary_hct.h + 20.0) % 360.0;
-        let variant_tone = if tertiary_hct.t > 60.0 { 45.0 } else { 65.0 };
+        let shifted_hue = (tertiary_hct.h + FIXED_VARIANT_HUE_SHIFT) % HUE_WRAP_AROUND;
+        let variant_tone = if tertiary_hct.t > FIXED_VARIANT_TONE_THRESHOLD { FIXED_VARIANT_TONE_BRIGHT } else { FIXED_VARIANT_TONE_DARK };
         let base_hct = color::Hct::from_hct(
             shifted_hue,
-            if tertiary_hct.c > 8.0 { tertiary_hct.c * 0.6 } else { 8.0 },
+            if tertiary_hct.c > FIXED_VARIANT_MIN_CHROMA { tertiary_hct.c * FIXED_VARIANT_CHROMA_FACTOR } else { FIXED_VARIANT_MIN_CHROMA },
             variant_tone,
         );
         create_color_format(&base_hct.to_hex())?
@@ -754,7 +755,7 @@ fn generate_single_mode_palette(
     let inverse_surface_hct = color::Hct::from_hct(
         surface_hct.h,
         surface_hct.c,
-        if is_dark_mode { 90.0 } else { 20.0 },
+        if is_dark_mode { INVERSE_SURFACE_TONE_DARK } else { INVERSE_SURFACE_TONE_LIGHT },
     );
     let inverse_surface = create_color_format(&inverse_surface_hct.to_hex())?;
 
@@ -767,13 +768,13 @@ fn generate_single_mode_palette(
     let inverse_primary_hct = color::Hct::from_hct(
         primary_hct.h,
         primary_hct.c,
-        if is_dark_mode { 40.0 } else { 80.0 },
+        if is_dark_mode { INVERSE_PRIMARY_TONE_DARK } else { INVERSE_PRIMARY_TONE_LIGHT },
     );
     let inverse_primary = create_color_format(&inverse_primary_hct.to_hex())?;
 
     // Bright and dim surface colors
-    let surface_dim_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { 6.0 } else { 87.0 });
-    let surface_bright_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { 24.0 } else { 100.0 });
+    let surface_dim_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { SURFACE_DIM_TONE_DARK } else { SURFACE_DIM_TONE_LIGHT });
+    let surface_bright_hct = color::Hct::from_hct(surface_hct.h, surface_hct.c, if is_dark_mode { SURFACE_BRIGHT_TONE_DARK } else { SURFACE_BRIGHT_TONE_LIGHT });
     let surface_dim = create_color_format(&surface_dim_hct.to_hex())?;
     let surface_bright = create_color_format(&surface_bright_hct.to_hex())?;
 
@@ -795,7 +796,7 @@ fn generate_single_mode_palette(
             .unwrap_or_else(|| create_color_format("#ffffff"))?
     };
 
-    let error_container_hct = color::Hct::from_hct(error_hct.h, 30.0, if is_dark_mode { 30.0 } else { 95.0 });
+    let error_container_hct = color::Hct::from_hct(error_hct.h, ERROR_CONTAINER_CHROMA, if is_dark_mode { ERROR_CONTAINER_TONE_DARK } else { ERROR_CONTAINER_TONE_LIGHT });
     let error_container = create_color_format(&error_container_hct.to_hex())?;
     let on_error_container = if is_dark_mode {
         create_color_format("#ffdad6")?
@@ -810,12 +811,12 @@ fn generate_single_mode_palette(
         .or_else(|| theme.get("mOutline").and_then(|v| v.as_str()))
         .map(create_color_format)
         .unwrap_or_else(|| {
-            let outline_hct = color::Hct::from_hct(surface_hct.h, 10.0, if is_dark_mode { 60.0 } else { 50.0 });
+            let outline_hct = color::Hct::from_hct(surface_hct.h, OUTLINE_CHROMA, if is_dark_mode { OUTLINE_TONE_DARK } else { OUTLINE_TONE_LIGHT });
             create_color_format(&outline_hct.to_hex())
         })?;
 
     let outline_variant = {
-        let outline_variant_hct = color::Hct::from_hct(surface_hct.h, 5.0, if is_dark_mode { 30.0 } else { 80.0 });
+        let outline_variant_hct = color::Hct::from_hct(surface_hct.h, OUTLINE_VARIANT_CHROMA, if is_dark_mode { OUTLINE_VARIANT_TONE_DARK } else { OUTLINE_VARIANT_TONE_LIGHT });
         create_color_format(&outline_variant_hct.to_hex())?
     };
 
@@ -827,7 +828,7 @@ fn generate_single_mode_palette(
         .map(create_color_format)
         .unwrap_or_else(|| create_color_format("#000000"))?;
 
-    let scrim_hex = if is_dark_mode { "#00000080" } else { "#1111114D" };
+    let scrim_hex = if is_dark_mode { SCRIM_COLOR_DARK } else { SCRIM_COLOR_LIGHT };
     let scrim = create_color_format(scrim_hex)?;
 
     // Build and return single-mode palette
