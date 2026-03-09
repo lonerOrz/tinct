@@ -11,6 +11,7 @@ use std::sync::Arc;
 mod cli;
 mod config;
 mod log;
+mod path_resolver;
 
 use clap::Parser;
 use colored::*;
@@ -24,12 +25,7 @@ fn main() {
     let args = cli::CliArgs::parse();
 
     // Determine the config file path
-    let config_path = if let Some(config_arg) = &args.config {
-        config_arg.clone()
-    } else {
-        let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        format!("{}/.config/tinct/config.toml", home_dir)
-    };
+    let config_path = path_resolver::resolve_config_file_path(args.config.as_ref());
 
     // Initialize global logger
     log::init_logger(match args.log_level {
@@ -51,7 +47,7 @@ fn main() {
     }
 
     // Resolve theme path
-    let theme_file = resolve_theme_path(&args.theme);
+    let theme_file = path_resolver::resolve_theme_path(&args.theme);
 
     // Read TOML config
     let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
@@ -70,44 +66,7 @@ fn main() {
 
     for (_group_name, group) in config.iter_mut() {
         for (_section_name, section) in group.iter_mut() {
-            section.input_path = shellexpand::tilde(&section.input_path).to_string();
-            section.output_path = shellexpand::tilde(&section.output_path).to_string();
-
-            if !Path::new(&section.input_path).is_absolute() {
-                section.input_path = Path::new(&config_dir)
-                    .join(&section.input_path)
-                    .to_string_lossy()
-                    .to_string();
-            }
-
-            if !Path::new(&section.output_path).is_absolute() {
-                let output_path = Path::new(&config_dir).join(&section.output_path);
-                if let Some(parent) = output_path.parent() {
-                    if let Ok(canonical_parent) = std::fs::canonicalize(parent) {
-                        let file_name = output_path.file_name().unwrap_or_default();
-                        section.output_path = canonical_parent.join(file_name).to_string_lossy().to_string();
-                    } else {
-                        section.output_path = output_path.to_string_lossy().to_string();
-                    }
-                } else {
-                    section.output_path = output_path.to_string_lossy().to_string();
-                }
-            }
-
-            if let Some(ref mut hook) = section.post_hook {
-                if hook.starts_with("./") {
-                    let hook_clone = hook.clone();
-                    let hook_path = Path::new(&config_dir).join(&hook_clone);
-                    if hook_path.exists() {
-                        *hook = std::fs::canonicalize(&hook_path)
-                            .unwrap_or_else(|_| hook_path)
-                            .to_string_lossy()
-                            .to_string();
-                    } else {
-                        *hook = hook_path.to_string_lossy().to_string();
-                    }
-                }
-            }
+            path_resolver::resolve_config_paths(section, &config_dir);
         }
     }
 
@@ -288,47 +247,4 @@ fn process_section_new(
     }
 
     true
-}
-
-/// Resolve theme path - check both project themes and user themes
-fn resolve_theme_path(theme_name: &str) -> String {
-    // Check absolute path
-    if Path::new(theme_name).is_absolute() && Path::new(theme_name).exists() {
-        return theme_name.to_string();
-    }
-
-    // Check relative path
-    if Path::new(theme_name).exists() {
-        return Path::new(theme_name)
-            .canonicalize()
-            .unwrap_or_else(|_| std::path::PathBuf::from(theme_name))
-            .to_string_lossy()
-            .to_string();
-    }
-
-    // Check project themes directory
-    let project_themes_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("themes")
-        .join(format!("{}.json", theme_name));
-    if project_themes_path.exists() {
-        return project_themes_path.to_string_lossy().to_string();
-    }
-
-    // Check user config directory
-    if let Ok(home_dir) = std::env::var("HOME") {
-        let user_themes_path = Path::new(&home_dir)
-            .join(".config")
-            .join("tinct")
-            .join("themes")
-            .join(format!("{}.json", theme_name));
-        if user_themes_path.exists() {
-            return user_themes_path.to_string_lossy().to_string();
-        }
-    }
-
-    eprintln!(
-        "Theme '{}' not found in any of these locations:\n  - Current directory\n  - Project themes/ directory\n  - ~/.config/tinct/themes/",
-        theme_name
-    );
-    process::exit(1);
 }

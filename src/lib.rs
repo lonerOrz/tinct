@@ -20,6 +20,7 @@ pub mod color;
 pub mod config;
 pub mod filter;
 pub mod log;
+pub mod path_resolver;
 pub mod preview;
 
 // Re-exports
