@@ -185,3 +185,136 @@ impl Filter for DesaturateFilter {
         format_type.is_complete_color()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::palette::ColorFormat;
+
+    fn create_test_color() -> ColorFormat {
+        ColorFormat {
+            hex: "#FF5722".to_string(),
+            hex_stripped: "FF5722".to_string(),
+            hex8: "#FF5722FF".to_string(),
+            hex8_stripped: "FF5722FF".to_string(),
+            rgb: "rgb(255, 87, 34)".to_string(),
+            rgba: "rgba(255, 87, 34, 1.0)".to_string(),
+            hsl: "hsl(14, 100%, 57%)".to_string(),
+            hsla: "hsla(14, 100%, 57%, 1.0)".to_string(),
+            red: 255,
+            green: 87,
+            blue: 34,
+            alpha: 1.0,
+            hue: 14.0,
+            saturation: 100.0,
+            lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
+        }
+    }
+
+    #[test]
+    fn test_saturate_filter_rgb() {
+        let filter = SaturateFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("10"));
+        assert!(result.starts_with("rgb("));
+    }
+
+    #[test]
+    fn test_saturate_filter_invalid_param() {
+        let filter = SaturateFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("invalid"));
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_saturate_filter_no_param() {
+        let filter = SaturateFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, None);
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_saturate_is_compatible() {
+        let filter = SaturateFilter;
+
+        assert!(filter.is_compatible(&ColorFormatType::Rgb));
+        assert!(filter.is_compatible(&ColorFormatType::Hex));
+        assert!(!filter.is_compatible(&ColorFormatType::Red));
+        assert!(!filter.is_compatible(&ColorFormatType::Saturation));
+    }
+
+    #[test]
+    fn test_desaturate_filter_rgb() {
+        let filter = DesaturateFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("10"));
+        assert!(result.starts_with("rgb("));
+    }
+
+    #[test]
+    fn test_desaturate_filter_invalid_param() {
+        let filter = DesaturateFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("invalid"));
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_desaturate_filter_no_param() {
+        let filter = DesaturateFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, None);
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_desaturate_is_compatible() {
+        let filter = DesaturateFilter;
+
+        assert!(filter.is_compatible(&ColorFormatType::Rgb));
+        assert!(filter.is_compatible(&ColorFormatType::Hex));
+        assert!(!filter.is_compatible(&ColorFormatType::Red));
+        assert!(!filter.is_compatible(&ColorFormatType::Saturation));
+    }
+}

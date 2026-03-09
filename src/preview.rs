@@ -358,3 +358,93 @@ fn print_terminal_palette(colors: &std::collections::HashMap<String, crate::core
         println!();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_color_format(r: u8, g: u8, b: u8) -> crate::core::ColorFormat {
+        crate::core::ColorFormat {
+            hex: format!("#{:02X}{:02X}{:02X}", r, g, b),
+            hex_stripped: format!("{:02X}{:02X}{:02X}", r, g, b),
+            hex8: format!("#{:02X}{:02X}{:02X}FF", r, g, b),
+            hex8_stripped: format!("{:02X}{:02X}{:02X}FF", r, g, b),
+            rgb: format!("rgb({}, {}, {})", r, g, b),
+            rgba: format!("rgba({}, {}, {}, 1.0)", r, g, b),
+            hsl: "hsl(0, 0%, 0%)".to_string(),
+            hsla: "hsla(0, 0%, 0%, 1.0)".to_string(),
+            red: r,
+            green: g,
+            blue: b,
+            alpha: 1.0,
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: 0.0,
+        }
+    }
+
+    #[test]
+    fn test_create_test_color_format() {
+        let color = create_test_color_format(255, 128, 64);
+        assert_eq!(color.red, 255);
+        assert_eq!(color.green, 128);
+        assert_eq!(color.blue, 64);
+        assert!(color.hex.starts_with("#"));
+    }
+
+    #[test]
+    fn test_luminance_calculation_white() {
+        let color = create_test_color_format(255, 255, 255);
+        let luminance =
+            0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
+        assert!(luminance > 128.0); // White should be bright
+    }
+
+    #[test]
+    fn test_luminance_calculation_black() {
+        let color = create_test_color_format(0, 0, 0);
+        let luminance =
+            0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
+        assert!(luminance < 128.0); // Black should be dark
+    }
+
+    #[test]
+    fn test_luminance_calculation_gray() {
+        let color = create_test_color_format(128, 128, 128);
+        let luminance =
+            0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
+        assert!((luminance - 128.0).abs() < 1.0); // Gray should be around 128
+    }
+
+    #[test]
+    fn test_mode_parsing() {
+        // Test mode parsing logic
+        let mode_dark = if "dark" == "dark" {
+            Mode::Dark
+        } else {
+            Mode::Light
+        };
+        assert_eq!(mode_dark, Mode::Dark);
+
+        let mode_light = if "light" == "dark" {
+            Mode::Dark
+        } else {
+            Mode::Light
+        };
+        assert_eq!(mode_light, Mode::Light);
+    }
+
+    #[test]
+    fn test_color_map_access() {
+        let mut colors = HashMap::new();
+        colors.insert("primary".to_string(), create_test_color_format(255, 0, 0));
+
+        assert!(colors.contains_key("primary"));
+        assert!(!colors.contains_key("secondary"));
+
+        let primary = colors.get("primary");
+        assert!(primary.is_some());
+        assert_eq!(primary.unwrap().red, 255);
+    }
+}

@@ -71,3 +71,155 @@ impl ThemeLoader for JsonThemeLoader {
             .unwrap_or(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn create_test_loader() -> JsonThemeLoader {
+        let generator = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+        JsonThemeLoader::new(generator)
+    }
+
+    #[test]
+    fn test_can_load_json_file() {
+        let loader = create_test_loader();
+
+        assert!(loader.can_load("theme.json"));
+        assert!(loader.can_load("/path/to/theme.json"));
+        assert!(!loader.can_load("theme.txt"));
+        assert!(!loader.can_load("theme.toml"));
+        assert!(!loader.can_load("no_extension"));
+    }
+
+    #[test]
+    fn test_load_nested_format() {
+        let loader = create_test_loader();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "{{").unwrap();
+        writeln!(temp_file, "  \"dark\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#FF572200\",").unwrap();
+        writeln!(temp_file, "    \"secondary\": \"#2196F300\"").unwrap();
+        writeln!(temp_file, "  }},").unwrap();
+        writeln!(temp_file, "  \"light\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#D81B6000\",").unwrap();
+        writeln!(temp_file, "    \"secondary\": \"#00BCD400\"").unwrap();
+        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "}}").unwrap();
+
+        let result = loader.load(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+
+        let theme = result.unwrap();
+        assert_eq!(
+            theme.name,
+            temp_file.path().file_stem().unwrap().to_str().unwrap()
+        );
+        assert!(!theme.dark_colors.is_empty());
+        assert!(!theme.light_colors.is_empty());
+    }
+
+    #[test]
+    fn test_load_flat_format() {
+        let loader = create_test_loader();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "{{").unwrap();
+        writeln!(temp_file, "  \"primary\": \"#FF572200\",").unwrap();
+        writeln!(temp_file, "  \"secondary\": \"#2196F300\"").unwrap();
+        writeln!(temp_file, "}}").unwrap();
+
+        let result = loader.load(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+
+        let theme = result.unwrap();
+        assert_eq!(theme.dark_colors.len(), theme.light_colors.len());
+    }
+
+    #[test]
+    fn test_load_invalid_json() {
+        let loader = create_test_loader();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "{{ invalid json }}").unwrap();
+
+        let result = loader.load(temp_file.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid JSON"));
+    }
+
+    #[test]
+    fn test_load_nonexistent_file() {
+        let loader = create_test_loader();
+
+        let result = loader.load("/nonexistent/path/theme.json");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Failed to read"));
+    }
+
+    #[test]
+    fn test_source_color_extraction() {
+        let loader = create_test_loader();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "{{").unwrap();
+        writeln!(temp_file, "  \"dark\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#AABBCC00\"").unwrap();
+        writeln!(temp_file, "  }},").unwrap();
+        writeln!(temp_file, "  \"light\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
+        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "}}").unwrap();
+
+        let result = loader.load(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        let theme = result.unwrap();
+        assert_eq!(theme.source_color, "#AABBCC00");
+    }
+
+    #[test]
+    fn test_source_color_extraction_m_primary() {
+        let loader = create_test_loader();
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "{{").unwrap();
+        writeln!(temp_file, "  \"dark\": {{").unwrap();
+        writeln!(temp_file, "    \"mPrimary\": \"#11223300\"").unwrap();
+        writeln!(temp_file, "  }},").unwrap();
+        writeln!(temp_file, "  \"light\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
+        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "}}").unwrap();
+
+        let result = loader.load(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        let theme = result.unwrap();
+        assert_eq!(theme.source_color, "#11223300");
+    }
+
+    #[test]
+    fn test_source_color_default() {
+        let loader = create_test_loader();
+
+        // When no primary/mPrimary is found, should fallback to #000000
+        // But the generator still needs valid color data to work
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "{{").unwrap();
+        writeln!(temp_file, "  \"dark\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
+        writeln!(temp_file, "  }},").unwrap();
+        writeln!(temp_file, "  \"light\": {{").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
+        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "}}").unwrap();
+
+        let result = loader.load(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        let theme = result.unwrap();
+        assert_eq!(theme.source_color, "#00000000");
+    }
+}

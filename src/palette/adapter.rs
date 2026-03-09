@@ -253,3 +253,235 @@ impl PaletteGenerator for LegacyPaletteGenerator {
         Ok(colors)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_legacy_palette_generator_new() {
+        let params = AlgorithmParameters {
+            contrast_threshold: 0.2,
+            saturation_adjustment: 10,
+            lightness_adjustment: 5,
+            hue_shift: 15,
+            min_contrast_ratio: 5.0,
+        };
+        let generator = LegacyPaletteGenerator::new(params.clone());
+        assert_eq!(generator.params.contrast_threshold, 0.2);
+        assert_eq!(generator.params.saturation_adjustment, 10);
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_with_defaults() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        assert_eq!(generator.params.contrast_threshold, 0.15);
+        assert_eq!(generator.params.saturation_adjustment, 0);
+        assert_eq!(generator.params.lightness_adjustment, 0);
+        assert_eq!(generator.params.hue_shift, 0);
+        assert_eq!(generator.params.min_contrast_ratio, 4.5);
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_default() {
+        let generator = LegacyPaletteGenerator::default();
+        assert_eq!(generator.params.contrast_threshold, 0.15);
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_dark_mode() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({
+            "seed": "#FF5722"
+        });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let colors = result.unwrap();
+        assert!(!colors.is_empty());
+        assert!(colors.contains_key("primary"));
+        assert!(colors.contains_key("secondary"));
+        assert!(colors.contains_key("tertiary"));
+        assert!(colors.contains_key("surface"));
+        assert!(colors.contains_key("error"));
+
+        // Verify primary color has expected format
+        let primary = colors.get("primary").unwrap();
+        assert!(!primary.hex.is_empty());
+        assert!(primary.hex.starts_with("#"));
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_light_mode() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({
+            "seed": "#2196F3"
+        });
+
+        let result = generator.generate(&theme, Mode::Light);
+        assert!(result.is_ok());
+
+        let colors = result.unwrap();
+        assert!(!colors.is_empty());
+
+        // Light mode should have different colors than dark mode
+        let primary = colors.get("primary").unwrap();
+        assert!(!primary.hex.is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_with_hue_shift() {
+        let params = AlgorithmParameters {
+            contrast_threshold: 0.15,
+            saturation_adjustment: 0,
+            lightness_adjustment: 0,
+            hue_shift: 180, // 180 degree shift
+            min_contrast_ratio: 4.5,
+        };
+        let generator = LegacyPaletteGenerator::new(params);
+        let theme = json!({
+            "seed": "#FF0000" // Red
+        });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let colors = result.unwrap();
+        // With 180 degree hue shift, red should become cyan-like
+        let primary = colors.get("primary").unwrap();
+        assert!(!primary.hex.is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_with_saturation() {
+        let params = AlgorithmParameters {
+            contrast_threshold: 0.15,
+            saturation_adjustment: 50, // +50% saturation
+            lightness_adjustment: 0,
+            hue_shift: 0,
+            min_contrast_ratio: 4.5,
+        };
+        let generator = LegacyPaletteGenerator::new(params);
+        let theme = json!({
+            "seed": "#FF5722"
+        });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let colors = result.unwrap();
+        let primary = colors.get("primary").unwrap();
+        assert!(!primary.hex.is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_all_color_roles() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({
+            "seed": "#6200EE"
+        });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let colors = result.unwrap();
+
+        // Verify all major color roles are present
+        let expected_roles = [
+            "primary",
+            "on_primary",
+            "primary_container",
+            "on_primary_container",
+            "secondary",
+            "on_secondary",
+            "secondary_container",
+            "on_secondary_container",
+            "tertiary",
+            "on_tertiary",
+            "tertiary_container",
+            "on_tertiary_container",
+            "error",
+            "on_error",
+            "error_container",
+            "on_error_container",
+            "background",
+            "on_background",
+            "surface",
+            "on_surface",
+            "surface_variant",
+            "on_surface_variant",
+            "outline",
+            "outline_variant",
+            "shadow",
+            "scrim",
+            "inverse_surface",
+            "inverse_on_surface",
+            "inverse_primary",
+            "surface_dim",
+            "surface_bright",
+            "surface_container_lowest",
+            "surface_container_low",
+            "surface_container",
+            "surface_container_high",
+            "surface_container_highest",
+            // Terminal colors
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "white",
+            "bright_black",
+            "bright_red",
+            "bright_green",
+            "bright_yellow",
+            "bright_blue",
+            "bright_magenta",
+            "bright_cyan",
+            "bright_white",
+        ];
+
+        for role in expected_roles.iter() {
+            assert!(colors.contains_key(*role), "Missing color role: {}", role);
+            let color = colors.get(*role).unwrap();
+            assert!(!color.hex.is_empty(), "Empty hex for role: {}", role);
+        }
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_invalid_theme() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({
+            "no_seed": "value"
+        });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Seed"));
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_with_overrides() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({
+            "seed": "#FF5722",
+            "error": "#FF0000",
+            "surface": "#121212"
+        });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let colors = result.unwrap();
+        // Overrides should be applied
+        let error = colors.get("error").unwrap();
+        assert_eq!(error.hex, "#FF0000");
+
+        let surface = colors.get("surface").unwrap();
+        assert_eq!(surface.hex, "#121212");
+    }
+}

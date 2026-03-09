@@ -11,7 +11,6 @@ impl Filter for LightenFilter {
     fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
         if let Some(amount) = param {
             if let Ok(percent) = amount.parse::<f64>() {
-                // Calculate lighter version of the color
                 let hsl = crate::color::rgb_to_hsl(
                     ctx.color_format.red as f64,
                     ctx.color_format.green as f64,
@@ -184,5 +183,138 @@ impl Filter for DarkenFilter {
 
     fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
         format_type.is_complete_color()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::palette::ColorFormat;
+
+    fn create_test_color() -> ColorFormat {
+        ColorFormat {
+            hex: "#FF5722".to_string(),
+            hex_stripped: "FF5722".to_string(),
+            hex8: "#FF5722FF".to_string(),
+            hex8_stripped: "FF5722FF".to_string(),
+            rgb: "rgb(255, 87, 34)".to_string(),
+            rgba: "rgba(255, 87, 34, 1.0)".to_string(),
+            hsl: "hsl(14, 100%, 57%)".to_string(),
+            hsla: "hsla(14, 100%, 57%, 1.0)".to_string(),
+            red: 255,
+            green: 87,
+            blue: 34,
+            alpha: 1.0,
+            hue: 14.0,
+            saturation: 100.0,
+            lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
+        }
+    }
+
+    #[test]
+    fn test_lighten_filter_rgb() {
+        let filter = LightenFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("10"));
+        assert!(result.starts_with("rgb("));
+    }
+
+    #[test]
+    fn test_lighten_filter_invalid_param() {
+        let filter = LightenFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("invalid"));
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_lighten_filter_no_param() {
+        let filter = LightenFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, None);
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_lighten_is_compatible() {
+        let filter = LightenFilter;
+
+        assert!(filter.is_compatible(&ColorFormatType::Rgb));
+        assert!(filter.is_compatible(&ColorFormatType::Hex));
+        assert!(!filter.is_compatible(&ColorFormatType::Red));
+        assert!(!filter.is_compatible(&ColorFormatType::Hue));
+    }
+
+    #[test]
+    fn test_darken_filter_rgb() {
+        let filter = DarkenFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("10"));
+        assert!(result.starts_with("rgb("));
+    }
+
+    #[test]
+    fn test_darken_filter_invalid_param() {
+        let filter = DarkenFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, Some("invalid"));
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_darken_filter_no_param() {
+        let filter = DarkenFilter;
+        let color = create_test_color();
+        let ctx = FilterContext {
+            original_value: "rgb(255, 87, 34)".to_string(),
+            format_type: ColorFormatType::Rgb,
+            color_format: color,
+        };
+
+        let result = filter.apply(&ctx, None);
+        assert_eq!(result, "rgb(255, 87, 34)");
+    }
+
+    #[test]
+    fn test_darken_is_compatible() {
+        let filter = DarkenFilter;
+
+        assert!(filter.is_compatible(&ColorFormatType::Rgb));
+        assert!(filter.is_compatible(&ColorFormatType::Hex));
+        assert!(!filter.is_compatible(&ColorFormatType::Red));
+        assert!(!filter.is_compatible(&ColorFormatType::Hue));
     }
 }

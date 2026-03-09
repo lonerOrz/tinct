@@ -28,3 +28,35 @@ impl OutputFormat for TerminalOutput {
         "terminal"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_terminal_output_new() {
+        let output = TerminalOutput::new();
+        assert_eq!(output.format_name(), "terminal");
+    }
+
+    #[test]
+    fn test_terminal_output_default() {
+        let output = TerminalOutput::default();
+        assert_eq!(output.format_name(), "terminal");
+    }
+
+    #[test]
+    fn test_terminal_output_format_name() {
+        let output = TerminalOutput::new();
+        assert_eq!(output.format_name(), "terminal");
+    }
+
+    #[test]
+    fn test_terminal_output_write() {
+        let output = TerminalOutput::new();
+        // Note: We can't easily test the actual print output,
+        // but we can verify it doesn't error
+        let result = output.write("test content", "");
+        assert!(result.is_ok());
+    }
+}
