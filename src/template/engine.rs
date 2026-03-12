@@ -47,7 +47,6 @@ impl Default for TemplateEngineRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::ColorFormat;
 
     // Mock template engine for testing
     struct MockEngine;

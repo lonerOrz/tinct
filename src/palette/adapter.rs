@@ -42,27 +42,22 @@ impl PaletteGenerator for LegacyPaletteGenerator {
 
         // Helper to get color from entry based on mode
         let get_color = |entry: &ColorEntry| -> ColorFormat {
-            let src = if mode.is_dark() {
-                &entry.dark
-            } else {
-                &entry.light
-            };
             ColorFormat {
-                hex: src.hex.clone(),
-                hex_stripped: src.hex_stripped.clone(),
-                hex8: src.hex8.clone(),
-                hex8_stripped: src.hex8_stripped.clone(),
-                rgb: src.rgb.clone(),
-                rgba: src.rgba.clone(),
-                hsl: src.hsl.clone(),
-                hsla: src.hsla.clone(),
-                red: src.red,
-                green: src.green,
-                blue: src.blue,
-                alpha: src.alpha,
-                hue: src.hue,
-                saturation: src.saturation,
-                lightness: src.lightness,
+                hex: entry.default.hex.clone(),
+                hex_stripped: entry.default.hex_stripped.clone(),
+                hex8: entry.default.hex8.clone(),
+                hex8_stripped: entry.default.hex8_stripped.clone(),
+                rgb: entry.default.rgb.clone(),
+                rgba: entry.default.rgba.clone(),
+                hsl: entry.default.hsl.clone(),
+                hsla: entry.default.hsla.clone(),
+                red: entry.default.red,
+                green: entry.default.green,
+                blue: entry.default.blue,
+                alpha: entry.default.alpha,
+                hue: entry.default.hue,
+                saturation: entry.default.saturation,
+                lightness: entry.default.lightness,
             }
         };
 
@@ -461,7 +456,9 @@ mod tests {
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Seed"));
+        // Error message should mention seed or Primary requirement
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("seed") || err_msg.contains("Primary"));
     }
 
     #[test]

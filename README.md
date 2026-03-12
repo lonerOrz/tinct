@@ -17,11 +17,11 @@ tinct is a command-line utility that generates themed configuration files based 
 - Configurable via TOML files with algorithm parameters
 - Support for post-processing hooks
 - Modular architecture for easy extensibility
-- **Backward compatible** with legacy theme formats
 - **Smart color generation** from single seed color
 - Consistent alpha values (0.0-1.0 range)
 - Format-preserving color filters
 - HSL-based color adjustments
+- **Simplified theme format** - no more dark/light nesting
 
 ## Installation
 
@@ -90,27 +90,43 @@ Options:
 
 ## Theme Format
 
-tinct supports both new and legacy theme formats for backward compatibility.
+tinct supports simplified theme formats using Material Design 3 color generation.
 
-### New Format (Recommended)
+### Format 1: Seed Only (Simplest)
 
-The new format uses a single seed color to generate the complete Material Design 3 palette using official algorithms.
+The simplest format uses only a seed color to generate the complete Material Design 3 palette.
 
-**Minimal example:**
 ```json
 {
-  "seed": "#b8bb26"
+  "seed": "#7aa2f7"
 }
 ```
 
-**With color overrides:**
+### Format 2: Overrides Only
+
+You can also specify override colors directly. The `Primary` color will be used as the seed.
+
 ```json
 {
-  "seed": "#b8bb26",
-  "error": "#fb4934",
-  "surface": "#282828",
-  "background": "#282828",
-  "outline": "#928374"
+  "Primary": "#7aa2f7",
+  "Secondary": "#bb9af7",
+  "Tertiary": "#9ece6a"
+}
+```
+
+### Format 3: Seed + Overrides (Recommended)
+
+Combine seed with color overrides for precise control.
+
+```json
+{
+  "seed": "#7aa2f7",
+  "Primary": "#7aa2f7",
+  "Secondary": "#bb9af7",
+  "Tertiary": "#9ece6a",
+  "Error": "#f7768e",
+  "Surface": "#1a1b26",
+  "Background": "#1a1b26"
 }
 ```
 
@@ -118,68 +134,23 @@ The new format uses a single seed color to generate the complete Material Design
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| `seed` | **Required.** Seed color for palette generation | `"#b8bb26"` |
-| `primary` | Override primary color | `"#b8bb26"` |
-| `secondary` | Override secondary color | `"#fabd2f"` |
-| `tertiary` | Override tertiary color | `"#83a598"` |
-| `error` | Override error color | `"#fb4934"` |
-| `surface` | Override surface color | `"#282828"` |
-| `background` | Override background color | `"#282828"` |
-| `surface_variant` | Override surface variant | `"#3c3836"` |
-| `outline` | Override outline color | `"#928374"` |
-| `outline_variant` | Override outline variant | `"#bdae93"` |
-| `shadow` | Override shadow color | `"#000000"` |
-| `scrim` | Override scrim color | `"#00000080"` |
-| `inverse_surface` | Override inverse surface | `"#ebdbb2"` |
-| `inverse_on_surface` | Override inverse on surface | `"#3c3836"` |
-| `inverse_primary` | Override inverse primary | `"#b8bb26"` |
+| `seed` | Seed color for palette generation | `"#7aa2f7"` |
+| `Primary` | Override primary color | `"#7aa2f7"` |
+| `Secondary` | Override secondary color | `"#bb9af7"` |
+| `Tertiary` | Override tertiary color | `"#9ece6a"` |
+| `Error` | Override error color | `"#f7768e"` |
+| `Surface` | Override surface color | `"#1a1b26"` |
+| `Background` | Override background color | `"#1a1b26"` |
+| `SurfaceVariant` | Override surface variant | `"#24283b"` |
+| `Outline` | Override outline color | `"#565f89"` |
+| `OutlineVariant` | Override outline variant | `"#b4b5b9"` |
+| `Shadow` | Override shadow color | `"#000000"` |
+| `Scrim` | Override scrim color | `"#00000080"` |
+| `InverseSurface` | Override inverse surface | `"#ebdbb2"` |
+| `InverseOnSurface` | Override inverse on surface | `"#3c3836"` |
+| `InversePrimary` | Override inverse primary | `"#7aa2f7"` |
 
-### Legacy Format (Still Supported)
-
-The legacy format specifies all colors explicitly for both dark and light modes.
-
-```json
-{
-  "dark": {
-    "mPrimary": "#b8bb26",
-    "mOnPrimary": "#282828",
-    "mSecondary": "#fabd2f",
-    "mOnSecondary": "#282828",
-    "mTertiary": "#83a598",
-    "mOnTertiary": "#282828",
-    "mError": "#fb4934",
-    "mOnError": "#282828",
-    "mSurface": "#282828",
-    "mOnSurface": "#fbf1c7",
-    "mSurfaceVariant": "#3c3836",
-    "mOnSurfaceVariant": "#ebdbb2",
-    "mOutline": "#928374",
-    "mShadow": "#000000"
-  },
-  "light": {
-    "mPrimary": "#98971a",
-    "mOnPrimary": "#fbf1c7",
-    "mSecondary": "#d79921",
-    "mOnSecondary": "#fbf1c7",
-    "mTertiary": "#458588",
-    "mOnTertiary": "#fbf1c7",
-    "mError": "#cc241d",
-    "mOnError": "#fbf1c7",
-    "mSurface": "#fbf1c7",
-    "mOnSurface": "#3c3836"
-  }
-}
-```
-
-**Key differences:**
-
-| Aspect | New Format | Legacy Format |
-|--------|-----------|---------------|
-| File size | ~5 lines | ~50 lines |
-| Maintenance | Automatic generation | Manual specification |
-| Color consistency | MD3 algorithm guaranteed | Depends on manual tuning |
-| Flexibility | Seed + optional overrides | Full manual control |
-| Compatibility | ✅ Recommended | ✅ Still supported |
+**Note:** Color names support both lowercase (`"primary"`) and PascalCase (`"Primary"`).
 
 ### Algorithm Configuration
 

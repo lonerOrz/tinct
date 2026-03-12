@@ -2,6 +2,32 @@
 //!
 //! This module uses the official Material You algorithm via the material-colors crate
 //! to generate perceptually uniform color palettes from a seed color.
+//!
+//! # Supported Theme Formats
+//!
+//! ## Format 1: Seed only
+//! ```json
+//! { "seed": "#7aa2f7" }
+//! ```
+//!
+//! ## Format 2: Overrides only (seed extracted from Primary)
+//! ```json
+//! {
+//!   "Primary": "#7aa2f7",
+//!   "Secondary": "#bb9af7",
+//!   "Tertiary": "#9ece6a"
+//! }
+//! ```
+//!
+//! ## Format 3: Seed + Overrides
+//! ```json
+//! {
+//!   "seed": "#7aa2f7",
+//!   "Primary": "#7aa2f7",
+//!   "Secondary": "#bb9af7",
+//!   "Tertiary": "#9ece6a"
+//! }
+//! ```
 
 use material_colors::color::Argb;
 use material_colors::dynamic_color::{DynamicScheme, Variant};
@@ -14,27 +40,21 @@ use super::params::AlgorithmParameters;
 use super::types::{ColorEntry, Palette};
 
 /// Generate color palette from theme data using HCT color space
+///
+/// Seed color priority:
+/// 1. `seed` field (if present)
+/// 2. `Primary` field (as fallback seed)
 pub fn generate_palette(
     theme: &Value,
     is_dark_mode: bool,
     _is_strict: bool,
 ) -> Result<Palette, String> {
-    // Try to get seed color from new format first
+    // Get seed color: prefer explicit "seed", fallback to "Primary"
     let seed_hex = theme
         .get("seed")
         .and_then(|v| v.as_str())
-        // Fallback to old format: extract from dark/light mode
-        .or_else(|| {
-            // Try old format with dark/light modes
-            let mode_key = if is_dark_mode { "dark" } else { "light" };
-            theme.get(mode_key)
-                .and_then(|m| m.get("mPrimary").or_else(|| m.get("primary")))
-                .and_then(|v| v.as_str())
-        })
-        // Fallback to top-level primary
-        .or_else(|| theme.get("primary").and_then(|v| v.as_str()))
-        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
-        .ok_or("Seed/primary color not found in theme. Expected 'seed', 'primary', or 'dark/light' object with 'mPrimary'/'primary'")?;
+        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
+        .ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     // Parse seed color from hex
     let seed_argb = parse_hex_color(seed_hex)?;
@@ -47,18 +67,21 @@ pub fn generate_palette(
 }
 
 /// Generate color palette with algorithm parameters
+///
+/// Seed color priority:
+/// 1. `seed` field (if present)
+/// 2. `Primary` field (as fallback seed)
 pub fn generate_palette_with_params(
     theme: &Value,
     is_dark_mode: bool,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
-    // Get seed color
+    // Get seed color: prefer explicit "seed", fallback to "Primary"
     let seed_hex = theme
         .get("seed")
         .and_then(|v| v.as_str())
-        .or_else(|| theme.get("primary").and_then(|v| v.as_str()))
-        .or_else(|| theme.get("mPrimary").and_then(|v| v.as_str()))
-        .ok_or("Seed/primary color not found in theme")?;
+        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
+        .ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     // Parse seed color
     let seed_argb = parse_hex_color(seed_hex)?;
@@ -156,34 +179,33 @@ fn generate_scheme_with_params(
 /// Convert material-colors scheme to our Palette format
 fn scheme_to_palette(
     scheme: &DynamicScheme,
-    is_dark_mode: bool,
+    _is_dark_mode: bool,
     theme: &Value,
 ) -> Result<Palette, String> {
-    // Helper to get override color from theme (supports both old and new formats)
+    // Helper to get override color from theme
     let get_override = |key: &str| -> Option<String> {
-        // Try new format first (top-level override)
-        if let Some(hex) = theme.get(key).and_then(|v| v.as_str()) {
-            return Some(hex.to_string());
-        }
-
-        // Try old format (dark/light mode specific)
-        let mode_key = if is_dark_mode { "dark" } else { "light" };
+        // Support both lowercase ("primary") and PascalCase ("Primary")
         theme
-            .get(mode_key)
-            .and_then(|m| {
-                m.get(key)
-                    .or_else(|| m.get(format!("m{}", key[..1].to_uppercase() + &key[1..])))
-            })
+            .get(key)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
+            .or_else(|| {
+                // Try PascalCase (first letter uppercase)
+                let pascal_case = format!("{}{}", &key[..1].to_uppercase(), &key[1..]);
+                theme
+                    .get(&pascal_case)
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
     };
 
     // Helper to create ColorEntry from scheme colors
+    // Pass the color role name directly, get_override will handle both formats
     let create_entry = |get_color_fn: fn(&DynamicScheme) -> Argb,
-                        override_key: Option<&str>|
+                        role_name: Option<&str>|
      -> Result<ColorEntry, String> {
-        // Check for override in theme
-        let override_hex = override_key.and_then(&get_override);
+        // Check for override in theme using get_override
+        let override_hex = role_name.and_then(&get_override);
 
         let argb = if let Some(hex) = override_hex {
             parse_hex_color(&hex)?
@@ -195,180 +217,61 @@ fn scheme_to_palette(
 
         Ok(ColorEntry {
             default: create_color_format(&hex)?,
-            dark: create_color_format(&hex)?,
-            light: create_color_format(&hex)?,
         })
     };
 
     // Build palette using MD3 color roles
     Ok(Palette {
-        primary: create_entry(
-            |s| s.primary(),
-            theme
-                .get("primary")
-                .and_then(|v| v.as_str())
-                .map(|_| "primary"),
-        )?,
-        on_primary: create_entry(
-            |s| s.on_primary(),
-            theme
-                .get("on_primary")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_primary"),
-        )?,
-        primary_container: create_entry(
-            |s| s.primary_container(),
-            theme
-                .get("primary_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "primary_container"),
-        )?,
+        primary: create_entry(|s| s.primary(), Some("primary"))?,
+        on_primary: create_entry(|s| s.on_primary(), Some("on_primary"))?,
+        primary_container: create_entry(|s| s.primary_container(), Some("primary_container"))?,
         on_primary_container: create_entry(
             |s| s.on_primary_container(),
-            theme
-                .get("on_primary_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_primary_container"),
+            Some("on_primary_container"),
         )?,
         primary_fixed: create_entry(|s| s.primary_fixed(), None)?,
         primary_fixed_dim: create_entry(|s| s.primary_fixed_dim(), None)?,
         on_primary_fixed: create_entry(|s| s.on_primary_fixed(), None)?,
         on_primary_fixed_variant: create_entry(|s| s.on_primary_fixed_variant(), None)?,
 
-        secondary: create_entry(
-            |s| s.secondary(),
-            theme
-                .get("secondary")
-                .and_then(|v| v.as_str())
-                .map(|_| "secondary"),
-        )?,
-        on_secondary: create_entry(
-            |s| s.on_secondary(),
-            theme
-                .get("on_secondary")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_secondary"),
-        )?,
+        secondary: create_entry(|s| s.secondary(), Some("secondary"))?,
+        on_secondary: create_entry(|s| s.on_secondary(), Some("on_secondary"))?,
         secondary_container: create_entry(
             |s| s.secondary_container(),
-            theme
-                .get("secondary_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "secondary_container"),
+            Some("secondary_container"),
         )?,
         on_secondary_container: create_entry(
             |s| s.on_secondary_container(),
-            theme
-                .get("on_secondary_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_secondary_container"),
+            Some("on_secondary_container"),
         )?,
         secondary_fixed: create_entry(|s| s.secondary_fixed(), None)?,
         secondary_fixed_dim: create_entry(|s| s.secondary_fixed_dim(), None)?,
         on_secondary_fixed: create_entry(|s| s.on_secondary_fixed(), None)?,
         on_secondary_fixed_variant: create_entry(|s| s.on_secondary_fixed_variant(), None)?,
 
-        tertiary: create_entry(
-            |s| s.tertiary(),
-            theme
-                .get("tertiary")
-                .and_then(|v| v.as_str())
-                .map(|_| "tertiary"),
-        )?,
-        on_tertiary: create_entry(
-            |s| s.on_tertiary(),
-            theme
-                .get("on_tertiary")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_tertiary"),
-        )?,
-        tertiary_container: create_entry(
-            |s| s.tertiary_container(),
-            theme
-                .get("tertiary_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "tertiary_container"),
-        )?,
+        tertiary: create_entry(|s| s.tertiary(), Some("tertiary"))?,
+        on_tertiary: create_entry(|s| s.on_tertiary(), Some("on_tertiary"))?,
+        tertiary_container: create_entry(|s| s.tertiary_container(), Some("tertiary_container"))?,
         on_tertiary_container: create_entry(
             |s| s.on_tertiary_container(),
-            theme
-                .get("on_tertiary_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_tertiary_container"),
+            Some("on_tertiary_container"),
         )?,
         tertiary_fixed: create_entry(|s| s.tertiary_fixed(), None)?,
         tertiary_fixed_dim: create_entry(|s| s.tertiary_fixed_dim(), None)?,
         on_tertiary_fixed: create_entry(|s| s.on_tertiary_fixed(), None)?,
         on_tertiary_fixed_variant: create_entry(|s| s.on_tertiary_fixed_variant(), None)?,
 
-        error: create_entry(
-            |s| s.error(),
-            theme.get("error").and_then(|v| v.as_str()).map(|_| "error"),
-        )?,
-        on_error: create_entry(
-            |s| s.on_error(),
-            theme
-                .get("on_error")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_error"),
-        )?,
-        error_container: create_entry(
-            |s| s.error_container(),
-            theme
-                .get("error_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "error_container"),
-        )?,
-        on_error_container: create_entry(
-            |s| s.on_error_container(),
-            theme
-                .get("on_error_container")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_error_container"),
-        )?,
+        error: create_entry(|s| s.error(), Some("error"))?,
+        on_error: create_entry(|s| s.on_error(), Some("on_error"))?,
+        error_container: create_entry(|s| s.error_container(), Some("error_container"))?,
+        on_error_container: create_entry(|s| s.on_error_container(), Some("on_error_container"))?,
 
-        background: create_entry(
-            |s| s.background(),
-            theme
-                .get("background")
-                .and_then(|v| v.as_str())
-                .map(|_| "background"),
-        )?,
-        on_background: create_entry(
-            |s| s.on_background(),
-            theme
-                .get("on_background")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_background"),
-        )?,
-        surface: create_entry(
-            |s| s.surface(),
-            theme
-                .get("surface")
-                .and_then(|v| v.as_str())
-                .map(|_| "surface"),
-        )?,
-        on_surface: create_entry(
-            |s| s.on_surface(),
-            theme
-                .get("on_surface")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_surface"),
-        )?,
-        surface_variant: create_entry(
-            |s| s.surface_variant(),
-            theme
-                .get("surface_variant")
-                .and_then(|v| v.as_str())
-                .map(|_| "surface_variant"),
-        )?,
-        on_surface_variant: create_entry(
-            |s| s.on_surface_variant(),
-            theme
-                .get("on_surface_variant")
-                .and_then(|v| v.as_str())
-                .map(|_| "on_surface_variant"),
-        )?,
+        background: create_entry(|s| s.background(), Some("background"))?,
+        on_background: create_entry(|s| s.on_background(), Some("on_background"))?,
+        surface: create_entry(|s| s.surface(), Some("surface"))?,
+        on_surface: create_entry(|s| s.on_surface(), Some("on_surface"))?,
+        surface_variant: create_entry(|s| s.surface_variant(), Some("surface_variant"))?,
+        on_surface_variant: create_entry(|s| s.on_surface_variant(), Some("on_surface_variant"))?,
 
         surface_container_lowest: create_entry(|s| s.surface_container_lowest(), None)?,
         surface_container_low: create_entry(|s| s.surface_container_low(), None)?,
@@ -376,57 +279,18 @@ fn scheme_to_palette(
         surface_container_high: create_entry(|s| s.surface_container_high(), None)?,
         surface_container_highest: create_entry(|s| s.surface_container_highest(), None)?,
 
-        inverse_surface: create_entry(
-            |s| s.inverse_surface(),
-            theme
-                .get("inverse_surface")
-                .and_then(|v| v.as_str())
-                .map(|_| "inverse_surface"),
-        )?,
-        inverse_on_surface: create_entry(
-            |s| s.inverse_on_surface(),
-            theme
-                .get("inverse_on_surface")
-                .and_then(|v| v.as_str())
-                .map(|_| "inverse_on_surface"),
-        )?,
-        inverse_primary: create_entry(
-            |s| s.inverse_primary(),
-            theme
-                .get("inverse_primary")
-                .and_then(|v| v.as_str())
-                .map(|_| "inverse_primary"),
-        )?,
+        inverse_surface: create_entry(|s| s.inverse_surface(), Some("inverse_surface"))?,
+        inverse_on_surface: create_entry(|s| s.inverse_on_surface(), Some("inverse_on_surface"))?,
+        inverse_primary: create_entry(|s| s.inverse_primary(), Some("inverse_primary"))?,
 
         surface_dim: create_entry(|s| s.surface_dim(), None)?,
         surface_bright: create_entry(|s| s.surface_bright(), None)?,
 
-        outline: create_entry(
-            |s| s.outline(),
-            theme
-                .get("outline")
-                .and_then(|v| v.as_str())
-                .map(|_| "outline"),
-        )?,
-        outline_variant: create_entry(
-            |s| s.outline_variant(),
-            theme
-                .get("outline_variant")
-                .and_then(|v| v.as_str())
-                .map(|_| "outline_variant"),
-        )?,
+        outline: create_entry(|s| s.outline(), Some("outline"))?,
+        outline_variant: create_entry(|s| s.outline_variant(), Some("outline_variant"))?,
 
-        shadow: create_entry(
-            |s| s.shadow(),
-            theme
-                .get("shadow")
-                .and_then(|v| v.as_str())
-                .map(|_| "shadow"),
-        )?,
-        scrim: create_entry(
-            |s| s.scrim(),
-            theme.get("scrim").and_then(|v| v.as_str()).map(|_| "scrim"),
-        )?,
+        shadow: create_entry(|s| s.shadow(), Some("shadow"))?,
+        scrim: create_entry(|s| s.scrim(), Some("scrim"))?,
 
         // Terminal colors - map from MD3 colors
         black: create_entry(|s| s.surface(), None)?,
@@ -492,6 +356,6 @@ mod tests {
         let palette = generate_palette(&theme, true, false).unwrap();
 
         // Dark mode should have dark surface
-        assert!(palette.surface.dark.hex.starts_with("#"));
+        assert!(palette.surface.default.hex.starts_with("#"));
     }
 }

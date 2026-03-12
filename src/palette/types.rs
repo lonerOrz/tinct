@@ -27,12 +27,10 @@ pub struct ColorFormat {
     pub original_lightness: Option<u32>,
 }
 
-/// A color entry with variants for different modes
+/// A color entry with default format
 #[derive(Debug, Clone)]
 pub struct ColorEntry {
     pub default: ColorFormat,
-    pub dark: ColorFormat,
-    pub light: ColorFormat,
 }
 
 /// Complete color palette with all Material Design 3 color roles

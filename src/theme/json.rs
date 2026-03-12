@@ -1,4 +1,9 @@
 //! JSON theme loader implementation
+//!
+//! Supports simplified theme format without dark/light nesting:
+//! - Format 1: `{ "seed": "#7aa2f7" }`
+//! - Format 2: `{ "Primary": "#7aa2f7", "Secondary": "#bb9af7" }`
+//! - Format 3: `{ "seed": "#7aa2f7", "Primary": "#7aa2f7", ... }`
 
 use crate::core::{Error, Mode, PaletteGenerator, Result, Theme, ThemeLoader};
 use serde_json::Value;
@@ -33,28 +38,17 @@ impl ThemeLoader for JsonThemeLoader {
             .unwrap_or("unknown")
             .to_string();
 
-        // Support both flat and nested (dark/light) JSON formats
-        let (dark_json, light_json) = if json.get("dark").is_some() {
-            // Nested format: { "dark": {...}, "light": {...} }
-            let dark = json.get("dark").cloned().unwrap_or_else(|| json.clone());
-            let light = json.get("light").cloned().unwrap_or_else(|| json.clone());
-            (dark, light)
-        } else {
-            // Flat format: { "primary": "...", ... }
-            (json.clone(), json.clone())
-        };
-
-        // Get source color from dark mode
-        let source_color = dark_json
-            .get("primary")
+        // Get source color from Primary (or seed for display purposes)
+        let source_color = json
+            .get("seed")
             .and_then(|v| v.as_str())
-            .or_else(|| dark_json.get("mPrimary").and_then(|v| v.as_str()))
+            .or_else(|| json.get("Primary").and_then(|v| v.as_str()))
             .unwrap_or("#000000")
             .to_string();
 
-        // Generate palettes for both modes
-        let dark_colors = self.palette_generator.generate(&dark_json, Mode::Dark)?;
-        let light_colors = self.palette_generator.generate(&light_json, Mode::Light)?;
+        // Generate palettes for both modes (MD3 algorithm generates different colors based on mode)
+        let dark_colors = self.palette_generator.generate(&json, Mode::Dark)?;
+        let light_colors = self.palette_generator.generate(&json, Mode::Light)?;
 
         Ok(Theme {
             name,
@@ -97,30 +91,25 @@ mod tests {
 
     #[test]
     fn test_load_nested_format() {
+        // Legacy nested format (dark/light) is no longer supported
+        // This test verifies that the loader handles it gracefully
         let loader = create_test_loader();
 
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
         writeln!(temp_file, "  \"dark\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#FF572200\",").unwrap();
-        writeln!(temp_file, "    \"secondary\": \"#2196F300\"").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#FF572200\"").unwrap();
         writeln!(temp_file, "  }},").unwrap();
         writeln!(temp_file, "  \"light\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#D81B6000\",").unwrap();
-        writeln!(temp_file, "    \"secondary\": \"#00BCD400\"").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#D81B6000\"").unwrap();
         writeln!(temp_file, "  }}").unwrap();
         writeln!(temp_file, "}}").unwrap();
 
+        // Legacy format without seed/Primary at top level should fail
         let result = loader.load(temp_file.path().to_str().unwrap());
-        assert!(result.is_ok());
-
-        let theme = result.unwrap();
-        assert_eq!(
-            theme.name,
-            temp_file.path().file_stem().unwrap().to_str().unwrap()
-        );
-        assert!(!theme.dark_colors.is_empty());
-        assert!(!theme.light_colors.is_empty());
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("seed") || err_msg.contains("Primary"));
     }
 
     #[test]
@@ -129,8 +118,9 @@ mod tests {
 
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
-        writeln!(temp_file, "  \"primary\": \"#FF572200\",").unwrap();
-        writeln!(temp_file, "  \"secondary\": \"#2196F300\"").unwrap();
+        writeln!(temp_file, "  \"seed\": \"#FF5722\",").unwrap();
+        writeln!(temp_file, "  \"Primary\": \"#FF5722\",").unwrap();
+        writeln!(temp_file, "  \"Secondary\": \"#2196F3\"").unwrap();
         writeln!(temp_file, "}}").unwrap();
 
         let result = loader.load(temp_file.path().to_str().unwrap());
@@ -162,64 +152,49 @@ mod tests {
     }
 
     #[test]
-    fn test_source_color_extraction() {
+    fn test_source_color_extraction_seed() {
         let loader = create_test_loader();
 
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
-        writeln!(temp_file, "  \"dark\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#AABBCC00\"").unwrap();
-        writeln!(temp_file, "  }},").unwrap();
-        writeln!(temp_file, "  \"light\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
-        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "  \"seed\": \"#AABBCC\"").unwrap();
         writeln!(temp_file, "}}").unwrap();
 
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
         let theme = result.unwrap();
-        assert_eq!(theme.source_color, "#AABBCC00");
+        assert_eq!(theme.source_color, "#AABBCC");
     }
 
     #[test]
-    fn test_source_color_extraction_m_primary() {
+    fn test_source_color_extraction_primary() {
         let loader = create_test_loader();
 
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
-        writeln!(temp_file, "  \"dark\": {{").unwrap();
-        writeln!(temp_file, "    \"mPrimary\": \"#11223300\"").unwrap();
-        writeln!(temp_file, "  }},").unwrap();
-        writeln!(temp_file, "  \"light\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
-        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "  \"Primary\": \"#112233\"").unwrap();
         writeln!(temp_file, "}}").unwrap();
 
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
         let theme = result.unwrap();
-        assert_eq!(theme.source_color, "#11223300");
+        assert_eq!(theme.source_color, "#112233");
     }
 
     #[test]
-    fn test_source_color_default() {
+    fn test_source_color_seed_priority() {
         let loader = create_test_loader();
 
-        // When no primary/mPrimary is found, should fallback to #000000
-        // But the generator still needs valid color data to work
+        // seed has priority over Primary
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
-        writeln!(temp_file, "  \"dark\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
-        writeln!(temp_file, "  }},").unwrap();
-        writeln!(temp_file, "  \"light\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#00000000\"").unwrap();
-        writeln!(temp_file, "  }}").unwrap();
+        writeln!(temp_file, "  \"seed\": \"#AABBCC\",").unwrap();
+        writeln!(temp_file, "  \"Primary\": \"#112233\"").unwrap();
         writeln!(temp_file, "}}").unwrap();
 
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
         let theme = result.unwrap();
-        assert_eq!(theme.source_color, "#00000000");
+        assert_eq!(theme.source_color, "#AABBCC");
     }
 }
