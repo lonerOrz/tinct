@@ -4,13 +4,13 @@ use crate::core::{ColorFormat, Mode, Result, TemplateEngine, Theme};
 use regex::Regex;
 use std::collections::HashMap;
 
+// Type alias for filter functions to reduce type complexity
+type FilterFn = Box<dyn Fn(&str, &HashMap<String, String>) -> Result<String> + Send + Sync>;
+
 /// Default template processor implementation
 pub struct TemplateProcessor {
     #[allow(dead_code)]
-    filters: HashMap<
-        String,
-        Box<dyn Fn(&str, &HashMap<String, String>) -> Result<String> + Send + Sync>,
-    >,
+    filters: HashMap<String, FilterFn>,
 }
 
 impl TemplateProcessor {

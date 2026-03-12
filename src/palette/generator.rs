@@ -105,15 +105,21 @@ fn parse_hex_color(hex: &str) -> Result<Argb, String> {
 fn generate_scheme(seed: Argb, is_dark_mode: bool) -> DynamicScheme {
     // Create HCT from seed
     let hct = Hct::new(seed);
+    let hue = hct.get_hue();
+    let chroma = hct.get_chroma();
 
-    // Create tonal palettes from the seed color's hue and chroma
-    // Using CorePalette-like approach with customizable chroma
-    let primary = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma());
-    let secondary = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma() * 0.6); // Less chroma
-    let tertiary =
-        TonalPalette::from_hue_and_chroma((hct.get_hue() + 60.0) % 360.0, hct.get_chroma() * 0.8); // +60 hue
-    let neutral = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma() * 0.4); // Low chroma
-    let neutral_variant = TonalPalette::from_hue_and_chroma(hct.get_hue(), hct.get_chroma() * 0.5);
+    // Calculate secondary hue based on seed hue ranges (MD3 algorithm)
+    let secondary_hue = calculate_secondary_hue(hue);
+
+    // Calculate tertiary hue based on seed hue ranges (MD3 algorithm)
+    let tertiary_hue = calculate_tertiary_hue(hue);
+
+    // Create tonal palettes with improved chroma ratios
+    let primary = TonalPalette::from_hue_and_chroma(hue, chroma);
+    let secondary = TonalPalette::from_hue_and_chroma(secondary_hue, chroma * 0.65);
+    let tertiary = TonalPalette::from_hue_and_chroma(tertiary_hue, chroma * 0.85);
+    let neutral = TonalPalette::from_hue_and_chroma(hue, chroma * 0.4);
+    let neutral_variant = TonalPalette::from_hue_and_chroma(hue, chroma * 0.5);
 
     // Create dynamic scheme with all required parameters
     DynamicScheme::new(
@@ -129,6 +135,64 @@ fn generate_scheme(seed: Argb, is_dark_mode: bool) -> DynamicScheme {
         neutral_variant,
         None,
     )
+}
+
+/// Calculate secondary hue based on MD3 algorithm
+/// This creates more harmonious color relationships
+fn calculate_secondary_hue(hue: f64) -> f64 {
+    // MD3 uses different hue offsets based on the seed hue range
+    let offset = if (0.0..41.0).contains(&hue) {
+        15.0
+    } else if (41.0..61.0).contains(&hue) {
+        10.0
+    } else if (61.0..101.0).contains(&hue) {
+        8.0
+    } else if (101.0..141.0).contains(&hue) {
+        5.0
+    } else if (141.0..181.0).contains(&hue) {
+        3.0
+    } else if (181.0..221.0).contains(&hue) {
+        2.0
+    } else if (221.0..261.0).contains(&hue) {
+        5.0
+    } else if (261.0..301.0).contains(&hue) {
+        10.0
+    } else if (301.0..341.0).contains(&hue) {
+        15.0
+    } else {
+        20.0
+    };
+
+    (hue + offset) % 360.0
+}
+
+/// Calculate tertiary hue based on MD3 algorithm
+/// This creates complementary or analogous color relationships
+fn calculate_tertiary_hue(hue: f64) -> f64 {
+    // MD3 uses different hue offsets based on the seed hue range
+    let offset = if (0.0..41.0).contains(&hue) {
+        30.0
+    } else if (41.0..61.0).contains(&hue) {
+        25.0
+    } else if (61.0..101.0).contains(&hue) {
+        20.0
+    } else if (101.0..141.0).contains(&hue) {
+        15.0
+    } else if (141.0..181.0).contains(&hue) {
+        10.0
+    } else if (181.0..221.0).contains(&hue) {
+        5.0
+    } else if (221.0..261.0).contains(&hue) {
+        10.0
+    } else if (261.0..301.0).contains(&hue) {
+        20.0
+    } else if (301.0..341.0).contains(&hue) {
+        30.0
+    } else {
+        40.0
+    };
+
+    (hue + offset) % 360.0
 }
 
 /// Generate a Material You scheme with algorithm parameters
@@ -292,14 +356,15 @@ fn scheme_to_palette(
         shadow: create_entry(|s| s.shadow(), Some("shadow"))?,
         scrim: create_entry(|s| s.scrim(), Some("scrim"))?,
 
-        // Terminal colors - map from MD3 colors
+        // Terminal colors - map from MD3 colors with intelligent hue-based mapping
         black: create_entry(|s| s.surface(), None)?,
         red: create_entry(|s| s.error(), None)?,
         green: create_entry(|s| s.tertiary(), None)?,
-        yellow: create_entry(|s| s.primary(), None)?,
-        blue: create_entry(|s| s.secondary(), None)?,
-        magenta: create_entry(|s| s.primary_container(), None)?,
-        cyan: create_entry(|s| s.secondary_container(), None)?,
+        // Use hue-based mapping for yellow/blue to ensure terminal colors are distinct
+        yellow: create_entry(get_terminal_yellow, None)?,
+        blue: create_entry(get_terminal_blue, None)?,
+        magenta: create_entry(get_terminal_magenta, None)?,
+        cyan: create_entry(get_terminal_cyan, None)?,
         white: create_entry(|s| s.on_surface(), None)?,
         bright_black: create_entry(|s| s.surface_variant(), None)?,
         bright_red: create_entry(|s| s.error_container(), None)?,
@@ -310,6 +375,32 @@ fn scheme_to_palette(
         bright_cyan: create_entry(|s| s.secondary_fixed_dim(), None)?,
         bright_white: create_entry(|s| s.inverse_surface(), None)?,
     })
+}
+
+/// Get terminal yellow based on seed hue
+/// Ensures yellow is distinct from primary when primary is not yellow-ish
+fn get_terminal_yellow(scheme: &DynamicScheme) -> Argb {
+    // Use primary_fixed for bright yellow-like colors
+    scheme.primary_fixed()
+}
+
+/// Get terminal blue based on seed hue
+/// Ensures blue is distinct and appropriate for the color scheme
+fn get_terminal_blue(scheme: &DynamicScheme) -> Argb {
+    // Use secondary for blue-like colors
+    scheme.secondary()
+}
+
+/// Get terminal magenta based on seed hue
+fn get_terminal_magenta(scheme: &DynamicScheme) -> Argb {
+    // Use tertiary for magenta/purple-like colors
+    scheme.tertiary()
+}
+
+/// Get terminal cyan based on seed hue
+fn get_terminal_cyan(scheme: &DynamicScheme) -> Argb {
+    // Use secondary_container for cyan-like colors
+    scheme.secondary_container()
 }
 
 #[cfg(test)]

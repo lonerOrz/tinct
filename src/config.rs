@@ -154,7 +154,7 @@ impl ConfigRoot {
 pub type Config = HashMap<String, HashMap<String, ConfigSection>>;
 
 impl ConfigRoot {
-    pub fn to_flat_config(self) -> Config {
+    pub fn into_flat_config(self) -> Config {
         self.groups
     }
 }
@@ -257,7 +257,7 @@ output_path = "output.css"
         let result = ConfigRoot::parse(config_content);
         assert!(result.is_ok());
         let config_root = result.unwrap();
-        let flat = config_root.to_flat_config();
+        let flat = config_root.into_flat_config();
         assert!(flat.contains_key("templates"));
     }
 

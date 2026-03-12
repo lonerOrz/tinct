@@ -178,6 +178,33 @@ pub fn calculate_contrast_ratio(color1: &str, color2: &str) -> Result<f64, Strin
     Ok((lighter + 0.05) / (darker + 0.05))
 }
 
+/// Check if two colors meet WCAG contrast requirements
+/// Returns true if contrast ratio meets or exceeds the threshold
+pub fn meets_contrast_requirement(
+    color1: &str,
+    color2: &str,
+    threshold: f64,
+) -> Result<bool, String> {
+    let ratio = calculate_contrast_ratio(color1, color2)?;
+    Ok(ratio >= threshold)
+}
+
+/// Get contrast rating based on WCAG guidelines
+/// Returns: "AAA" (>=7.0), "AA" (>=4.5), "AA Large" (>=3.0), or "Fail"
+pub fn get_contrast_rating(color1: &str, color2: &str) -> Result<String, String> {
+    let ratio = calculate_contrast_ratio(color1, color2)?;
+
+    if ratio >= 7.0 {
+        Ok("AAA".to_string())
+    } else if ratio >= 4.5 {
+        Ok("AA".to_string())
+    } else if ratio >= 3.0 {
+        Ok("AA Large".to_string())
+    } else {
+        Ok("Fail".to_string())
+    }
+}
+
 /// Generate appropriate text color for a given background
 pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
     let light = is_light_color(base)?;
@@ -302,6 +329,24 @@ mod tests {
         // Test with actual colors
         assert!(is_light_color("#FF5722").unwrap()); // Orange - should be light
         assert!(!is_light_color("#1a1a1a").unwrap()); // Very dark gray - should be dark
+    }
+
+    #[test]
+    fn test_meets_contrast_requirement() {
+        // Black and white should meet AAA requirements
+        assert!(meets_contrast_requirement("#000000", "#FFFFFF", 7.0).unwrap());
+        // Similar colors should fail
+        assert!(!meets_contrast_requirement("#666666", "#999999", 4.5).unwrap());
+    }
+
+    #[test]
+    fn test_get_contrast_rating() {
+        // Black and white should be AAA
+        assert_eq!(get_contrast_rating("#000000", "#FFFFFF").unwrap(), "AAA");
+        // Medium contrast should be AA
+        assert_eq!(get_contrast_rating("#000000", "#767676").unwrap(), "AA");
+        // Low contrast should fail
+        assert_eq!(get_contrast_rating("#666666", "#999999").unwrap(), "Fail");
     }
 
     #[test]

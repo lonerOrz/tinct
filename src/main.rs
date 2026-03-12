@@ -55,7 +55,7 @@ fn main() {
         config::ConfigRoot::parse(&config_content).expect("Invalid TOML format in config file");
 
     let alg_params = config_root.algorithm.clone();
-    let mut config = config_root.to_flat_config();
+    let mut config = config_root.into_flat_config();
 
     // Resolve paths relative to config file
     let config_dir = Path::new(&config_path)
@@ -129,16 +129,16 @@ fn main() {
                     continue;
                 }
 
-                let result = process_section_new(
+                let ctx = ProcessContext {
                     section_name,
                     section,
-                    &theme_file,
+                    theme_file: &theme_file,
                     mode,
-                    &theme_loader,
-                    &template_engine,
-                    &output,
-                    args.skip_sequences,
-                );
+                    theme_loader: &theme_loader,
+                    template_engine: &template_engine,
+                    output: &output,
+                };
+                let result = process_section_new(ctx, args.skip_sequences);
 
                 if result {
                     success_count += 1;
@@ -167,24 +167,26 @@ fn main() {
     }
 }
 
-/// Process a single section using the new architecture
-fn process_section_new(
-    section_name: &str,
-    section: &config::ConfigSection,
-    theme_file: &str,
+// Context struct for process_section to reduce parameter count
+struct ProcessContext<'a> {
+    section_name: &'a str,
+    section: &'a config::ConfigSection,
+    theme_file: &'a str,
     mode: Mode,
-    theme_loader: &JsonThemeLoader,
-    template_engine: &TemplateProcessor,
-    output: &FileOutput,
-    _skip_sequences: bool,
-) -> bool {
-    let input_path = &section.input_path;
-    let output_path = &section.output_path;
+    theme_loader: &'a JsonThemeLoader,
+    template_engine: &'a TemplateProcessor,
+    output: &'a FileOutput,
+}
+
+/// Process a single section using the new architecture
+fn process_section_new(ctx: ProcessContext, _skip_sequences: bool) -> bool {
+    let input_path = &ctx.section.input_path;
+    let output_path = &ctx.section.output_path;
 
     // Check if input file exists
     if !Path::new(input_path).exists() {
         crate::log::error::message(
-            section_name,
+            ctx.section_name,
             &format!("Input file '{}' does not exist. Skipping.", input_path),
         );
         return false;
@@ -194,7 +196,7 @@ fn process_section_new(
     if let Some(parent) = Path::new(output_path).parent() {
         if let Err(e) = fs::create_dir_all(parent) {
             crate::log::error::message(
-                section_name,
+                ctx.section_name,
                 &format!("Error creating output directory: {}. Skipping.", e),
             );
             return false;
@@ -202,10 +204,10 @@ fn process_section_new(
     }
 
     // Load theme
-    let theme = match theme_loader.load(theme_file) {
+    let theme = match ctx.theme_loader.load(ctx.theme_file) {
         Ok(t) => t,
         Err(e) => {
-            crate::log::error::theme_error(section_name, &e.to_string());
+            crate::log::error::theme_error(ctx.section_name, &e.to_string());
             return false;
         }
     };
@@ -215,7 +217,7 @@ fn process_section_new(
         Ok(c) => c,
         Err(e) => {
             crate::log::error::message(
-                section_name,
+                ctx.section_name,
                 &format!("Error reading template file: {}. Skipping.", e),
             );
             return false;
@@ -223,27 +225,30 @@ fn process_section_new(
     };
 
     // Render template
-    let output_content = match template_engine.render(&template_content, &theme, mode) {
+    let output_content = match ctx
+        .template_engine
+        .render(&template_content, &theme, ctx.mode)
+    {
         Ok(c) => c,
         Err(e) => {
-            crate::log::error::theme_error(section_name, &e.to_string());
+            crate::log::error::theme_error(ctx.section_name, &e.to_string());
             return false;
         }
     };
 
     // Write output
-    if let Err(e) = output.write(&output_content, output_path) {
-        crate::log::error::message(section_name, &format!("Error writing output: {}", e));
+    if let Err(e) = ctx.output.write(&output_content, output_path) {
+        crate::log::error::message(ctx.section_name, &format!("Error writing output: {}", e));
         return false;
     }
 
     // Run post hook if specified
-    if let Some(ref post_hook) = section.post_hook {
+    if let Some(ref post_hook) = ctx.section.post_hook {
         if !post_hook.is_empty() {
             return cli::run_post_hook(
                 post_hook,
                 output_path,
-                Some(section_name),
+                Some(ctx.section_name),
                 cli::LogLevel::Normal,
             );
         }
