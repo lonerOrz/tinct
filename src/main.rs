@@ -15,6 +15,7 @@ mod path_resolver;
 
 use clap::Parser;
 use colored::*;
+use serde_json::json;
 use tinct::core::{Mode, OutputFormat, TemplateEngine, ThemeLoader};
 use tinct::output::FileOutput;
 use tinct::palette::LegacyPaletteGenerator;
@@ -23,6 +24,12 @@ use tinct::theme::JsonThemeLoader;
 
 fn main() {
     let args = cli::CliArgs::parse();
+
+    // Validate arguments
+    if let Err(e) = args.validate() {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
 
     // Determine the config file path
     let config_path = path_resolver::resolve_config_file_path(args.config.as_ref());
@@ -34,6 +41,28 @@ fn main() {
         cli::LogLevel::Verbose => log::LogLevel::Verbose,
     });
 
+    // Create theme data: either from seed or from theme file
+    let theme_data = if let Some(ref seed) = args.seed {
+        // Create temporary theme from seed color
+        json!({ "seed": seed })
+    } else {
+        // Load theme from file
+        let theme_file = path_resolver::resolve_theme_path(args.theme.as_ref().unwrap());
+        match fs::read_to_string(&theme_file) {
+            Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                Ok(json) => json,
+                Err(e) => {
+                    eprintln!("Error parsing theme JSON: {}", e);
+                    process::exit(1);
+                }
+            },
+            Err(e) => {
+                eprintln!("Error reading theme file: {}", e);
+                process::exit(1);
+            }
+        }
+    };
+
     // Print basic info
     if matches!(
         args.log_level,
@@ -41,13 +70,14 @@ fn main() {
     ) {
         println!("{}", "tinct - Theme Injector".bold());
         println!("{}: {}", "Config".blue(), config_path);
-        println!("{}: {}", "Theme".blue(), args.theme);
+        if args.seed.is_some() {
+            println!("{}: {}", "Seed".blue(), args.seed.as_ref().unwrap());
+        } else {
+            println!("{}: {}", "Theme".blue(), args.theme.as_ref().unwrap());
+        }
         println!("{}: {}", "Mode".blue(), args.mode.to_string().yellow());
         println!();
     }
-
-    // Resolve theme path
-    let theme_file = path_resolver::resolve_theme_path(&args.theme);
 
     // Read TOML config
     let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
@@ -87,7 +117,16 @@ fn main() {
 
     // Show preview if requested
     if args.preview {
-        match tinct::preview::show_color_preview(&theme_file, &args.mode.to_string()) {
+        // For seed-based preview, create a temporary theme JSON string
+        let preview_result = if let Some(ref seed) = args.seed {
+            let temp_theme = json!({ "seed": seed });
+            tinct::preview::show_color_preview_from_json(&temp_theme, &args.mode.to_string())
+        } else {
+            let theme_file = path_resolver::resolve_theme_path(args.theme.as_ref().unwrap());
+            tinct::preview::show_color_preview(&theme_file, &args.mode.to_string())
+        };
+
+        match preview_result {
             Ok(()) => process::exit(0),
             Err(e) => {
                 eprintln!("Error showing color preview: {}", e);
@@ -132,7 +171,7 @@ fn main() {
                 let ctx = ProcessContext {
                     section_name,
                     section,
-                    theme_file: &theme_file,
+                    theme_data: &theme_data,
                     mode,
                     theme_loader: &theme_loader,
                     template_engine: &template_engine,
@@ -171,7 +210,7 @@ fn main() {
 struct ProcessContext<'a> {
     section_name: &'a str,
     section: &'a config::ConfigSection,
-    theme_file: &'a str,
+    theme_data: &'a serde_json::Value,
     mode: Mode,
     theme_loader: &'a JsonThemeLoader,
     template_engine: &'a TemplateProcessor,
@@ -203,8 +242,8 @@ fn process_section_new(ctx: ProcessContext, _skip_sequences: bool) -> bool {
         }
     }
 
-    // Load theme
-    let theme = match ctx.theme_loader.load(ctx.theme_file) {
+    // Load theme from theme_data
+    let theme = match ctx.theme_loader.load_value(ctx.theme_data) {
         Ok(t) => t,
         Err(e) => {
             crate::log::error::theme_error(ctx.section_name, &e.to_string());

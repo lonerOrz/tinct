@@ -83,6 +83,9 @@ pub trait ThemeLoader {
     /// Load a theme from the given source
     fn load(&self, source: &str) -> Result<Theme>;
 
+    /// Load a theme from a JSON value
+    fn load_value(&self, json: &serde_json::Value) -> Result<Theme>;
+
     /// Check if this loader can handle the given source
     fn can_load(&self, source: &str) -> bool;
 }

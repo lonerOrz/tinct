@@ -58,6 +58,34 @@ impl ThemeLoader for JsonThemeLoader {
         })
     }
 
+    fn load_value(&self, json: &Value) -> Result<Theme> {
+        // Extract theme name (use "seed-color" as fallback)
+        let name = json
+            .get("seed")
+            .and_then(|v| v.as_str())
+            .unwrap_or("theme")
+            .to_string();
+
+        // Get source color from Primary (or seed for display purposes)
+        let source_color = json
+            .get("seed")
+            .and_then(|v| v.as_str())
+            .or_else(|| json.get("Primary").and_then(|v| v.as_str()))
+            .unwrap_or("#000000")
+            .to_string();
+
+        // Generate palettes for both modes
+        let dark_colors = self.palette_generator.generate(json, Mode::Dark)?;
+        let light_colors = self.palette_generator.generate(json, Mode::Light)?;
+
+        Ok(Theme {
+            name,
+            source_color,
+            dark_colors,
+            light_colors,
+        })
+    }
+
     fn can_load(&self, source: &str) -> bool {
         std::path::Path::new(source)
             .extension()

@@ -13,8 +13,12 @@ pub struct CliArgs {
     pub config: Option<String>,
 
     /// Path to theme.json file or theme name in themes/ folder
-    #[arg(short, long, required = true)]
-    pub theme: String,
+    #[arg(short, long)]
+    pub theme: Option<String>,
+
+    /// Seed color for generating palette (e.g., "#7aa2f7")
+    #[arg(short, long)]
+    pub seed: Option<String>,
 
     /// Theme mode override
     #[arg(short, long, value_enum, default_value = "dark")]
@@ -53,6 +57,19 @@ pub enum LogLevel {
     Quiet,
     Normal,
     Verbose,
+}
+
+impl CliArgs {
+    /// Validate that either --theme or --seed is provided (mutually exclusive)
+    pub fn validate(&self) -> Result<(), String> {
+        if self.theme.is_none() && self.seed.is_none() {
+            return Err("Either --theme or --seed must be provided".to_string());
+        }
+        if self.theme.is_some() && self.seed.is_some() {
+            return Err("--theme and --seed are mutually exclusive, use only one".to_string());
+        }
+        Ok(())
+    }
 }
 
 pub fn run_post_hook(
@@ -246,13 +263,14 @@ mod tests {
         // Verify CliArgs can be created with derive
         let args = CliArgs {
             config: Some("custom.toml".to_string()),
-            theme: "mytheme".to_string(),
+            theme: Some("mytheme".to_string()),
+            seed: None,
             mode: ThemeMode::Light,
             preview: true,
             skip_sequences: false,
             log_level: LogLevel::Verbose,
         };
-        assert_eq!(args.theme, "mytheme");
+        assert_eq!(args.theme, Some("mytheme".to_string()));
         assert_eq!(args.mode, ThemeMode::Light);
         assert!(args.preview);
     }

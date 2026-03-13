@@ -41,6 +41,39 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Display a color preview from a JSON value (for seed-based preview)
+pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
+    // Create palette generator
+    let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+
+    // Load theme from JSON value
+    let theme_loader = JsonThemeLoader::new(palette_gen.clone());
+    let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
+
+    // Determine mode and get colors
+    let mode = if mode == "dark" {
+        Mode::Dark
+    } else {
+        Mode::Light
+    };
+    let colors = match mode {
+        Mode::Dark => &theme.dark_colors,
+        Mode::Light => &theme.light_colors,
+    };
+
+    println!(
+        "{}",
+        "🎨 Material Design 3 Color Preview".bold().underline()
+    );
+    println!("🌙 Theme Mode: {}", mode.to_string().bold());
+    println!();
+
+    // Display colors in MD3 style with actual color blocks
+    display_md3_cards_grid(colors);
+
+    Ok(())
+}
+
 /// Display colors in a card grid layout with true color blocks
 fn display_md3_cards_grid(colors: &std::collections::HashMap<String, crate::core::ColorFormat>) {
     // Define color cards based on the MD3 documentation structure
