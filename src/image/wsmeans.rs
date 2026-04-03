@@ -6,11 +6,18 @@
 //!
 //! Reference: material-color-utilities quantizer pipeline
 
+use material_colors::color::Argb;
+use material_colors::hct::Hct;
 use std::collections::HashMap;
 
 // ============================================================================
 // LCG Random for cluster initialization
 // ============================================================================
+
+/// Convert RGB components to an opaque ARGB integer.
+pub fn rgb_to_argb(r: u8, g: u8, b: u8) -> Argb {
+    Argb::from_u32(0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32))
+}
 
 struct Random {
     seed: u64,
@@ -376,24 +383,13 @@ const CUTOFF_EXCITED_PROPORTION: f64 = 0.01;
 const FALLBACK_COLOR_ARGB: u32 = 0xFF4285F4; // Google Blue
 
 /// Simplified CAM16 chroma estimation from RGB (for scoring).
-/// This is a fast approximation — full CAM16 is in the material-colors crate.
 pub fn estimate_chroma_from_rgb(r: u8, g: u8, b: u8) -> f64 {
-    // Use CIELAB chroma as approximation: sqrt(a² + b²)
-    let (l, a, b_val) = rgb_to_lab(r, g, b);
-    let _ = l; // unused
-    (a * a + b_val * b_val).sqrt()
+    Hct::new(rgb_to_argb(r, g, b)).get_chroma()
 }
 
-/// Estimate hue angle from RGB (0-360 degrees).
+/// Estimate hue angle from RGB (0-360 degrees) using HCT.
 fn estimate_hue_from_rgb(r: u8, g: u8, b: u8) -> f64 {
-    let (l, a, b_val) = rgb_to_lab(r, g, b);
-    let _ = l; // unused
-    let hue_rad = b_val.atan2(a);
-    let mut hue_deg = hue_rad.to_degrees();
-    if hue_deg < 0.0 {
-        hue_deg += 360.0;
-    }
-    hue_deg
+    Hct::new(rgb_to_argb(r, g, b)).get_hue()
 }
 
 /// Rank colors based on suitability for UI themes.

@@ -236,12 +236,17 @@ fn main() {
         };
 
         // Create new architecture components
+        let harmony = tinct::ColorHarmony::parse(&alg_params.color_harmony)
+            .unwrap_or(tinct::ColorHarmony::Md3);
+
         let palette_gen = Arc::new(LegacyPaletteGenerator::new(tinct::AlgorithmParameters {
             contrast_threshold: alg_params.contrast_threshold,
             saturation_adjustment: alg_params.saturation_adjustment,
             lightness_adjustment: alg_params.lightness_adjustment,
             hue_shift: alg_params.hue_shift,
             min_contrast_ratio: alg_params.min_contrast_ratio,
+            contrast_level: alg_params.contrast_level,
+            color_harmony: harmony,
         }));
         let theme_loader = Arc::new(JsonThemeLoader::new(palette_gen));
         let template_engine = Arc::new(TemplateProcessor::new());

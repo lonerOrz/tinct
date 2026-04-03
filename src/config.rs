@@ -30,6 +30,14 @@ pub struct AlgorithmConfig {
     /// Minimum contrast ratio for readability
     #[serde(default = "default_min_contrast_ratio")]
     pub min_contrast_ratio: f64,
+
+    /// MD3 contrast level (-1.0 to 1.0)
+    #[serde(default = "default_contrast_level")]
+    pub contrast_level: f64,
+
+    /// Color harmony mode (md3, analogous, complementary, triadic, split-complementary)
+    #[serde(default = "default_color_harmony")]
+    pub color_harmony: String,
 }
 
 fn default_contrast_threshold() -> f64 {
@@ -50,6 +58,14 @@ fn default_hue_shift() -> i16 {
 
 fn default_min_contrast_ratio() -> f64 {
     4.5
+}
+
+fn default_contrast_level() -> f64 {
+    0.0
+}
+
+fn default_color_harmony() -> String {
+    "md3".to_string()
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -90,6 +106,8 @@ impl ConfigRoot {
             lightness_adjustment: default_lightness_adjustment(),
             hue_shift: default_hue_shift(),
             min_contrast_ratio: default_min_contrast_ratio(),
+            contrast_level: default_contrast_level(),
+            color_harmony: default_color_harmony(),
         };
         if let Some(table) = value.get("algorithm").and_then(|v| v.as_table()) {
             if let Some(v) = table.get("contrast_threshold").and_then(|v| v.as_float()) {
@@ -112,6 +130,12 @@ impl ConfigRoot {
             }
             if let Some(v) = table.get("min_contrast_ratio").and_then(|v| v.as_float()) {
                 algorithm.min_contrast_ratio = v;
+            }
+            if let Some(v) = table.get("contrast_level").and_then(|v| v.as_float()) {
+                algorithm.contrast_level = v;
+            }
+            if let Some(v) = table.get("color_harmony").and_then(|v| v.as_str()) {
+                algorithm.color_harmony = v.to_string();
             }
         }
 

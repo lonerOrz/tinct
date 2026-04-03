@@ -10,7 +10,8 @@
 
 use std::collections::HashMap;
 
-use super::wsmeans::{hue_distance, lab_distance_squared, lab_to_rgb, rgb_to_lab};
+use super::wsmeans::{hue_distance, lab_distance_squared, lab_to_rgb, rgb_to_argb, rgb_to_lab};
+use material_colors::hct::Hct;
 
 /// RGB pixel tuple.
 pub type Rgb = (u8, u8, u8);
@@ -164,23 +165,14 @@ fn circular_hue_diff(h1: f64, h2: f64) -> f64 {
     diff.min(360.0 - diff)
 }
 
-/// Estimate chroma from RGB.
+/// Estimate chroma from RGB using HCT color space.
 pub fn estimate_chroma(r: u8, g: u8, b: u8) -> f64 {
-    let (l, a, bv) = rgb_to_lab(r, g, b);
-    let _ = l;
-    (a * a + bv * bv).sqrt()
+    Hct::new(rgb_to_argb(r, g, b)).get_chroma()
 }
 
-/// Estimate hue from RGB.
+/// Estimate hue from RGB using HCT color space.
 fn estimate_hue(r: u8, g: u8, b: u8) -> f64 {
-    let (l, a, bv) = rgb_to_lab(r, g, b);
-    let _ = l;
-    let hue_rad = bv.atan2(a);
-    let mut hue_deg = hue_rad.to_degrees();
-    if hue_deg < 0.0 {
-        hue_deg += 360.0;
-    }
-    hue_deg
+    Hct::new(rgb_to_argb(r, g, b)).get_hue()
 }
 
 /// Score colors prioritizing chroma (vibrancy) over area coverage.

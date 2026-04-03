@@ -20,5 +20,5 @@ mod types;
 
 pub use adapter::LegacyPaletteGenerator;
 pub use generator::{generate_palette, generate_palette_with_params};
-pub use params::AlgorithmParameters;
+pub use params::{AlgorithmParameters, ColorHarmony};
 pub use types::{ColorEntry, ColorFormat, Palette};
