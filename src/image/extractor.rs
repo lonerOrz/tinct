@@ -24,9 +24,10 @@ use super::reader::{self, ResizeFilter};
 use super::wsmeans;
 
 /// Supported scheme types for color extraction.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize, Default)]
 pub enum SchemeType {
     // M3 schemes (Wu + Score)
+    #[default]
     TonalSpot,
     Content,
     FruitSalad,

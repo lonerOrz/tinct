@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Image extraction configuration
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct ImageConfig {
+    /// Scheme type for color extraction (tonal-spot, vibrant, faithful, etc.)
+    #[serde(default)]
+    pub scheme_type: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlgorithmConfig {
     /// Color contrast threshold (0.0-1.0)
@@ -62,6 +70,8 @@ pub struct ConfigGroup {
 #[derive(Debug)]
 pub struct ConfigRoot {
     pub algorithm: AlgorithmConfig,
+    #[allow(dead_code)]
+    pub image: ImageConfig,
     pub groups: HashMap<String, HashMap<String, ConfigSection>>,
 }
 
@@ -105,12 +115,20 @@ impl ConfigRoot {
             }
         }
 
+        // Extract image config if present
+        let mut image = ImageConfig::default();
+        if let Some(table) = value.get("image").and_then(|v| v.as_table()) {
+            if let Some(v) = table.get("scheme_type").and_then(|v| v.as_str()) {
+                image.scheme_type = Some(v.to_string());
+            }
+        }
+
         // Extract template groups - process tables that contain template sections
         let mut groups = HashMap::new();
         if let Value::Table(table) = &value {
             for (group_key, group_value) in table {
-                // Skip the algorithm section
-                if group_key != "algorithm" {
+                // Skip the algorithm and image sections
+                if group_key != "algorithm" && group_key != "image" {
                     // Process if this is a table containing template sections
                     if let Value::Table(sub_table) = group_value {
                         let mut section_map = HashMap::new();
@@ -146,7 +164,11 @@ impl ConfigRoot {
 
         // No debug output in release version - only for development
 
-        Ok(ConfigRoot { algorithm, groups })
+        Ok(ConfigRoot {
+            algorithm,
+            image,
+            groups,
+        })
     }
 }
 
