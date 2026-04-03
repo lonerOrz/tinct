@@ -2,3 +2,6 @@ target/
 result
 test/
 AGENTS.md
+.sediment/
+org/
+tinct.sh

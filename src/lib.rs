@@ -15,6 +15,9 @@ pub mod palette;
 pub mod template;
 pub mod theme;
 
+// Image-based color extraction (wallpaper support)
+pub mod image;
+
 // Core utilities (kept for backward compatibility and shared functionality)
 pub mod color;
 pub mod config;
@@ -38,6 +41,8 @@ pub use core::{
 
 // New module re-exports
 pub use output::{FileOutput, OutputRegistry, TerminalOutput};
-pub use palette::{AlgorithmParameters, ColorEntry, ColorFormat, LegacyPaletteGenerator, Palette};
+pub use palette::{
+    AlgorithmParameters, ColorEntry, ColorFormat, ColorHarmony, LegacyPaletteGenerator, Palette,
+};
 pub use template::{Filter as TemplateFilter, TemplateEngineRegistry, TemplateProcessor};
 pub use theme::{JsonThemeLoader, ThemeLoaderRegistry};

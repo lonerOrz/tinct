@@ -36,7 +36,7 @@ use material_colors::palette::TonalPalette;
 use serde_json::Value;
 
 use super::color_parser::create_color_format;
-use super::params::AlgorithmParameters;
+use super::params::{AlgorithmParameters, ColorHarmony};
 use super::types::{ColorEntry, Palette};
 
 /// Generate color palette from theme data using HCT color space
@@ -59,10 +59,9 @@ pub fn generate_palette(
     // Parse seed color from hex
     let seed_argb = parse_hex_color(seed_hex)?;
 
-    // Generate scheme using material-colors
-    let scheme = generate_scheme(seed_argb, is_dark_mode);
+    let scheme =
+        generate_scheme_with_params(seed_argb, is_dark_mode, &AlgorithmParameters::default());
 
-    // Convert scheme to our Palette format
     scheme_to_palette(&scheme, is_dark_mode, theme)
 }
 
@@ -99,42 +98,6 @@ fn parse_hex_color(hex: &str) -> Result<Argb, String> {
     u32::from_str_radix(hex, 16)
         .map(Argb::from_u32)
         .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))
-}
-
-/// Generate a Material You scheme from a seed color
-fn generate_scheme(seed: Argb, is_dark_mode: bool) -> DynamicScheme {
-    // Create HCT from seed
-    let hct = Hct::new(seed);
-    let hue = hct.get_hue();
-    let chroma = hct.get_chroma();
-
-    // Calculate secondary hue based on seed hue ranges (MD3 algorithm)
-    let secondary_hue = calculate_secondary_hue(hue);
-
-    // Calculate tertiary hue based on seed hue ranges (MD3 algorithm)
-    let tertiary_hue = calculate_tertiary_hue(hue);
-
-    // Create tonal palettes with improved chroma ratios
-    let primary = TonalPalette::from_hue_and_chroma(hue, chroma);
-    let secondary = TonalPalette::from_hue_and_chroma(secondary_hue, chroma * 0.65);
-    let tertiary = TonalPalette::from_hue_and_chroma(tertiary_hue, chroma * 0.85);
-    let neutral = TonalPalette::from_hue_and_chroma(hue, chroma * 0.4);
-    let neutral_variant = TonalPalette::from_hue_and_chroma(hue, chroma * 0.5);
-
-    // Create dynamic scheme with all required parameters
-    DynamicScheme::new(
-        seed,
-        Some(hct),
-        Variant::Fidelity,
-        is_dark_mode,
-        None,
-        primary,
-        secondary,
-        tertiary,
-        neutral,
-        neutral_variant,
-        None,
-    )
 }
 
 /// Calculate secondary hue based on MD3 algorithm
@@ -201,36 +164,61 @@ fn generate_scheme_with_params(
     is_dark_mode: bool,
     params: &AlgorithmParameters,
 ) -> DynamicScheme {
-    // Create HCT from seed
     let hct = Hct::new(seed);
+    let base_hue = hct.get_hue();
+    let base_chroma = hct.get_chroma();
 
-    // Apply hue shift
-    let shifted_hue = (hct.get_hue() + params.hue_shift as f64) % 360.0;
-    let shifted_hue = if shifted_hue < 0.0 {
-        shifted_hue + 360.0
-    } else {
-        shifted_hue
+    // Calculate secondary/tertiary hues based on harmony mode
+    let (secondary_base_hue, tertiary_base_hue) = match params.color_harmony {
+        ColorHarmony::Md3 => (
+            calculate_secondary_hue(base_hue),
+            calculate_tertiary_hue(base_hue),
+        ),
+        ColorHarmony::Analogous => ((base_hue + 15.0) % 360.0, (base_hue + 30.0) % 360.0),
+        ColorHarmony::Complementary => ((base_hue + 180.0) % 360.0, (base_hue + 180.0) % 360.0),
+        ColorHarmony::Triadic => ((base_hue + 120.0) % 360.0, (base_hue + 240.0) % 360.0),
+        ColorHarmony::SplitComplementary => {
+            ((base_hue + 150.0) % 360.0, (base_hue + 210.0) % 360.0)
+        }
     };
+
+    // Then apply hue shift on top
+    let apply_shift =
+        |hue: f64| -> f64 { ((hue + params.hue_shift as f64) % 360.0 + 360.0) % 360.0 };
+
+    let primary_hue = apply_shift(base_hue);
+    let secondary_hue = apply_shift(secondary_base_hue);
+    let tertiary_hue = apply_shift(tertiary_base_hue);
+    let neutral_hue = primary_hue;
+    let neutral_variant_hue = primary_hue;
 
     // Apply saturation adjustment (modify chroma)
     let chroma_multiplier = 1.0 + (params.saturation_adjustment as f64 / 100.0);
-    let adjusted_chroma = (hct.get_chroma() * chroma_multiplier).max(0.0);
+    let adjusted_chroma = (base_chroma * chroma_multiplier).max(0.0);
 
-    // Create tonal palettes with adjusted hue and chroma
-    let primary = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma);
-    let secondary = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma * 0.6);
-    let tertiary =
-        TonalPalette::from_hue_and_chroma((shifted_hue + 60.0) % 360.0, adjusted_chroma * 0.8);
-    let neutral = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma * 0.4);
-    let neutral_variant = TonalPalette::from_hue_and_chroma(shifted_hue, adjusted_chroma * 0.5);
+    // Create tonal palettes with official MD3 Fidelity chroma formulas
+    // Secondary: max(chroma - 32, chroma * 0.5)
+    let secondary_chroma = (adjusted_chroma - 32.0).max(adjusted_chroma * 0.5).max(0.0);
+    // Tertiary: uses complement hue with full chroma
+    let tertiary_chroma = adjusted_chroma;
+    // Neutral: chroma / 8.0
+    let neutral_chroma = adjusted_chroma / 8.0;
+    // NeutralVariant: chroma / 8.0 + 4.0
+    let neutral_variant_chroma = adjusted_chroma / 8.0 + 4.0;
 
-    // Create dynamic scheme
+    let primary = TonalPalette::from_hue_and_chroma(primary_hue, adjusted_chroma);
+    let secondary = TonalPalette::from_hue_and_chroma(secondary_hue, secondary_chroma);
+    let tertiary = TonalPalette::from_hue_and_chroma(tertiary_hue, tertiary_chroma);
+    let neutral = TonalPalette::from_hue_and_chroma(neutral_hue, neutral_chroma);
+    let neutral_variant =
+        TonalPalette::from_hue_and_chroma(neutral_variant_hue, neutral_variant_chroma);
+
     DynamicScheme::new(
         seed,
-        Some(Hct::from(shifted_hue, adjusted_chroma, hct.get_tone())),
+        Some(Hct::from(primary_hue, adjusted_chroma, hct.get_tone())),
         Variant::Fidelity,
         is_dark_mode,
-        None,
+        Some(params.contrast_level),
         primary,
         secondary,
         tertiary,

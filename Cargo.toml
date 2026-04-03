@@ -32,6 +32,8 @@ colored = "2.1"
 glob = "0.3"
 thiserror = "1.0"
 material-colors = "0.4.2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+rayon = "1.10"
 
 [dev-dependencies]
 tempfile = "3.0"

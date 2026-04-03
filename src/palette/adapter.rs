@@ -1,7 +1,7 @@
 //! Adapter for the legacy palette generator module
 
 use crate::core::{ColorFormat, Error, Mode, PaletteGenerator, Result};
-use crate::palette::{generate_palette_with_params, AlgorithmParameters, ColorEntry};
+use crate::palette::{generate_palette_with_params, AlgorithmParameters, ColorEntry, ColorHarmony};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -23,6 +23,8 @@ impl LegacyPaletteGenerator {
                 lightness_adjustment: 0,
                 hue_shift: 0,
                 min_contrast_ratio: 4.5,
+                contrast_level: 0.0,
+                color_harmony: ColorHarmony::Md3,
             },
         }
     }
@@ -262,6 +264,8 @@ mod tests {
             lightness_adjustment: 5,
             hue_shift: 15,
             min_contrast_ratio: 5.0,
+            contrast_level: 0.0,
+            color_harmony: ColorHarmony::Md3,
         };
         let generator = LegacyPaletteGenerator::new(params.clone());
         assert_eq!(generator.params.contrast_threshold, 0.2);
@@ -332,8 +336,10 @@ mod tests {
             contrast_threshold: 0.15,
             saturation_adjustment: 0,
             lightness_adjustment: 0,
-            hue_shift: 180, // 180 degree shift
+            hue_shift: 180,
             min_contrast_ratio: 4.5,
+            contrast_level: 0.0,
+            color_harmony: ColorHarmony::Md3,
         };
         let generator = LegacyPaletteGenerator::new(params);
         let theme = json!({
@@ -353,10 +359,12 @@ mod tests {
     fn test_legacy_palette_generator_generate_with_saturation() {
         let params = AlgorithmParameters {
             contrast_threshold: 0.15,
-            saturation_adjustment: 50, // +50% saturation
+            saturation_adjustment: 50,
             lightness_adjustment: 0,
             hue_shift: 0,
             min_contrast_ratio: 4.5,
+            contrast_level: 0.0,
+            color_harmony: ColorHarmony::Md3,
         };
         let generator = LegacyPaletteGenerator::new(params);
         let theme = json!({

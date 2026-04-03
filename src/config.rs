@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Image extraction configuration
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct ImageConfig {
+    /// Scheme type for color extraction (tonal-spot, vibrant, faithful, etc.)
+    #[serde(default)]
+    pub scheme_type: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlgorithmConfig {
     /// Color contrast threshold (0.0-1.0)
@@ -22,6 +30,14 @@ pub struct AlgorithmConfig {
     /// Minimum contrast ratio for readability
     #[serde(default = "default_min_contrast_ratio")]
     pub min_contrast_ratio: f64,
+
+    /// MD3 contrast level (-1.0 to 1.0)
+    #[serde(default = "default_contrast_level")]
+    pub contrast_level: f64,
+
+    /// Color harmony mode (md3, analogous, complementary, triadic, split-complementary)
+    #[serde(default = "default_color_harmony")]
+    pub color_harmony: String,
 }
 
 fn default_contrast_threshold() -> f64 {
@@ -44,6 +60,14 @@ fn default_min_contrast_ratio() -> f64 {
     4.5
 }
 
+fn default_contrast_level() -> f64 {
+    0.0
+}
+
+fn default_color_harmony() -> String {
+    "md3".to_string()
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConfigSection {
     pub input_path: String,
@@ -62,6 +86,8 @@ pub struct ConfigGroup {
 #[derive(Debug)]
 pub struct ConfigRoot {
     pub algorithm: AlgorithmConfig,
+    #[allow(dead_code)]
+    pub image: ImageConfig,
     pub groups: HashMap<String, HashMap<String, ConfigSection>>,
 }
 
@@ -80,6 +106,8 @@ impl ConfigRoot {
             lightness_adjustment: default_lightness_adjustment(),
             hue_shift: default_hue_shift(),
             min_contrast_ratio: default_min_contrast_ratio(),
+            contrast_level: default_contrast_level(),
+            color_harmony: default_color_harmony(),
         };
         if let Some(table) = value.get("algorithm").and_then(|v| v.as_table()) {
             if let Some(v) = table.get("contrast_threshold").and_then(|v| v.as_float()) {
@@ -103,14 +131,28 @@ impl ConfigRoot {
             if let Some(v) = table.get("min_contrast_ratio").and_then(|v| v.as_float()) {
                 algorithm.min_contrast_ratio = v;
             }
+            if let Some(v) = table.get("contrast_level").and_then(|v| v.as_float()) {
+                algorithm.contrast_level = v;
+            }
+            if let Some(v) = table.get("color_harmony").and_then(|v| v.as_str()) {
+                algorithm.color_harmony = v.to_string();
+            }
+        }
+
+        // Extract image config if present
+        let mut image = ImageConfig::default();
+        if let Some(table) = value.get("image").and_then(|v| v.as_table()) {
+            if let Some(v) = table.get("scheme_type").and_then(|v| v.as_str()) {
+                image.scheme_type = Some(v.to_string());
+            }
         }
 
         // Extract template groups - process tables that contain template sections
         let mut groups = HashMap::new();
         if let Value::Table(table) = &value {
             for (group_key, group_value) in table {
-                // Skip the algorithm section
-                if group_key != "algorithm" {
+                // Skip the algorithm and image sections
+                if group_key != "algorithm" && group_key != "image" {
                     // Process if this is a table containing template sections
                     if let Value::Table(sub_table) = group_value {
                         let mut section_map = HashMap::new();
@@ -146,7 +188,11 @@ impl ConfigRoot {
 
         // No debug output in release version - only for development
 
-        Ok(ConfigRoot { algorithm, groups })
+        Ok(ConfigRoot {
+            algorithm,
+            image,
+            groups,
+        })
     }
 }
 
