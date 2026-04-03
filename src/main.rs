@@ -17,10 +17,19 @@ use clap::Parser;
 use colored::*;
 use serde_json::json;
 use tinct::core::{Mode, OutputFormat, TemplateEngine, ThemeLoader};
+use tinct::image::extract_source_color;
 use tinct::output::FileOutput;
 use tinct::palette::LegacyPaletteGenerator;
 use tinct::template::TemplateProcessor;
 use tinct::theme::JsonThemeLoader;
+
+/// Convert Argb to hex string.
+fn argb_to_hex(argb: material_colors::color::Argb) -> String {
+    let material_colors::color::Argb {
+        red, green, blue, ..
+    } = argb;
+    format!("#{:02X}{:02X}{:02X}", red, green, blue)
+}
 
 fn main() {
     let args = cli::CliArgs::parse();
@@ -41,10 +50,51 @@ fn main() {
         cli::LogLevel::Verbose => log::LogLevel::Verbose,
     });
 
-    // Create theme data: either from seed or from theme file
+    // Create theme data: either from seed, image, or from theme file
     let theme_data = if let Some(ref seed) = args.seed {
         // Create temporary theme from seed color
         json!({ "seed": seed })
+    } else if let Some(ref image_path) = args.image {
+        // Extract source color from wallpaper image
+        let img_path = Path::new(image_path);
+        if !img_path.exists() {
+            eprintln!("Error: Image not found: {}", image_path);
+            process::exit(1);
+        }
+
+        let scheme_type = args.scheme_type.0;
+
+        if matches!(
+            args.log_level,
+            cli::LogLevel::Normal | cli::LogLevel::Verbose
+        ) {
+            println!(
+                "{}: {} (scheme: {})",
+                "Extracting".blue(),
+                image_path,
+                scheme_type.to_string().yellow()
+            );
+        }
+
+        let source_argb = match extract_source_color(img_path, scheme_type) {
+            Ok(argb) => argb,
+            Err(e) => {
+                eprintln!("Error extracting color from image: {}", e);
+                process::exit(1);
+            }
+        };
+
+        let hex = argb_to_hex(source_argb);
+
+        if matches!(
+            args.log_level,
+            cli::LogLevel::Normal | cli::LogLevel::Verbose
+        ) {
+            println!("{}: {}", "Source color".blue(), hex.green());
+            println!();
+        }
+
+        json!({ "seed": hex })
     } else {
         // Load theme from file
         let theme_file = path_resolver::resolve_theme_path(args.theme.as_ref().unwrap());
@@ -70,10 +120,17 @@ fn main() {
     ) {
         println!("{}", "tinct - Theme Injector".bold());
         println!("{}: {}", "Config".blue(), config_path);
-        if args.seed.is_some() {
-            println!("{}: {}", "Seed".blue(), args.seed.as_ref().unwrap());
-        } else {
-            println!("{}: {}", "Theme".blue(), args.theme.as_ref().unwrap());
+        if let Some(seed) = &args.seed {
+            println!("{}: {}", "Seed".blue(), seed);
+        } else if let Some(image) = &args.image {
+            println!(
+                "{}: {} (scheme: {})",
+                "Image".blue(),
+                image,
+                args.scheme_type.0.to_string().yellow()
+            );
+        } else if let Some(theme) = &args.theme {
+            println!("{}: {}", "Theme".blue(), theme);
         }
         println!("{}: {}", "Mode".blue(), args.mode.to_string().yellow());
         println!();
@@ -117,10 +174,27 @@ fn main() {
 
     // Show preview if requested
     if args.preview {
-        // For seed-based preview, create a temporary theme JSON string
         let preview_result = if let Some(ref seed) = args.seed {
             let temp_theme = json!({ "seed": seed });
             tinct::preview::show_color_preview_from_json(&temp_theme, &args.mode.to_string())
+        } else if let Some(ref image_path) = args.image {
+            // For image-based preview, extract color first
+            let img_path = Path::new(image_path);
+            let scheme_type = args.scheme_type.0;
+            match extract_source_color(img_path, scheme_type) {
+                Ok(argb) => {
+                    let hex = argb_to_hex(argb);
+                    let temp_theme = json!({ "seed": hex });
+                    tinct::preview::show_color_preview_from_json(
+                        &temp_theme,
+                        &args.mode.to_string(),
+                    )
+                }
+                Err(e) => {
+                    eprintln!("Error extracting color from image: {}", e);
+                    process::exit(1);
+                }
+            }
         } else {
             let theme_file = path_resolver::resolve_theme_path(args.theme.as_ref().unwrap());
             tinct::preview::show_color_preview(&theme_file, &args.mode.to_string())

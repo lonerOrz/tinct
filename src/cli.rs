@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::config::ConfigSection;
+use tinct::image::SchemeType;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -20,6 +21,14 @@ pub struct CliArgs {
     #[arg(short, long)]
     pub seed: Option<String>,
 
+    /// Path to wallpaper image for color extraction (PNG/JPG/WebP)
+    #[arg(long)]
+    pub image: Option<String>,
+
+    /// Color scheme type for image extraction
+    #[arg(long, value_name = "SCHEME", default_value = "tonal-spot")]
+    pub scheme_type: SchemeTypeCli,
+
     /// Theme mode override
     #[arg(short, long, value_enum, default_value = "dark")]
     pub mode: ThemeMode,
@@ -35,6 +44,51 @@ pub struct CliArgs {
     /// Logging level: quiet, normal, verbose
     #[arg(long, value_enum, default_value = "normal")]
     pub log_level: LogLevel,
+}
+
+/// CLI wrapper for SchemeType with clap integration.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SchemeTypeCli(pub SchemeType);
+
+impl clap::ValueEnum for SchemeTypeCli {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self(SchemeType::TonalSpot),
+            Self(SchemeType::Content),
+            Self(SchemeType::FruitSalad),
+            Self(SchemeType::Rainbow),
+            Self(SchemeType::Monochrome),
+            Self(SchemeType::Vibrant),
+            Self(SchemeType::Faithful),
+            Self(SchemeType::Dysfunctional),
+            Self(SchemeType::Muted),
+        ]
+    }
+
+    fn to_possible_value<'a>(&self) -> Option<clap::builder::PossibleValue> {
+        let name = match self.0 {
+            SchemeType::TonalSpot => "tonal-spot",
+            SchemeType::Content => "content",
+            SchemeType::FruitSalad => "fruit-salad",
+            SchemeType::Rainbow => "rainbow",
+            SchemeType::Monochrome => "monochrome",
+            SchemeType::Vibrant => "vibrant",
+            SchemeType::Faithful => "faithful",
+            SchemeType::Dysfunctional => "dysfunctional",
+            SchemeType::Muted => "muted",
+        };
+        Some(clap::builder::PossibleValue::new(name))
+    }
+}
+
+impl std::str::FromStr for SchemeTypeCli {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SchemeType::parse(s)
+            .map(SchemeTypeCli)
+            .ok_or_else(|| format!("Invalid scheme type: {}", s))
+    }
 }
 
 #[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
@@ -60,13 +114,24 @@ pub enum LogLevel {
 }
 
 impl CliArgs {
-    /// Validate that either --theme or --seed is provided (mutually exclusive)
+    /// Validate that either --theme, --seed, or --image is provided
     pub fn validate(&self) -> Result<(), String> {
-        if self.theme.is_none() && self.seed.is_none() {
-            return Err("Either --theme or --seed must be provided".to_string());
+        let has_theme = self.theme.is_some();
+        let has_seed = self.seed.is_some();
+        let has_image = self.image.is_some();
+
+        let count = [has_theme, has_seed, has_image]
+            .iter()
+            .filter(|&&x| x)
+            .count();
+
+        if count == 0 {
+            return Err("Either --theme, --seed, or --image must be provided".to_string());
         }
-        if self.theme.is_some() && self.seed.is_some() {
-            return Err("--theme and --seed are mutually exclusive, use only one".to_string());
+        if count > 1 {
+            return Err(
+                "--theme, --seed, and --image are mutually exclusive, use only one".to_string(),
+            );
         }
         Ok(())
     }
@@ -265,6 +330,8 @@ mod tests {
             config: Some("custom.toml".to_string()),
             theme: Some("mytheme".to_string()),
             seed: None,
+            image: None,
+            scheme_type: SchemeTypeCli(SchemeType::TonalSpot),
             mode: ThemeMode::Light,
             preview: true,
             skip_sequences: false,

@@ -15,6 +15,9 @@ pub mod palette;
 pub mod template;
 pub mod theme;
 
+// Image-based color extraction (wallpaper support)
+pub mod image;
+
 // Core utilities (kept for backward compatibility and shared functionality)
 pub mod color;
 pub mod config;
