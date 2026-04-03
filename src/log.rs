@@ -82,10 +82,6 @@ pub mod error {
     pub fn hook_error(section: &str, error: &str) {
         message(section, &format!("Error executing hook command: {}", error));
     }
-
-    pub fn theme_error(section: &str, error: &str) {
-        message(section, &format!("Error processing theme: {}", error));
-    }
 }
 
 // Hook module
