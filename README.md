@@ -11,10 +11,13 @@ tinct is a command-line utility that generates themed configuration files based 
 ## Features
 
 - Material Design 3 compliant color generation using official algorithms
+- **Wallpaper-based color extraction** — extract source colors from images with multiple scheme types
 - Support for light and dark themes
-- Template-based theme injection
+- Template-based theme injection with **parallel processing** (10x faster)
 - Color preview functionality
 - Configurable via TOML files with algorithm parameters
+  - `contrast_level` for accessibility
+  - `color_harmony` modes (md3, analogous, complementary, triadic, split-complementary)
 - Support for post-processing hooks
 - Modular architecture for easy extensibility
 - **Smart color generation** from single seed color
@@ -84,8 +87,12 @@ Options:
 
 - `-c, --config`: Path to the TOML config file (defaults to `~/.config/tinct/config.toml`)
 - `-t, --theme`: Path to theme.json file or theme name in themes/ folder
+- `-s, --seed`: Seed color for generating palette (e.g., `"#7aa2f7"`)
+- `-i, --image`: Path to wallpaper image for color extraction (PNG/JPG/WebP)
 - `-m, --mode`: Theme mode override (dark/light, defaults to dark)
 - `-p, --preview`: Show color preview instead of processing templates
+- `--scheme-type`: Color scheme for image extraction (tonal-spot, vibrant, faithful, muted, dysfunctional, content, fruit-salad, rainbow, monochrome)
+- `--skip-sequences`: Skip sending ANSI escape sequences to update terminal colors
 - `--log-level`: Logging level (quiet/normal/verbose, defaults to normal)
 
 ## Theme Format
@@ -160,6 +167,8 @@ You can adjust the color generation algorithm in your `config.toml`:
 [algorithm]
 hue_shift = 0               # Rotate hue by degrees (-180 to 180)
 saturation_adjustment = 0   # Adjust saturation percentage (-100 to 100)
+contrast_level = 0.0        # MD3 contrast level (-1.0 to 1.0)
+color_harmony = "md3"       # Harmony mode (md3, analogous, complementary, triadic, split-complementary)
 ```
 
 **Algorithm parameters:**
@@ -168,6 +177,18 @@ saturation_adjustment = 0   # Adjust saturation percentage (-100 to 100)
 |-----------|-------|---------|--------|
 | `hue_shift` | -180 ~ 180 | `0` | Rotates all colors' hue |
 | `saturation_adjustment` | -100 ~ 100 | `0` | Adjusts color saturation (chroma) |
+| `contrast_level` | -1.0 ~ 1.0 | `0.0` | MD3 contrast level for accessibility |
+| `color_harmony` | see below | `md3` | Secondary/tertiary hue relationships |
+
+**Color Harmony modes:**
+
+| Mode | Description | Secondary Hue | Tertiary Hue |
+|------|-------------|---------------|--------------|
+| `md3` | Material Design 3 standard | MD3 hue table (2-20°) | MD3 hue table (5-40°) |
+| `analogous` | Close, harmonious colors | +15° | +30° |
+| `complementary` | Opposite colors | +180° | +180° |
+| `triadic` | Evenly spaced | +120° | +240° |
+| `split-complementary` | Split opposite | +150° | +210° |
 
 **Examples:**
 
@@ -186,6 +207,31 @@ saturation_adjustment = -20
 [algorithm]
 saturation_adjustment = 50
 ```
+
+### Image Configuration
+
+Extract colors from wallpaper images using the `[image]` section:
+
+```toml
+[image]
+scheme_type = "vibrant"    # Color extraction scheme
+```
+
+**Scheme types:**
+
+| Scheme | Pipeline | Description |
+|--------|----------|-------------|
+| `tonal-spot` | Wu + WSMeans + Score | MD3 standard, balanced |
+| `vibrant` | K-means + Chroma | High saturation colors |
+| `faithful` | K-means + Count | Area-dominant colors |
+| `muted` | K-means + Muted | Low saturation, subtle |
+| `dysfunctional` | K-means + Dysfunctional | 2nd most dominant family |
+| `content` | Wu + Score | MD3 Content variant |
+| `fruit-salad` | Wu + Score | MD3 Fruit Salad variant |
+| `rainbow` | Wu + Score | MD3 Rainbow variant |
+| `monochrome` | Wu + Score | MD3 Monochrome variant |
+
+**Priority chain:** CLI `--scheme-type` > config `[image].scheme_type` > default (`tonal-spot`)
 
 **Notes:**
 - `hue_shift = 30` rotates colors 30° toward orange

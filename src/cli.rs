@@ -22,7 +22,7 @@ pub struct CliArgs {
     pub seed: Option<String>,
 
     /// Path to wallpaper image for color extraction (PNG/JPG/WebP)
-    #[arg(long)]
+    #[arg(short = 'i', long)]
     pub image: Option<String>,
 
     /// Color scheme type for image extraction (tonal-spot, vibrant, faithful, etc.)
