@@ -25,9 +25,10 @@ pub struct CliArgs {
     #[arg(long)]
     pub image: Option<String>,
 
-    /// Color scheme type for image extraction
-    #[arg(long, value_name = "SCHEME", default_value = "tonal-spot")]
-    pub scheme_type: SchemeTypeCli,
+    /// Color scheme type for image extraction (tonal-spot, vibrant, faithful, etc.)
+    /// If not provided, uses config file or defaults to tonal-spot
+    #[arg(long, value_name = "SCHEME")]
+    pub scheme_type: Option<SchemeTypeCli>,
 
     /// Theme mode override
     #[arg(short, long, value_enum, default_value = "dark")]
@@ -331,7 +332,7 @@ mod tests {
             theme: Some("mytheme".to_string()),
             seed: None,
             image: None,
-            scheme_type: SchemeTypeCli(SchemeType::TonalSpot),
+            scheme_type: Some(SchemeTypeCli(SchemeType::TonalSpot)),
             mode: ThemeMode::Light,
             preview: true,
             skip_sequences: false,

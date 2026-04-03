@@ -18,10 +18,8 @@ use colored::*;
 use serde_json::json;
 use tinct::core::{Mode, OutputFormat, TemplateEngine, ThemeLoader};
 use tinct::image::extract_source_color;
-use tinct::output::FileOutput;
-use tinct::palette::LegacyPaletteGenerator;
-use tinct::template::TemplateProcessor;
-use tinct::theme::JsonThemeLoader;
+use tinct::image::SchemeType;
+use tinct::{FileOutput, JsonThemeLoader, LegacyPaletteGenerator, TemplateProcessor};
 
 /// Convert Argb to hex string.
 fn argb_to_hex(argb: material_colors::color::Argb) -> String {
@@ -29,6 +27,20 @@ fn argb_to_hex(argb: material_colors::color::Argb) -> String {
         red, green, blue, ..
     } = argb;
     format!("#{:02X}{:02X}{:02X}", red, green, blue)
+}
+
+/// Resolve scheme type: CLI arg > config file > default
+fn resolve_scheme_type(
+    cli_scheme: &Option<cli::SchemeTypeCli>,
+    config_scheme: &Option<String>,
+) -> SchemeType {
+    if let Some(cli) = cli_scheme {
+        cli.0
+    } else if let Some(cfg) = config_scheme {
+        SchemeType::parse(cfg).unwrap_or(SchemeType::TonalSpot)
+    } else {
+        SchemeType::TonalSpot
+    }
 }
 
 fn main() {
@@ -42,6 +54,13 @@ fn main() {
 
     // Determine the config file path
     let config_path = path_resolver::resolve_config_file_path(args.config.as_ref());
+
+    // Read config early for image settings
+    let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
+    let config_root =
+        config::ConfigRoot::parse(&config_content).expect("Invalid TOML format in config file");
+    let image_config = config_root.image.clone();
+    let alg_params = config_root.algorithm.clone();
 
     // Initialize global logger
     log::init_logger(match args.log_level {
@@ -62,7 +81,8 @@ fn main() {
             process::exit(1);
         }
 
-        let scheme_type = args.scheme_type.0;
+        // CLI arg > config file > default
+        let scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);
 
         if matches!(
             args.log_level,
@@ -123,11 +143,12 @@ fn main() {
         if let Some(seed) = &args.seed {
             println!("{}: {}", "Seed".blue(), seed);
         } else if let Some(image) = &args.image {
+            let scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);
             println!(
                 "{}: {} (scheme: {})",
                 "Image".blue(),
                 image,
-                args.scheme_type.0.to_string().yellow()
+                scheme_type.to_string().yellow()
             );
         } else if let Some(theme) = &args.theme {
             println!("{}: {}", "Theme".blue(), theme);
@@ -136,12 +157,6 @@ fn main() {
         println!();
     }
 
-    // Read TOML config
-    let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
-    let config_root =
-        config::ConfigRoot::parse(&config_content).expect("Invalid TOML format in config file");
-
-    let alg_params = config_root.algorithm.clone();
     let mut config = config_root.into_flat_config();
 
     // Resolve paths relative to config file
@@ -180,7 +195,7 @@ fn main() {
         } else if let Some(ref image_path) = args.image {
             // For image-based preview, extract color first
             let img_path = Path::new(image_path);
-            let scheme_type = args.scheme_type.0;
+            let scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);
             match extract_source_color(img_path, scheme_type) {
                 Ok(argb) => {
                     let hex = argb_to_hex(argb);
