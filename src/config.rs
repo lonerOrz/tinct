@@ -68,7 +68,7 @@ fn default_color_harmony() -> String {
     "md3".to_string()
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConfigSection {
     pub input_path: String,
     pub output_path: String,
@@ -83,7 +83,7 @@ pub struct ConfigGroup {
 }
 
 // Use a completely different approach - parse algorithm and templates separately
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigRoot {
     pub algorithm: AlgorithmConfig,
     #[allow(dead_code)]
