@@ -38,15 +38,13 @@ pub use core::{
 };
 
 // New module re-exports
-pub use output::{FileOutput, OutputRegistry, TerminalOutput};
+pub use output::{FileOutput, TerminalOutput};
 pub use palette::{
     AlgorithmParameters, ColorEntry, ColorFormat, ColorHarmony, LegacyPaletteGenerator, Palette,
 };
 pub use pipeline::{LogVerbosity, Pipeline, PipelineConfig};
-pub use template::{
-    ColorFormatType, FilterContext, FilterRegistry, TemplateEngineRegistry, TemplateProcessor,
-};
-pub use theme::{JsonThemeLoader, ThemeLoaderRegistry};
+pub use template::{ColorFormatType, FilterContext, FilterRegistry, TemplateProcessor};
+pub use theme::JsonThemeLoader;
 
 // Shared types between binary and library
 pub use image::{extract_source_color, SchemeType};

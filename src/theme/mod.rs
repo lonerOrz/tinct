@@ -4,7 +4,5 @@
 //! from various sources.
 
 mod json;
-mod loader;
 
 pub use json::JsonThemeLoader;
-pub use loader::ThemeLoaderRegistry;
