@@ -6,18 +6,13 @@
 //!
 //! Reference: material-color-utilities quantizer pipeline
 
-use material_colors::color::Argb;
-use material_colors::hct::Hct;
 use std::collections::HashMap;
+
+use crate::color::{estimate_chroma, estimate_hue, hue_distance};
 
 // ============================================================================
 // LCG Random for cluster initialization
 // ============================================================================
-
-/// Convert RGB components to an opaque ARGB integer.
-pub fn rgb_to_argb(r: u8, g: u8, b: u8) -> Argb {
-    Argb::from_u32(0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32))
-}
 
 struct Random {
     seed: u64,
@@ -382,16 +377,6 @@ const CUTOFF_CHROMA: f64 = 5.0;
 const CUTOFF_EXCITED_PROPORTION: f64 = 0.01;
 const FALLBACK_COLOR_ARGB: u32 = 0xFF4285F4; // Google Blue
 
-/// Simplified CAM16 chroma estimation from RGB (for scoring).
-pub fn estimate_chroma_from_rgb(r: u8, g: u8, b: u8) -> f64 {
-    Hct::new(rgb_to_argb(r, g, b)).get_chroma()
-}
-
-/// Estimate hue angle from RGB (0-360 degrees) using HCT.
-fn estimate_hue_from_rgb(r: u8, g: u8, b: u8) -> f64 {
-    Hct::new(rgb_to_argb(r, g, b)).get_hue()
-}
-
 /// Rank colors based on suitability for UI themes.
 ///
 /// Given a map of colors to population counts, removes unsuitable colors
@@ -416,8 +401,8 @@ pub fn score_colors(
 
     for (&argb, &population) in color_to_population {
         let (r, g, b) = rgb_from_argb(argb);
-        let hue = estimate_hue_from_rgb(r, g, b);
-        let chroma = estimate_chroma_from_rgb(r, g, b);
+        let hue = estimate_hue(r, g, b);
+        let chroma = estimate_chroma(r, g, b);
         let hue_bucket = (hue.round() as usize) % 360;
 
         colors_data.push((argb, hue, chroma));
@@ -484,14 +469,14 @@ pub fn score_colors(
         chosen.clear();
         for &(argb, score, _chroma) in &scored {
             let _ = score;
-            let h = estimate_hue_from_rgb(
+            let h = estimate_hue(
                 ((argb >> 16) & 0xFF) as u8,
                 ((argb >> 8) & 0xFF) as u8,
                 (argb & 0xFF) as u8,
             );
 
             let is_far_enough = chosen.iter().all(|&chosen_argb| {
-                let ch = estimate_hue_from_rgb(
+                let ch = estimate_hue(
                     ((chosen_argb >> 16) & 0xFF) as u8,
                     ((chosen_argb >> 8) & 0xFF) as u8,
                     (chosen_argb & 0xFF) as u8,
@@ -522,13 +507,6 @@ pub fn score_colors(
     }
 
     chosen
-}
-
-/// Calculate circular hue distance (0-180).
-#[inline]
-pub fn hue_distance(h1: f64, h2: f64) -> f64 {
-    let diff = (h1 - h2).abs();
-    diff.min(360.0 - diff)
 }
 
 #[cfg(test)]

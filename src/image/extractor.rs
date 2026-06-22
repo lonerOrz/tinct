@@ -18,10 +18,11 @@ use material_colors::color::Argb;
 use std::collections::HashMap;
 use std::path::Path;
 
-use super::kmeans::{self, Rgb};
+use super::kmeans;
 use super::quantizer;
 use super::reader::{self, ResizeFilter};
 use super::wsmeans;
+use crate::color::Rgb;
 
 /// Supported scheme types for color extraction.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize, Default)]
@@ -146,7 +147,7 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<u32, String> {
         let r = ((argb >> 16) & 0xFF) as u8;
         let g = ((argb >> 8) & 0xFF) as u8;
         let b = (argb & 0xFF) as u8;
-        let chroma = wsmeans::estimate_chroma_from_rgb(r, g, b);
+        let chroma = crate::color::estimate_chroma(r, g, b);
         if chroma >= MIN_CHROMA {
             filtered.insert(argb, count);
         }
@@ -183,7 +184,7 @@ fn extract_kmeans_source_color(pixels: &[Rgb], scheme_type: SchemeType) -> Resul
     // For vibrant mode, pre-filter to colorful pixels
     let mut filtered_pixels = sampled.to_vec();
     if matches!(scheme_type, SchemeType::Vibrant) {
-        filtered_pixels.retain(|&(r, g, b)| kmeans::estimate_chroma(r, g, b) >= 5.0);
+        filtered_pixels.retain(|&(r, g, b)| crate::color::estimate_chroma(r, g, b) >= 5.0);
     }
 
     if filtered_pixels.is_empty() {

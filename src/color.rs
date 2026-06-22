@@ -4,6 +4,25 @@ pub type Rgb = (u8, u8, u8);
 /// HSL components as (h, s, l)
 pub type Hsl = (f64, f64, f64);
 
+/// Circular hue distance (0-180).
+#[inline]
+pub fn hue_distance(h1: f64, h2: f64) -> f64 {
+    let diff = (h1 - h2).abs();
+    diff.min(360.0 - diff)
+}
+
+/// Estimate chroma from RGB using HCT color space.
+pub fn estimate_chroma(r: u8, g: u8, b: u8) -> f64 {
+    let argb = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+    material_colors::hct::Hct::new(material_colors::color::Argb::from_u32(argb)).get_chroma()
+}
+
+/// Estimate hue from RGB using HCT color space (0-360 degrees).
+pub fn estimate_hue(r: u8, g: u8, b: u8) -> f64 {
+    let argb = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+    material_colors::hct::Hct::new(material_colors::color::Argb::from_u32(argb)).get_hue()
+}
+
 /// Clamp value between min and max
 pub fn clamp<T: PartialOrd + Copy>(n: T, minn: T, maxn: T) -> T {
     if n < minn {
@@ -277,12 +296,29 @@ mod tests {
 
     #[test]
     fn test_relative_luminance() {
-        // White has luminance of 1.0
         let lum = calculate_relative_luminance(255, 255, 255);
         assert!((lum - 1.0).abs() < 0.001);
 
-        // Black has luminance of 0.0
         let lum = calculate_relative_luminance(0, 0, 0);
         assert!((lum - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_hue_distance() {
+        assert!((hue_distance(0.0, 10.0) - 10.0).abs() < 0.001);
+        assert!((hue_distance(350.0, 10.0) - 20.0).abs() < 0.001);
+        assert!((hue_distance(180.0, 0.0) - 180.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_estimate_chroma() {
+        let chroma = estimate_chroma(255, 0, 0);
+        assert!(chroma > 0.0);
+    }
+
+    #[test]
+    fn test_estimate_hue() {
+        let hue = estimate_hue(255, 0, 0);
+        assert!(hue >= 0.0 && hue <= 360.0);
     }
 }

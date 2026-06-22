@@ -240,13 +240,8 @@ impl Pipeline {
         let results: Vec<_> = sections
             .par_iter()
             .map(|(section_name, section)| {
-                let (success, error) = process_section(
-                    section,
-                    theme,
-                    mode,
-                    &template_engine,
-                    &output,
-                );
+                let (success, error) =
+                    process_section(section, theme, mode, &template_engine, &output);
                 (section_name.clone(), success, error)
             })
             .collect();

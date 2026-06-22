@@ -8,8 +8,7 @@
 use image::imageops::FilterType;
 use std::path::Path;
 
-/// RGB pixel tuple.
-pub type Rgb = (u8, u8, u8);
+pub use crate::color::Rgb;
 
 /// Default resize dimension for color extraction (matches matugen).
 const EXTRACT_SIZE: u32 = 112;

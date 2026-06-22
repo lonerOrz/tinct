@@ -24,9 +24,8 @@ pub fn show_color_preview_from_theme(
 
 /// Display a color preview showing all available colors in the theme as a matrix
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    let palette_gen = std::sync::Arc::new(LegacyPaletteGenerator::new(
-        AlgorithmParameters::default(),
-    ));
+    let palette_gen =
+        std::sync::Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
 
@@ -42,9 +41,8 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
 
 /// Display a color preview from a JSON value (for seed-based preview)
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
-    let palette_gen = std::sync::Arc::new(LegacyPaletteGenerator::new(
-        AlgorithmParameters::default(),
-    ));
+    let palette_gen =
+        std::sync::Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
 
@@ -283,11 +281,12 @@ fn display_md3_cards_grid(colors: &std::collections::HashMap<String, crate::core
                             display_content.on_truecolor(color.red, color.green, color.blue);
 
                         // Choose text color based on contrast
-                        let text_color = if (0.299 * color.red as f64
-                            + 0.587 * color.green as f64
-                            + 0.114 * color.blue as f64)
-                            > 128.0
-                        {
+                        let luminance = crate::color::calculate_relative_luminance(
+                            color.red,
+                            color.green,
+                            color.blue,
+                        );
+                        let text_color = if luminance > 0.1791 {
                             // Dark text for light backgrounds
                             color_block.black()
                         } else {
@@ -350,10 +349,10 @@ fn print_terminal_palette(colors: &std::collections::HashMap<String, crate::core
             let r1 = color1.red;
             let g1 = color1.green;
             let b1 = color1.blue;
-            let luminance1 = 0.299 * r1 as f64 + 0.587 * g1 as f64 + 0.114 * b1 as f64;
+            let luminance1 = crate::color::calculate_relative_luminance(r1, g1, b1);
 
             let block1 = format!(" {:<24} ", key1);
-            let color_block1 = if luminance1 > 128.0 {
+            let color_block1 = if luminance1 > 0.1791 {
                 block1.black().on_truecolor(r1, g1, b1)
             } else {
                 block1.white().on_truecolor(r1, g1, b1)
@@ -368,10 +367,10 @@ fn print_terminal_palette(colors: &std::collections::HashMap<String, crate::core
             let r2 = color2.red;
             let g2 = color2.green;
             let b2 = color2.blue;
-            let luminance2 = 0.299 * r2 as f64 + 0.587 * g2 as f64 + 0.114 * b2 as f64;
+            let luminance2 = crate::color::calculate_relative_luminance(r2, g2, b2);
 
             let block2 = format!(" {:<24} ", key2);
-            let color_block2 = if luminance2 > 128.0 {
+            let color_block2 = if luminance2 > 0.1791 {
                 block2.black().on_truecolor(r2, g2, b2)
             } else {
                 block2.white().on_truecolor(r2, g2, b2)
@@ -425,24 +424,24 @@ mod tests {
     fn test_luminance_calculation_white() {
         let color = create_test_color_format(255, 255, 255);
         let luminance =
-            0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
-        assert!(luminance > 128.0);
+            crate::color::calculate_relative_luminance(color.red, color.green, color.blue);
+        assert!(luminance > 0.5);
     }
 
     #[test]
     fn test_luminance_calculation_black() {
         let color = create_test_color_format(0, 0, 0);
         let luminance =
-            0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
-        assert!(luminance < 128.0);
+            crate::color::calculate_relative_luminance(color.red, color.green, color.blue);
+        assert!(luminance < 0.5);
     }
 
     #[test]
     fn test_luminance_calculation_gray() {
         let color = create_test_color_format(128, 128, 128);
         let luminance =
-            0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
-        assert!((luminance - 128.0).abs() < 1.0);
+            crate::color::calculate_relative_luminance(color.red, color.green, color.blue);
+        assert!(luminance > 0.1 && luminance < 0.5);
     }
 
     #[test]

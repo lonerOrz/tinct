@@ -25,5 +25,6 @@ mod quantizer;
 mod reader;
 mod wsmeans;
 
+pub use crate::color::Rgb;
 pub use extractor::{extract_source_color, SchemeType};
-pub use reader::{read_image, ResizeFilter, Rgb};
+pub use reader::{read_image, ResizeFilter};

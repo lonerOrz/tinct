@@ -10,11 +10,8 @@
 
 use std::collections::HashMap;
 
-use super::wsmeans::{hue_distance, lab_distance_squared, lab_to_rgb, rgb_to_argb, rgb_to_lab};
-use material_colors::hct::Hct;
-
-/// RGB pixel tuple.
-pub type Rgb = (u8, u8, u8);
+use super::wsmeans::{lab_distance_squared, lab_to_rgb, rgb_to_lab};
+use crate::color::{estimate_chroma, estimate_hue, hue_distance, Rgb};
 
 /// Downsample pixels for faster processing.
 pub fn downsample_pixels(pixels: &[Rgb], factor: usize) -> Vec<Rgb> {
@@ -157,22 +154,6 @@ fn hue_to_family(hue: f64) -> usize {
 /// Get the center hue for a family index.
 fn family_center_hue(family: usize) -> f64 {
     [0.0, 45.0, 82.5, 147.5, 230.0, 300.0][family]
-}
-
-/// Circular hue difference (0-180).
-fn circular_hue_diff(h1: f64, h2: f64) -> f64 {
-    let diff = (h1 - h2).abs();
-    diff.min(360.0 - diff)
-}
-
-/// Estimate chroma from RGB using HCT color space.
-pub fn estimate_chroma(r: u8, g: u8, b: u8) -> f64 {
-    Hct::new(rgb_to_argb(r, g, b)).get_chroma()
-}
-
-/// Estimate hue from RGB using HCT color space.
-fn estimate_hue(r: u8, g: u8, b: u8) -> f64 {
-    Hct::new(rgb_to_argb(r, g, b)).get_hue()
 }
 
 /// Score colors prioritizing chroma (vibrancy) over area coverage.
@@ -335,7 +316,7 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
 
     for (family, count) in &family_totals[1..] {
         let family_center = family_center_hue(*family);
-        let hue_diff = circular_hue_diff(dominant_center, family_center);
+        let hue_diff = hue_distance(dominant_center, family_center);
         if hue_diff >= MIN_HUE_DISTANCE && *count >= min_count {
             let max_chroma = hue_families[family]
                 .iter()
