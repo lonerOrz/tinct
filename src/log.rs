@@ -1,10 +1,16 @@
 use colored::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum LogLevel {
     Quiet,
     Normal,
     Verbose,
+}
+
+impl LogLevel {
+    pub fn is_quiet(&self) -> bool {
+        matches!(self, LogLevel::Quiet)
+    }
 }
 
 use std::sync::OnceLock;

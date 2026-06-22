@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub use crate::palette::ColorFormat;
 
 /// Theme mode (dark or light)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum)]
 pub enum Mode {
     Dark,
     Light,

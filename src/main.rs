@@ -9,9 +9,8 @@ use std::process;
 mod cli;
 
 use clap::Parser;
-use tinct::core::Mode;
 use tinct::image::SchemeType;
-use tinct::{LogVerbosity, Pipeline, PipelineConfig, SchemeTypeCli, ThemeMode};
+use tinct::{Pipeline, PipelineConfig, SchemeTypeCli};
 
 fn main() {
     let args = cli::CliArgs::parse();
@@ -52,27 +51,14 @@ fn main() {
         tinct::pipeline::ThemeSource::File(args.theme.clone().unwrap())
     };
 
-    // Determine log verbosity
-    let log_level = match args.log_level {
-        cli::LogLevel::Quiet => LogVerbosity::Quiet,
-        cli::LogLevel::Normal => LogVerbosity::Normal,
-        cli::LogLevel::Verbose => LogVerbosity::Verbose,
-    };
-
-    // Determine mode
-    let mode = match args.mode {
-        ThemeMode::Dark => Mode::Dark,
-        ThemeMode::Light => Mode::Light,
-    };
-
     // Build pipeline config
     let pipeline_config = PipelineConfig {
         config_path,
         flat_config,
         config_dir,
-        mode,
+        mode: args.mode,
         preview: args.preview,
-        log_level,
+        log_level: args.log_level,
         algorithm,
         image_scheme_type: Some(image_scheme_type),
         theme_source,

@@ -42,7 +42,7 @@ pub use output::{FileOutput, TerminalOutput};
 pub use palette::{
     AlgorithmParameters, ColorEntry, ColorFormat, ColorHarmony, LegacyPaletteGenerator, Palette,
 };
-pub use pipeline::{LogVerbosity, Pipeline, PipelineConfig};
+pub use pipeline::{Pipeline, PipelineConfig};
 pub use template::{ColorFormatType, FilterContext, FilterRegistry, TemplateProcessor};
 pub use theme::JsonThemeLoader;
 
@@ -54,22 +54,6 @@ pub use path_resolver::{resolve_config_file_path, resolve_config_paths, resolve_
 use std::env;
 use std::fs;
 use std::path::Path;
-
-/// Theme mode (dark or light) — shared between CLI and pipeline.
-#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
-pub enum ThemeMode {
-    Dark,
-    Light,
-}
-
-impl std::fmt::Display for ThemeMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ThemeMode::Dark => write!(f, "dark"),
-            ThemeMode::Light => write!(f, "light"),
-        }
-    }
-}
 
 /// CLI wrapper for SchemeType with clap integration.
 #[derive(Clone, Debug, PartialEq)]

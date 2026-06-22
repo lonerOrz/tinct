@@ -31,7 +31,7 @@ pub struct PipelineConfig {
     pub config_dir: String,
     pub mode: Mode,
     pub preview: bool,
-    pub log_level: LogVerbosity,
+    pub log_level: crate::log::LogLevel,
     pub algorithm: AlgorithmConfig,
     pub image_scheme_type: Option<SchemeType>,
     pub theme_source: ThemeSource,
@@ -45,30 +45,6 @@ pub enum ThemeSource {
         scheme_type: SchemeType,
     },
     File(String),
-}
-
-/// Log verbosity level.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LogVerbosity {
-    Quiet,
-    Normal,
-    Verbose,
-}
-
-impl LogVerbosity {
-    pub fn is_quiet(&self) -> bool {
-        matches!(self, LogVerbosity::Quiet)
-    }
-}
-
-impl From<LogVerbosity> for crate::log::LogLevel {
-    fn from(v: LogVerbosity) -> Self {
-        match v {
-            LogVerbosity::Quiet => crate::log::LogLevel::Quiet,
-            LogVerbosity::Normal => crate::log::LogLevel::Normal,
-            LogVerbosity::Verbose => crate::log::LogLevel::Verbose,
-        }
-    }
 }
 
 /// The pipeline: one method handles the entire tinct workflow.
@@ -90,7 +66,7 @@ impl Pipeline {
         } = config;
 
         // Initialize logger
-        log::init_logger(log_level.into());
+        log::init_logger(log_level);
 
         // Create theme data from source
         let theme_data = Self::create_theme_data(&theme_source)?;
@@ -242,7 +218,7 @@ impl Pipeline {
         theme: &Theme,
         mode: Mode,
         flat_config: &crate::config::Config,
-        log_level: LogVerbosity,
+        log_level: crate::log::LogLevel,
     ) -> crate::Result<()> {
         let template_engine = Arc::new(TemplateProcessor::new());
         let output = Arc::new(FileOutput::new());

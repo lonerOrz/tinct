@@ -28,7 +28,7 @@ pub struct CliArgs {
 
     /// Theme mode override
     #[arg(short, long, value_enum, default_value = "dark")]
-    pub mode: tinct::ThemeMode,
+    pub mode: tinct::Mode,
 
     /// Show color preview instead of processing templates
     #[arg(short, long)]
@@ -40,14 +40,7 @@ pub struct CliArgs {
 
     /// Logging level: quiet, normal, verbose
     #[arg(long, value_enum, default_value = "normal")]
-    pub log_level: LogLevel,
-}
-
-#[derive(clap::ValueEnum, Clone, Debug, PartialEq)]
-pub enum LogLevel {
-    Quiet,
-    Normal,
-    Verbose,
+    pub log_level: tinct::LogLevel,
 }
 
 impl CliArgs {
@@ -87,20 +80,20 @@ mod tests {
             seed: None,
             image: None,
             scheme_type: Some(SchemeTypeCli(SchemeType::TonalSpot)),
-            mode: tinct::ThemeMode::Light,
+            mode: tinct::Mode::Light,
             preview: true,
             skip_sequences: false,
-            log_level: LogLevel::Verbose,
+            log_level: tinct::LogLevel::Verbose,
         };
         assert_eq!(args.theme, Some("mytheme".to_string()));
-        assert_eq!(args.mode, tinct::ThemeMode::Light);
+        assert_eq!(args.mode, tinct::Mode::Light);
         assert!(args.preview);
     }
 
     #[test]
     fn test_log_level_variants() {
-        let _ = LogLevel::Quiet;
-        let _ = LogLevel::Normal;
-        let _ = LogLevel::Verbose;
+        let _ = tinct::LogLevel::Quiet;
+        let _ = tinct::LogLevel::Normal;
+        let _ = tinct::LogLevel::Verbose;
     }
 }
