@@ -25,7 +25,10 @@ use super::wsmeans;
 use crate::color::Rgb;
 
 /// Supported scheme types for color extraction.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default,
+)]
+#[clap(rename_all = "kebab-case")]
 pub enum SchemeType {
     // M3 schemes (Wu + Score)
     #[default]

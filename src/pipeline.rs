@@ -3,6 +3,7 @@
 //! `Pipeline::run(config)` handles theme creation, palette generation,
 //! template rendering, output, and post-hooks. One interface, one place to test.
 
+use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -19,7 +20,7 @@ use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
 use crate::path_resolver;
 use crate::template::TemplateProcessor;
 use crate::theme::JsonThemeLoader;
-use crate::{validate_config_section, FileOutput};
+use crate::FileOutput;
 
 /// Pre-parsed configuration for the pipeline.
 ///
@@ -267,7 +268,7 @@ impl Pipeline {
             if let Some(ref post_hook) = section.post_hook {
                 if !post_hook.is_empty() {
                     let output_path = &section.output_path;
-                    crate::run_post_hook(post_hook, output_path, Some(section_name));
+                    run_post_hook(post_hook, output_path, Some(section_name));
                 }
             }
         }
@@ -323,4 +324,122 @@ fn process_section(
     }
 
     (true, None)
+}
+
+/// Validate a config section has required fields.
+fn validate_config_section(section: &crate::config::ConfigSection, section_name: &str) -> bool {
+    let mut is_valid = true;
+
+    if section.input_path.is_empty() {
+        eprintln!("[{}] Missing required key: input_path", section_name);
+        is_valid = false;
+    }
+
+    if section.output_path.is_empty() {
+        eprintln!("[{}] Missing required key: output_path", section_name);
+        is_valid = false;
+    }
+
+    is_valid
+}
+
+/// Run a post-hook command after processing a section.
+fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>) -> bool {
+    if post_hook.is_empty() {
+        return true;
+    }
+
+    let post_hook_cmd = post_hook.replace("{{output_file}}", output_file);
+
+    if post_hook_cmd.starts_with("./") {
+        let script_dir = Path::new(env!("CARGO_MANIFEST_DIR")).to_str().unwrap();
+        let post_hook_path = Path::new(script_dir).join(&post_hook_cmd);
+
+        if post_hook_path.exists() && is_executable(&post_hook_path) {
+            if let Some(name) = section_name {
+                log::hook::executing(name);
+            }
+
+            match std::process::Command::new(&post_hook_path).output() {
+                Ok(result) => {
+                    if result.status.success() {
+                        if let Some(name) = section_name {
+                            log::hook::success(name);
+                        }
+                        true
+                    } else {
+                        if let Some(name) = section_name {
+                            log::error::message(name, "Error executing hook script");
+                        }
+                        false
+                    }
+                }
+                Err(e) => {
+                    if let Some(name) = section_name {
+                        log::error::message(name, &format!("Error executing hook script: {}", e));
+                    }
+                    false
+                }
+            }
+        } else {
+            if let Some(name) = section_name {
+                log::error::message(
+                    name,
+                    &format!(
+                        "post_hook '{}' not found. Skipping.",
+                        post_hook_path.display()
+                    ),
+                );
+            }
+            false
+        }
+    } else {
+        if let Some(name) = section_name {
+            log::hook::executing(name);
+        }
+
+        match std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&post_hook_cmd)
+            .output()
+        {
+            Ok(result) => {
+                if result.status.success() {
+                    if let Some(name) = section_name {
+                        log::hook::success(name);
+                    }
+                    true
+                } else {
+                    if let Some(name) = section_name {
+                        log::error::hook_error(
+                            name,
+                            String::from_utf8_lossy(&result.stderr).as_ref(),
+                        );
+                    }
+                    false
+                }
+            }
+            Err(e) => {
+                if let Some(name) = section_name {
+                    log::error::hook_error(name, &e.to_string());
+                }
+                false
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(metadata) = fs::metadata(path) {
+        metadata.permissions().mode() & 0o111 != 0
+    } else {
+        false
+    }
+}
+
+#[cfg(not(unix))]
+fn is_executable(_path: &Path) -> bool {
+    true
 }

@@ -10,7 +10,7 @@ mod cli;
 
 use clap::Parser;
 use tinct::image::SchemeType;
-use tinct::{Pipeline, PipelineConfig, SchemeTypeCli};
+use tinct::{Pipeline, PipelineConfig};
 
 fn main() {
     let args = cli::CliArgs::parse();
@@ -73,11 +73,11 @@ fn main() {
 
 /// Resolve scheme type: CLI arg > config file > default
 fn resolve_scheme_type(
-    cli_scheme: &Option<SchemeTypeCli>,
+    cli_scheme: &Option<SchemeType>,
     config_scheme: &Option<String>,
 ) -> SchemeType {
     if let Some(cli) = cli_scheme {
-        cli.0
+        *cli
     } else if let Some(cfg) = config_scheme {
         SchemeType::parse(cfg).unwrap_or(SchemeType::TonalSpot)
     } else {

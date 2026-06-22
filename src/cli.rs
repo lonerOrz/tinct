@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use tinct::SchemeTypeCli;
+use tinct::SchemeType;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -24,7 +24,7 @@ pub struct CliArgs {
     /// Color scheme type for image extraction (tonal-spot, vibrant, faithful, etc.)
     /// If not provided, uses config file or defaults to tonal-spot
     #[arg(long, value_name = "SCHEME")]
-    pub scheme_type: Option<SchemeTypeCli>,
+    pub scheme_type: Option<SchemeType>,
 
     /// Theme mode override
     #[arg(short, long, value_enum, default_value = "dark")]
@@ -70,7 +70,7 @@ impl CliArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tinct::image::SchemeType;
+    use tinct::SchemeType;
 
     #[test]
     fn test_cli_args_derive() {
@@ -79,7 +79,7 @@ mod tests {
             theme: Some("mytheme".to_string()),
             seed: None,
             image: None,
-            scheme_type: Some(SchemeTypeCli(SchemeType::TonalSpot)),
+            scheme_type: Some(SchemeType::TonalSpot),
             mode: tinct::Mode::Light,
             preview: true,
             skip_sequences: false,
