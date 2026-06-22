@@ -319,6 +319,6 @@ mod tests {
     #[test]
     fn test_estimate_hue() {
         let hue = estimate_hue(255, 0, 0);
-        assert!(hue >= 0.0 && hue <= 360.0);
+        assert!((0.0..=360.0).contains(&hue));
     }
 }
