@@ -254,8 +254,8 @@ fn main() {
 
         // Flatten all sections into a single list for parallel processing
         let sections: Vec<_> = config
-            .iter()
-            .flat_map(|(_group_name, group)| {
+            .values()
+            .flat_map(|group| {
                 group
                     .iter()
                     .map(|(name, section)| (name.clone(), section))

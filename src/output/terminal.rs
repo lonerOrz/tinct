@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn test_terminal_output_default() {
-        let output = TerminalOutput::default();
+        let output = TerminalOutput;
         assert_eq!(output.format_name(), "terminal");
     }
 

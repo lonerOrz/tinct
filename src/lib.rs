@@ -35,8 +35,8 @@ pub use preview::*;
 
 // Core trait re-exports
 pub use core::{
-    ColorFormat as CoreColorFormat, ColorSpace, Error, Mode, OutputFormat, PaletteGenerator,
-    Result, TemplateEngine, Theme, ThemeLoader,
+    ColorSpace, Error, Mode, OutputFormat, PaletteGenerator, Result, TemplateEngine, Theme,
+    ThemeLoader,
 };
 
 // New module re-exports

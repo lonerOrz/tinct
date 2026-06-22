@@ -47,16 +47,18 @@ impl TemplateEngine for TemplateProcessor {
 
         // Process {{colors.XXX.default.XXX}} syntax - uses current mode colors
         let current_mode_colors = match mode {
-            Mode::Dark => &theme.dark_colors,
-            Mode::Light => &theme.light_colors,
+            Mode::Dark => theme.dark_colors(),
+            Mode::Light => theme.light_colors(),
         };
-        content = self.process_color_placeholders(content, current_mode_colors, "default")?;
+        content = self.process_color_placeholders(content, &current_mode_colors, "default")?;
 
         // Process {{colors.XXX.dark.XXX}} syntax - always uses dark colors
-        content = self.process_color_placeholders(content, &theme.dark_colors, "dark")?;
+        let dark_colors = theme.dark_colors();
+        content = self.process_color_placeholders(content, &dark_colors, "dark")?;
 
         // Process {{colors.XXX.light.XXX}} syntax - always uses light colors
-        content = self.process_color_placeholders(content, &theme.light_colors, "light")?;
+        let light_colors = theme.light_colors();
+        content = self.process_color_placeholders(content, &light_colors, "light")?;
 
         // Process mode placeholders
         content = content.replace("{{mode}}", &mode.to_string());
@@ -143,7 +145,7 @@ impl TemplateProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::ColorFormat;
+    use crate::palette::{ColorEntry, ColorFormat};
 
     fn create_test_color(hex: &str) -> ColorFormat {
         ColorFormat {
@@ -162,6 +164,9 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         }
     }
 
@@ -177,10 +182,10 @@ mod tests {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
         let color = create_test_color("#FF5722");
-        theme
-            .dark_colors
-            .insert("primary".to_string(), color.clone());
-        theme.light_colors.insert("primary".to_string(), color);
+        theme.dark_palette.primary = ColorEntry {
+            default: color.clone(),
+        };
+        theme.light_palette.primary = ColorEntry { default: color };
 
         let template = "Primary: {{colors.primary.default.hex}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
@@ -214,12 +219,12 @@ mod tests {
         let dark_color = create_test_color("#111111");
         let light_color = create_test_color("#EEEEEE");
 
-        theme
-            .dark_colors
-            .insert("background".to_string(), dark_color);
-        theme
-            .light_colors
-            .insert("background".to_string(), light_color);
+        theme.dark_palette.background = ColorEntry {
+            default: dark_color,
+        };
+        theme.light_palette.background = ColorEntry {
+            default: light_color,
+        };
 
         let template =
             "Dark: {{colors.background.dark.hex}}, Light: {{colors.background.light.hex}}";

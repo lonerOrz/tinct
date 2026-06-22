@@ -3,25 +3,8 @@
 use crate::core::traits::{ColorSpace, Hsl, Rgb};
 use std::collections::HashMap;
 
-/// Unified color format that implements ColorSpace
-#[derive(Debug, Clone)]
-pub struct ColorFormat {
-    pub hex: String,
-    pub hex_stripped: String,
-    pub hex8: String,
-    pub hex8_stripped: String,
-    pub rgb: String,
-    pub rgba: String,
-    pub hsl: String,
-    pub hsla: String,
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
-    pub alpha: f64,
-    pub hue: f64,
-    pub saturation: f64,
-    pub lightness: f64,
-}
+// Re-export palette::ColorFormat as the canonical type
+pub use crate::palette::ColorFormat;
 
 impl ColorSpace for ColorFormat {
     fn to_rgb(&self) -> Rgb {
@@ -110,8 +93,8 @@ impl std::fmt::Display for Mode {
 pub struct Theme {
     pub name: String,
     pub source_color: String,
-    pub dark_colors: HashMap<String, ColorFormat>,
-    pub light_colors: HashMap<String, ColorFormat>,
+    pub dark_palette: crate::palette::Palette,
+    pub light_palette: crate::palette::Palette,
 }
 
 impl Theme {
@@ -119,16 +102,25 @@ impl Theme {
         Self {
             name,
             source_color,
-            dark_colors: HashMap::new(),
-            light_colors: HashMap::new(),
+            dark_palette: crate::palette::Palette::empty(),
+            light_palette: crate::palette::Palette::empty(),
         }
     }
 
-    pub fn get_color(&self, name: &str, mode: Mode) -> Option<&ColorFormat> {
-        match mode {
-            Mode::Dark => self.dark_colors.get(name),
-            Mode::Light => self.light_colors.get(name),
-        }
+    pub fn dark_colors(&self) -> HashMap<String, ColorFormat> {
+        self.dark_palette.to_map()
+    }
+
+    pub fn light_colors(&self) -> HashMap<String, ColorFormat> {
+        self.light_palette.to_map()
+    }
+
+    pub fn get_color(&self, name: &str, mode: Mode) -> Option<ColorFormat> {
+        let map = match mode {
+            Mode::Dark => self.dark_palette.to_map(),
+            Mode::Light => self.light_palette.to_map(),
+        };
+        map.get(name).cloned()
     }
 }
 
@@ -155,15 +147,16 @@ mod tests {
         let theme = Theme::new("test".to_string(), "#FF5722".to_string());
         assert_eq!(theme.name, "test");
         assert_eq!(theme.source_color, "#FF5722");
-        assert!(theme.dark_colors.is_empty());
-        assert!(theme.light_colors.is_empty());
+        // Palette entries exist but have empty hex values
+        assert!(theme.dark_palette.primary.default.hex.is_empty());
+        assert!(theme.light_palette.primary.default.hex.is_empty());
     }
 
     #[test]
     fn test_theme_get_color() {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
-        let color = ColorFormat {
+        let color = crate::palette::ColorFormat {
             hex: "#FF5722".to_string(),
             hex_stripped: "FF5722".to_string(),
             hex8: "#FF5722FF".to_string(),
@@ -179,14 +172,15 @@ mod tests {
             hue: 14.0,
             saturation: 100.0,
             lightness: 57.0,
+            original_hue: Some(14),
+            original_saturation: Some(100),
+            original_lightness: Some(57),
         };
 
-        theme
-            .dark_colors
-            .insert("primary".to_string(), color.clone());
-        theme
-            .light_colors
-            .insert("primary".to_string(), color.clone());
+        theme.dark_palette.primary = crate::palette::ColorEntry {
+            default: color.clone(),
+        };
+        theme.light_palette.primary = crate::palette::ColorEntry { default: color };
 
         assert!(theme.get_color("primary", Mode::Dark).is_some());
         assert!(theme.get_color("primary", Mode::Light).is_some());

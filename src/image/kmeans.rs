@@ -129,7 +129,7 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
     }
 
     // Sort by cluster size (most common first)
-    results.sort_by(|a, b| b.2.cmp(&a.2));
+    results.sort_by_key(|b| std::cmp::Reverse(b.2));
     results
 }
 
@@ -256,7 +256,7 @@ pub fn score_colors_count(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
             (family, total)
         })
         .collect();
-    family_totals.sort_by(|a, b| b.1.cmp(&a.1));
+    family_totals.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     // Build result: colors from dominant families first
     let mut result_colors: Vec<(Rgb, f64)> = Vec::new();
@@ -321,7 +321,7 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
             (family, total)
         })
         .collect();
-    family_totals.sort_by(|a, b| b.1.cmp(&a.1));
+    family_totals.sort_by_key(|b| std::cmp::Reverse(b.1));
 
     let dominant_family = family_totals[0].0;
     let _dominant_count = family_totals[0].1;

@@ -185,7 +185,7 @@ mod tests {
         let level2 = level1;
         assert_eq!(level1, level2);
 
-        let cloned = level1.clone();
+        let cloned = level1;
         assert_eq!(level1, cloned);
     }
 }

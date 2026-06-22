@@ -161,13 +161,13 @@ mod tests {
         let test_path = temp_dir.join("subdir").join("output.txt");
 
         // Create parent directory
-        let _ = fs::create_dir_all(&test_path.parent().unwrap());
+        let _ = fs::create_dir_all(test_path.parent().unwrap());
 
         let result = resolve_output_path(&test_path);
         assert!(result.ends_with("output.txt"));
 
         // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir.join("subdir"));
+        let _ = fs::remove_dir_all(temp_dir.join("subdir"));
     }
 
     #[test]

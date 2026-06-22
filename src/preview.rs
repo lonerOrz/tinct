@@ -24,8 +24,8 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
         Mode::Light
     };
     let colors = match mode {
-        Mode::Dark => &theme.dark_colors,
-        Mode::Light => &theme.light_colors,
+        Mode::Dark => theme.dark_colors(),
+        Mode::Light => theme.light_colors(),
     };
 
     println!(
@@ -36,7 +36,7 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
     println!();
 
     // Display colors in MD3 style with actual color blocks
-    display_md3_cards_grid(colors);
+    display_md3_cards_grid(&colors);
 
     Ok(())
 }
@@ -57,8 +57,8 @@ pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Res
         Mode::Light
     };
     let colors = match mode {
-        Mode::Dark => &theme.dark_colors,
-        Mode::Light => &theme.light_colors,
+        Mode::Dark => theme.dark_colors(),
+        Mode::Light => theme.light_colors(),
     };
 
     println!(
@@ -69,7 +69,7 @@ pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Res
     println!();
 
     // Display colors in MD3 style with actual color blocks
-    display_md3_cards_grid(colors);
+    display_md3_cards_grid(&colors);
 
     Ok(())
 }
@@ -397,8 +397,8 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn create_test_color_format(r: u8, g: u8, b: u8) -> crate::core::ColorFormat {
-        crate::core::ColorFormat {
+    fn create_test_color_format(r: u8, g: u8, b: u8) -> crate::palette::ColorFormat {
+        crate::palette::ColorFormat {
             hex: format!("#{:02X}{:02X}{:02X}", r, g, b),
             hex_stripped: format!("{:02X}{:02X}{:02X}", r, g, b),
             hex8: format!("#{:02X}{:02X}{:02X}FF", r, g, b),
@@ -414,6 +414,9 @@ mod tests {
             hue: 0.0,
             saturation: 0.0,
             lightness: 0.0,
+            original_hue: None,
+            original_saturation: None,
+            original_lightness: None,
         }
     }
 

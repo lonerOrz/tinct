@@ -47,14 +47,14 @@ impl ThemeLoader for JsonThemeLoader {
             .to_string();
 
         // Generate palettes for both modes (MD3 algorithm generates different colors based on mode)
-        let dark_colors = self.palette_generator.generate(&json, Mode::Dark)?;
-        let light_colors = self.palette_generator.generate(&json, Mode::Light)?;
+        let dark_palette = self.palette_generator.generate(&json, Mode::Dark)?;
+        let light_palette = self.palette_generator.generate(&json, Mode::Light)?;
 
         Ok(Theme {
             name,
             source_color,
-            dark_colors,
-            light_colors,
+            dark_palette,
+            light_palette,
         })
     }
 
@@ -75,14 +75,14 @@ impl ThemeLoader for JsonThemeLoader {
             .to_string();
 
         // Generate palettes for both modes
-        let dark_colors = self.palette_generator.generate(json, Mode::Dark)?;
-        let light_colors = self.palette_generator.generate(json, Mode::Light)?;
+        let dark_palette = self.palette_generator.generate(json, Mode::Dark)?;
+        let light_palette = self.palette_generator.generate(json, Mode::Light)?;
 
         Ok(Theme {
             name,
             source_color,
-            dark_colors,
-            light_colors,
+            dark_palette,
+            light_palette,
         })
     }
 
@@ -155,7 +155,7 @@ mod tests {
         assert!(result.is_ok());
 
         let theme = result.unwrap();
-        assert_eq!(theme.dark_colors.len(), theme.light_colors.len());
+        assert_eq!(theme.dark_colors().len(), theme.light_colors().len());
     }
 
     #[test]

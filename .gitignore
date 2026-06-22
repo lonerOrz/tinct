@@ -1,7 +1,13 @@
 target/
-result
 test/
 AGENTS.md
 .sediment/
 org/
 tinct.sh
+
+# Nix
+.envrc
+.direnv/
+result/
+result
+result-*
