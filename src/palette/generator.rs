@@ -35,9 +35,8 @@ use material_colors::hct::Hct;
 use material_colors::palette::TonalPalette;
 use serde_json::Value;
 
-use super::color_parser::create_color_format;
 use super::params::{AlgorithmParameters, ColorHarmony};
-use super::types::{ColorEntry, Palette};
+use super::types::{ColorEntry, ColorFormat, Palette};
 
 /// Generate color palette from theme data using HCT color space
 ///
@@ -268,7 +267,7 @@ fn scheme_to_palette(
         let hex = argb.to_hex();
 
         Ok(ColorEntry {
-            default: create_color_format(&hex)?,
+            default: ColorFormat::from_hex(&hex)?,
         })
     };
 

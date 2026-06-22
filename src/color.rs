@@ -198,47 +198,6 @@ pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
     }
 }
 
-/// HCT (Hue-Chroma-Tone) color space implementation for Material Design 3
-#[derive(Debug, Clone)]
-pub struct Hct {
-    pub h: f64, // Hue (0-360)
-    pub c: f64, // Chroma (0-100+)
-    pub t: f64, // Tone (0-100, equivalent to L* in L*a*b*)
-}
-
-impl Hct {
-    /// Create an HCT color from hue, chroma, and tone values
-    pub fn from_hct(h: f64, c: f64, t: f64) -> Self {
-        Self {
-            h: clamp(h, 0.0, 360.0),
-            c: clamp(c, 0.0, 200.0),
-            t: clamp(t, 0.0, 100.0),
-        }
-    }
-
-    /// Convert HCT to RGB
-    pub fn to_rgb(&self) -> Rgb {
-        let s = clamp(self.c * 0.8, 0.0, 100.0);
-        hsl_to_rgb(self.h, s, self.t)
-    }
-
-    /// Convert HCT to HEX
-    pub fn to_hex(&self) -> String {
-        let (r, g, b) = self.to_rgb();
-        rgb_to_hex(r as f64, g as f64, b as f64)
-    }
-}
-
-/// Generate HCT color from RGB
-pub fn rgb_to_hct(r: u8, g: u8, b: u8) -> Hct {
-    let (h, s, l) = rgb_to_hsl(r as f64, g as f64, b as f64);
-    Hct {
-        h,
-        c: clamp(s * 1.2, 0.0, 150.0),
-        t: l,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
