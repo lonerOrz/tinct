@@ -1,37 +1,19 @@
 //! Template processor implementation
 
 use crate::core::{ColorFormat, Mode, Result, TemplateEngine, Theme};
+use crate::template::filters::{ColorFormatType, FilterRegistry};
 use regex::Regex;
-use std::collections::HashMap;
-
-// Type alias for filter functions to reduce type complexity
-type FilterFn = Box<dyn Fn(&str, &HashMap<String, String>) -> Result<String> + Send + Sync>;
 
 /// Default template processor implementation
 pub struct TemplateProcessor {
-    #[allow(dead_code)]
-    filters: HashMap<String, FilterFn>,
+    filter_registry: FilterRegistry,
 }
 
 impl TemplateProcessor {
     pub fn new() -> Self {
-        let mut processor = Self {
-            filters: HashMap::new(),
-        };
-        processor.register_builtin_filters();
-        processor
-    }
-
-    fn register_builtin_filters(&mut self) {
-        // Register built-in filters here
-    }
-
-    #[allow(dead_code)]
-    pub fn register_filter<F>(&mut self, name: &str, filter: F)
-    where
-        F: Fn(&str, &HashMap<String, String>) -> Result<String> + Send + Sync + 'static,
-    {
-        self.filters.insert(name.to_string(), Box::new(filter));
+        Self {
+            filter_registry: FilterRegistry::new(),
+        }
     }
 }
 
@@ -76,7 +58,7 @@ impl TemplateProcessor {
     fn process_color_placeholders(
         &self,
         content: String,
-        colors: &HashMap<String, ColorFormat>,
+        colors: &std::collections::HashMap<String, ColorFormat>,
         mode_suffix: &str,
     ) -> Result<String> {
         let mut result = content;
@@ -100,9 +82,9 @@ impl TemplateProcessor {
         ];
 
         for prop in &properties {
-            // Match {{colors.NAME.SUFFIX.PROP}} where SUFFIX is the mode suffix
+            // Match {{colors.NAME.SUFFIX.PROP}} or {{colors.NAME.SUFFIX.PROP|filter:param}}
             let pattern = format!(
-                r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{}\.{}\s*\}}\}}",
+                r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{}\.{}\s*(?:\|([a-zA-Z_]+)(?::([^}}]*))?)?\s*\}}\}}",
                 mode_suffix, prop
             );
             let re = Regex::new(&pattern).map_err(|e| {
@@ -112,24 +94,24 @@ impl TemplateProcessor {
             result = re
                 .replace_all(&result, |caps: &regex::Captures| {
                     let key = &caps[1];
+                    let filter_name = caps.get(2).map(|m| m.as_str());
+                    let filter_param = caps.get(3).map(|m| m.as_str());
+
                     if let Some(color) = colors.get(key) {
-                        match *prop {
-                            "hex" => color.hex.clone(),
-                            "hex_stripped" => color.hex_stripped.clone(),
-                            "hex8" => color.hex8.clone(),
-                            "hex8_stripped" => color.hex8_stripped.clone(),
-                            "rgb" => color.rgb.clone(),
-                            "rgba" => color.rgba.clone(),
-                            "hsl" => color.hsl.clone(),
-                            "hsla" => color.hsla.clone(),
-                            "red" => color.red.to_string(),
-                            "green" => color.green.to_string(),
-                            "blue" => color.blue.to_string(),
-                            "alpha" => color.alpha.to_string(),
-                            "hue" => format!("{:.0}", color.hue),
-                            "saturation" => format!("{:.0}", color.saturation),
-                            "lightness" => format!("{:.0}", color.lightness),
-                            _ => "#000000".to_string(),
+                        let value = resolve_property(color, prop);
+
+                        if let Some(name) = filter_name {
+                            let format_type = ColorFormatType::from_property(prop)
+                                .unwrap_or(ColorFormatType::Rgb);
+                            self.filter_registry.apply_filter(
+                                &value,
+                                name,
+                                filter_param,
+                                color,
+                                format_type,
+                            )
+                        } else {
+                            value
                         }
                     } else {
                         "#000000".to_string()
@@ -139,6 +121,27 @@ impl TemplateProcessor {
         }
 
         Ok(result)
+    }
+}
+
+fn resolve_property(color: &ColorFormat, prop: &str) -> String {
+    match prop {
+        "hex" => color.hex.clone(),
+        "hex_stripped" => color.hex_stripped.clone(),
+        "hex8" => color.hex8.clone(),
+        "hex8_stripped" => color.hex8_stripped.clone(),
+        "rgb" => color.rgb.clone(),
+        "rgba" => color.rgba.clone(),
+        "hsl" => color.hsl.clone(),
+        "hsla" => color.hsla.clone(),
+        "red" => color.red.to_string(),
+        "green" => color.green.to_string(),
+        "blue" => color.blue.to_string(),
+        "alpha" => color.alpha.to_string(),
+        "hue" => format!("{:.0}", color.hue),
+        "saturation" => format!("{:.0}", color.saturation),
+        "lightness" => format!("{:.0}", color.lightness),
+        _ => "#000000".to_string(),
     }
 }
 
@@ -173,7 +176,7 @@ mod tests {
     #[test]
     fn test_template_processor_new() {
         let processor = TemplateProcessor::new();
-        assert!(processor.filters.is_empty());
+        assert!(!processor.filter_registry.is_empty());
     }
 
     #[test]
@@ -238,6 +241,41 @@ mod tests {
         assert!(
             result.contains("Light: #EEEEEE"),
             "Expected light color, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_template_processor_render_with_filter() {
+        let processor = TemplateProcessor::new();
+        let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
+
+        let color = create_test_color("#FF5722");
+        theme.dark_palette.primary = ColorEntry { default: color };
+
+        // Test set_alpha filter
+        let template = "Primary: {{colors.primary.default.hex|set_alpha:0.5}}";
+        let result = processor.render(template, &theme, Mode::Dark).unwrap();
+        assert!(
+            result.contains("Primary: #FF572280"),
+            "Expected hex8 with alpha, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_template_processor_render_with_lighten_filter() {
+        let processor = TemplateProcessor::new();
+        let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
+
+        let color = create_test_color("#FF5722");
+        theme.dark_palette.primary = ColorEntry { default: color };
+
+        let template = "Primary: {{colors.primary.default.rgb|lighten:10}}";
+        let result = processor.render(template, &theme, Mode::Dark).unwrap();
+        assert!(
+            result.starts_with("Primary: rgb("),
+            "Expected rgb format, got: {}",
             result
         );
     }

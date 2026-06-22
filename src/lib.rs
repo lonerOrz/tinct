@@ -21,7 +21,6 @@ pub mod image;
 // Core utilities (kept for backward compatibility and shared functionality)
 pub mod color;
 pub mod config;
-pub mod filter;
 pub mod log;
 pub mod path_resolver;
 pub mod pipeline;
@@ -30,7 +29,6 @@ pub mod preview;
 // Re-exports
 pub use color::*;
 pub use config::*;
-pub use filter::{Filter as ColorFilter, FilterContext, FilterRegistry};
 pub use log::*;
 pub use preview::*;
 
@@ -45,7 +43,9 @@ pub use palette::{
     AlgorithmParameters, ColorEntry, ColorFormat, ColorHarmony, LegacyPaletteGenerator, Palette,
 };
 pub use pipeline::{LogVerbosity, Pipeline, PipelineConfig};
-pub use template::{Filter as TemplateFilter, TemplateEngineRegistry, TemplateProcessor};
+pub use template::{
+    ColorFormatType, FilterContext, FilterRegistry, TemplateEngineRegistry, TemplateProcessor,
+};
 pub use theme::{JsonThemeLoader, ThemeLoaderRegistry};
 
 // Shared types between binary and library
