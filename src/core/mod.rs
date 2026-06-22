@@ -8,7 +8,5 @@ mod traits;
 mod types;
 
 pub use error::{Error, Result};
-pub use traits::{
-    ColorSpace, Hsl, OutputFormat, PaletteGenerator, Rgb, TemplateEngine, ThemeLoader,
-};
+pub use traits::{OutputFormat, PaletteGenerator, TemplateEngine, ThemeLoader};
 pub use types::{ColorFormat, Mode, Theme};

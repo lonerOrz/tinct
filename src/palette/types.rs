@@ -29,6 +29,88 @@ pub struct ColorFormat {
     pub original_lightness: Option<u32>,
 }
 
+impl ColorFormat {
+    /// Create a ColorFormat from a hex string.
+    ///
+    /// Supports 6-digit (#RRGGBB) and 8-digit (#RRGGBBAA) hex formats.
+    /// 8-digit format interprets the last two digits as alpha (0-255 → 0.0-1.0).
+    pub fn from_hex(hex: &str) -> Result<Self, String> {
+        let hex_stripped = hex.trim_start_matches('#');
+        let (r, g, b, alpha) = if hex_stripped.len() == 8 {
+            let r = u8::from_str_radix(&hex_stripped[0..2], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            let g = u8::from_str_radix(&hex_stripped[2..4], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            let b = u8::from_str_radix(&hex_stripped[4..6], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            let a = u8::from_str_radix(&hex_stripped[6..8], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            (r, g, b, a as f64 / 255.0)
+        } else {
+            let (r, g, b) = crate::color::hex_to_rgb(hex)?;
+            (r, g, b, 1.0)
+        };
+
+        let (h, s, l) = crate::color::rgb_to_hsl(r as f64, g as f64, b as f64);
+        let h_int = h.round() as u32;
+        let s_int = s.round() as u32;
+        let l_int = l.round() as u32;
+        let alpha_byte = (alpha * 255.0).round() as u8;
+
+        Ok(ColorFormat {
+            hex: format!("#{:02X}{:02X}{:02X}", r, g, b),
+            hex_stripped: format!("{:02X}{:02X}{:02X}", r, g, b),
+            hex8: format!("#{:02X}{:02X}{:02X}{:02X}", r, g, b, alpha_byte),
+            hex8_stripped: format!("{:02X}{:02X}{:02X}{:02X}", r, g, b, alpha_byte),
+            rgb: format!("rgb({}, {}, {})", r, g, b),
+            rgba: format!("rgba({}, {}, {}, {:.1})", r, g, b, alpha),
+            hsl: format!(
+                "hsl({}, {}%, {}%)",
+                h_int % 360,
+                s_int.min(100),
+                l_int.min(100)
+            ),
+            hsla: format!(
+                "hsla({}, {}%, {}%, {:.1})",
+                h_int % 360,
+                s_int.min(100),
+                l_int.min(100),
+                alpha
+            ),
+            red: r,
+            green: g,
+            blue: b,
+            alpha,
+            hue: h,
+            saturation: s,
+            lightness: l,
+            original_hue: Some(h_int),
+            original_saturation: Some(s_int),
+            original_lightness: Some(l_int),
+        })
+    }
+
+    /// Convert to RGB components as (r, g, b)
+    pub fn to_rgb(&self) -> crate::color::Rgb {
+        (self.red, self.green, self.blue)
+    }
+
+    /// Convert to HSL components as (h, s, l)
+    pub fn to_hsl(&self) -> crate::color::Hsl {
+        (self.hue, self.saturation, self.lightness)
+    }
+
+    /// Get hex string
+    pub fn to_hex(&self) -> &str {
+        &self.hex
+    }
+
+    /// Get 8-digit hex string (with alpha)
+    pub fn to_hex8(&self) -> &str {
+        &self.hex8
+    }
+}
+
 /// A color entry with default format
 #[derive(Debug, Clone)]
 pub struct ColorEntry {

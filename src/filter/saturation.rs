@@ -11,74 +11,53 @@ impl Filter for SaturateFilter {
     fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
         if let Some(amount) = param {
             if let Ok(percent) = amount.parse::<f64>() {
-                let hsl = crate::color::rgb_to_hsl(
-                    ctx.color_format.red as f64,
-                    ctx.color_format.green as f64,
-                    ctx.color_format.blue as f64,
-                );
+                let (h, s, l) = ctx.color_format.to_hsl();
 
-                let new_saturation = crate::color::clamp(hsl.s + percent, 0.0, 100.0);
-                let new_rgb = crate::color::hsl_to_rgb(hsl.h, new_saturation, hsl.l);
+                let new_saturation = crate::color::clamp(s + percent, 0.0, 100.0);
+                let (nr, ng, nb) = crate::color::hsl_to_rgb(h, new_saturation, l);
 
                 match ctx.format_type {
                     ColorFormatType::Rgb => {
-                        format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
+                        format!("rgb({}, {}, {})", nr, ng, nb)
                     }
                     ColorFormatType::Rgba => {
                         format!(
                             "rgba({}, {}, {}, {:.1})",
-                            new_rgb.r, new_rgb.g, new_rgb.b, ctx.color_format.alpha
+                            nr, ng, nb, ctx.color_format.alpha
                         )
                     }
                     ColorFormatType::Hsl => {
-                        let h = ctx
-                            .color_format
-                            .original_hue
-                            .unwrap_or(hsl.h.round() as u32);
-                        let s = new_saturation.round() as u32;
-                        let l = ctx
+                        let hue = ctx.color_format.original_hue.unwrap_or(h.round() as u32);
+                        let sat = new_saturation.round() as u32;
+                        let light = ctx
                             .color_format
                             .original_lightness
-                            .unwrap_or(hsl.l.round() as u32);
-                        format!("hsl({}, {}%, {}%)", h, s, l)
+                            .unwrap_or(l.round() as u32);
+                        format!("hsl({}, {}%, {}%)", hue, sat, light)
                     }
                     ColorFormatType::Hsla => format!(
                         "hsla({}, {}%, {}%, {:.1})",
-                        ctx.color_format
-                            .original_hue
-                            .unwrap_or(hsl.h.round() as u32),
+                        ctx.color_format.original_hue.unwrap_or(h.round() as u32),
                         new_saturation.round() as u32,
                         ctx.color_format
                             .original_lightness
-                            .unwrap_or(hsl.l.round() as u32),
+                            .unwrap_or(l.round() as u32),
                         ctx.color_format.alpha
                     ),
-                    ColorFormatType::Hex => crate::color::rgb_to_hex_upper(
-                        new_rgb.r as f64,
-                        new_rgb.g as f64,
-                        new_rgb.b as f64,
-                    ),
+                    ColorFormatType::Hex => {
+                        crate::color::rgb_to_hex(nr as f64, ng as f64, nb as f64)
+                    }
                     ColorFormatType::HexStripped => {
-                        let hex = crate::color::rgb_to_hex_upper(
-                            new_rgb.r as f64,
-                            new_rgb.g as f64,
-                            new_rgb.b as f64,
-                        );
+                        let hex = crate::color::rgb_to_hex(nr as f64, ng as f64, nb as f64);
                         hex.strip_prefix('#').unwrap_or(&hex).to_string()
                     }
                     ColorFormatType::Hex8 => {
                         let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
-                        format!(
-                            "#{:02X}{:02X}{:02X}{:02X}",
-                            new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte
-                        )
+                        format!("#{:02X}{:02X}{:02X}{:02X}", nr, ng, nb, alpha_byte)
                     }
                     ColorFormatType::Hex8Stripped => {
                         let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
-                        format!(
-                            "{:02x}{:02x}{:02x}{:02x}",
-                            new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte
-                        )
+                        format!("{:02x}{:02x}{:02x}{:02x}", nr, ng, nb, alpha_byte)
                     }
                     _ => ctx.original_value.clone(),
                 }
@@ -102,74 +81,53 @@ impl Filter for DesaturateFilter {
     fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
         if let Some(amount) = param {
             if let Ok(percent) = amount.parse::<f64>() {
-                let hsl = crate::color::rgb_to_hsl(
-                    ctx.color_format.red as f64,
-                    ctx.color_format.green as f64,
-                    ctx.color_format.blue as f64,
-                );
+                let (h, s, l) = ctx.color_format.to_hsl();
 
-                let new_saturation = crate::color::clamp(hsl.s - percent, 0.0, 100.0);
-                let new_rgb = crate::color::hsl_to_rgb(hsl.h, new_saturation, hsl.l);
+                let new_saturation = crate::color::clamp(s - percent, 0.0, 100.0);
+                let (nr, ng, nb) = crate::color::hsl_to_rgb(h, new_saturation, l);
 
                 match ctx.format_type {
                     ColorFormatType::Rgb => {
-                        format!("rgb({}, {}, {})", new_rgb.r, new_rgb.g, new_rgb.b)
+                        format!("rgb({}, {}, {})", nr, ng, nb)
                     }
                     ColorFormatType::Rgba => {
                         format!(
                             "rgba({}, {}, {}, {:.1})",
-                            new_rgb.r, new_rgb.g, new_rgb.b, ctx.color_format.alpha
+                            nr, ng, nb, ctx.color_format.alpha
                         )
                     }
                     ColorFormatType::Hsl => {
-                        let h = ctx
-                            .color_format
-                            .original_hue
-                            .unwrap_or(hsl.h.round() as u32);
-                        let s = new_saturation.round() as u32;
-                        let l = ctx
+                        let hue = ctx.color_format.original_hue.unwrap_or(h.round() as u32);
+                        let sat = new_saturation.round() as u32;
+                        let light = ctx
                             .color_format
                             .original_lightness
-                            .unwrap_or(hsl.l.round() as u32);
-                        format!("hsl({}, {}%, {}%)", h, s, l)
+                            .unwrap_or(l.round() as u32);
+                        format!("hsl({}, {}%, {}%)", hue, sat, light)
                     }
                     ColorFormatType::Hsla => format!(
                         "hsla({}, {}%, {}%, {:.1})",
-                        ctx.color_format
-                            .original_hue
-                            .unwrap_or(hsl.h.round() as u32),
+                        ctx.color_format.original_hue.unwrap_or(h.round() as u32),
                         new_saturation.round() as u32,
                         ctx.color_format
                             .original_lightness
-                            .unwrap_or(hsl.l.round() as u32),
+                            .unwrap_or(l.round() as u32),
                         ctx.color_format.alpha
                     ),
-                    ColorFormatType::Hex => crate::color::rgb_to_hex_upper(
-                        new_rgb.r as f64,
-                        new_rgb.g as f64,
-                        new_rgb.b as f64,
-                    ),
+                    ColorFormatType::Hex => {
+                        crate::color::rgb_to_hex(nr as f64, ng as f64, nb as f64)
+                    }
                     ColorFormatType::HexStripped => {
-                        let hex = crate::color::rgb_to_hex_upper(
-                            new_rgb.r as f64,
-                            new_rgb.g as f64,
-                            new_rgb.b as f64,
-                        );
+                        let hex = crate::color::rgb_to_hex(nr as f64, ng as f64, nb as f64);
                         hex.strip_prefix('#').unwrap_or(&hex).to_string()
                     }
                     ColorFormatType::Hex8 => {
                         let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
-                        format!(
-                            "#{:02X}{:02X}{:02X}{:02X}",
-                            new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte
-                        )
+                        format!("#{:02X}{:02X}{:02X}{:02X}", nr, ng, nb, alpha_byte)
                     }
                     ColorFormatType::Hex8Stripped => {
                         let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
-                        format!(
-                            "{:02x}{:02x}{:02x}{:02x}",
-                            new_rgb.r, new_rgb.g, new_rgb.b, alpha_byte
-                        )
+                        format!("{:02x}{:02x}{:02x}{:02x}", nr, ng, nb, alpha_byte)
                     }
                     _ => ctx.original_value.clone(),
                 }

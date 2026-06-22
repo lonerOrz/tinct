@@ -1,32 +1,8 @@
-use std::fmt;
+/// RGB components as (r, g, b)
+pub type Rgb = (u8, u8, u8);
 
-/// RGB color representation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Rgb {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-}
-
-impl fmt::Display for Rgb {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RGB({}, {}, {})", self.r, self.g, self.b)
-    }
-}
-
-/// HSL color representation  
-#[derive(Debug, Clone, Copy)]
-pub struct Hsl {
-    pub h: f64, // Hue (0-360)
-    pub s: f64, // Saturation (0-100)
-    pub l: f64, // Lightness (0-100)
-}
-
-impl fmt::Display for Hsl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "HSL({:.1}°, {:.1}%, {:.1}%)", self.h, self.s, self.l)
-    }
-}
+/// HSL components as (h, s, l)
+pub type Hsl = (f64, f64, f64);
 
 /// Clamp value between min and max
 pub fn clamp<T: PartialOrd + Copy>(n: T, minn: T, maxn: T) -> T {
@@ -47,7 +23,7 @@ pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
     format!("#{:02X}{:02X}{:02X}", r_byte, g_byte, b_byte)
 }
 
-/// Convert hex string to RGB
+/// Convert hex string to RGB tuple
 pub fn hex_to_rgb(hex: &str) -> Result<Rgb, String> {
     let hex_stripped = hex.trim_start_matches('#');
 
@@ -62,10 +38,10 @@ pub fn hex_to_rgb(hex: &str) -> Result<Rgb, String> {
     let b = u8::from_str_radix(&hex_stripped[4..6], 16)
         .map_err(|_| format!("Invalid hex color: {}", hex))?;
 
-    Ok(Rgb { r, g, b })
+    Ok((r, g, b))
 }
 
-/// Convert RGB to HSL
+/// Convert RGB to HSL tuple
 pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     let r = r / 255.0;
     let g = g / 255.0;
@@ -94,14 +70,14 @@ pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
         (max - min) / (2.0 - 2.0 * l)
     };
 
-    Hsl {
-        h: clamp(h, 0.0, 360.0),
-        s: clamp(s * 100.0, 0.0, 100.0),
-        l: clamp(l * 100.0, 0.0, 100.0),
-    }
+    (
+        clamp(h, 0.0, 360.0),
+        clamp(s * 100.0, 0.0, 100.0),
+        clamp(l * 100.0, 0.0, 100.0),
+    )
 }
 
-/// Convert HSL to RGB
+/// Convert HSL to RGB tuple
 pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
     let h = h / 360.0;
     let s = s / 100.0;
@@ -125,17 +101,17 @@ pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
         (c, 0.0, x)
     };
 
-    Rgb {
-        r: ((r + m) * 255.0).round() as u8,
-        g: ((g + m) * 255.0).round() as u8,
-        b: ((b + m) * 255.0).round() as u8,
-    }
+    (
+        ((r + m) * 255.0).round() as u8,
+        ((g + m) * 255.0).round() as u8,
+        ((b + m) * 255.0).round() as u8,
+    )
 }
 
 /// Determine if a color is light or dark based on relative luminance
 pub fn is_light_color(hex: &str) -> Result<bool, String> {
-    let rgb = hex_to_rgb(hex)?;
-    let luminance = calculate_relative_luminance(rgb.r, rgb.g, rgb.b);
+    let (r, g, b) = hex_to_rgb(hex)?;
+    let luminance = calculate_relative_luminance(r, g, b);
     Ok(luminance > 0.1791)
 }
 
@@ -166,11 +142,11 @@ pub fn calculate_relative_luminance(r: u8, g: u8, b: u8) -> f64 {
 
 /// Calculate contrast ratio between two colors
 pub fn calculate_contrast_ratio(color1: &str, color2: &str) -> Result<f64, String> {
-    let rgb1 = hex_to_rgb(color1)?;
-    let rgb2 = hex_to_rgb(color2)?;
+    let (r1, g1, b1) = hex_to_rgb(color1)?;
+    let (r2, g2, b2) = hex_to_rgb(color2)?;
 
-    let l1 = calculate_relative_luminance(rgb1.r, rgb1.g, rgb1.b);
-    let l2 = calculate_relative_luminance(rgb2.r, rgb2.g, rgb2.b);
+    let l1 = calculate_relative_luminance(r1, g1, b1);
+    let l2 = calculate_relative_luminance(r2, g2, b2);
 
     let lighter = l1.max(l2);
     let darker = l1.min(l2);
@@ -242,34 +218,25 @@ impl Hct {
 
     /// Convert HCT to RGB
     pub fn to_rgb(&self) -> Rgb {
-        let hsl = Hsl {
-            h: self.h,
-            s: clamp(self.c * 0.8, 0.0, 100.0),
-            l: self.t,
-        };
-        hsl_to_rgb(hsl.h, hsl.s, hsl.l)
+        let s = clamp(self.c * 0.8, 0.0, 100.0);
+        hsl_to_rgb(self.h, s, self.t)
     }
 
     /// Convert HCT to HEX
     pub fn to_hex(&self) -> String {
-        let rgb = self.to_rgb();
-        rgb_to_hex(rgb.r as f64, rgb.g as f64, rgb.b as f64)
+        let (r, g, b) = self.to_rgb();
+        rgb_to_hex(r as f64, g as f64, b as f64)
     }
 }
 
 /// Generate HCT color from RGB
 pub fn rgb_to_hct(r: u8, g: u8, b: u8) -> Hct {
-    let hsl = rgb_to_hsl(r as f64, g as f64, b as f64);
+    let (h, s, l) = rgb_to_hsl(r as f64, g as f64, b as f64);
     Hct {
-        h: hsl.h,
-        c: clamp(hsl.s * 1.2, 0.0, 150.0),
-        t: hsl.l,
+        h,
+        c: clamp(s * 1.2, 0.0, 150.0),
+        t: l,
     }
-}
-
-/// Convert RGB to hex string with uppercase letters
-pub fn rgb_to_hex_upper(r: f64, g: f64, b: f64) -> String {
-    rgb_to_hex(r, g, b).to_uppercase()
 }
 
 #[cfg(test)]
@@ -278,15 +245,15 @@ mod tests {
 
     #[test]
     fn test_hex_to_rgb() {
-        let rgb = hex_to_rgb("#ffffff").unwrap();
-        assert_eq!(rgb.r, 255);
-        assert_eq!(rgb.g, 255);
-        assert_eq!(rgb.b, 255);
+        let (r, g, b) = hex_to_rgb("#ffffff").unwrap();
+        assert_eq!(r, 255);
+        assert_eq!(g, 255);
+        assert_eq!(b, 255);
 
-        let rgb = hex_to_rgb("#000000").unwrap();
-        assert_eq!(rgb.r, 0);
-        assert_eq!(rgb.g, 0);
-        assert_eq!(rgb.b, 0);
+        let (r, g, b) = hex_to_rgb("#000000").unwrap();
+        assert_eq!(r, 0);
+        assert_eq!(g, 0);
+        assert_eq!(b, 0);
     }
 
     #[test]
@@ -300,18 +267,18 @@ mod tests {
 
     #[test]
     fn test_rgb_to_hsl() {
-        let hsl = rgb_to_hsl(255.0, 0.0, 0.0);
-        assert!((hsl.h - 0.0).abs() < 0.1);
-        assert!((hsl.s - 100.0).abs() < 0.1);
-        assert!((hsl.l - 50.0).abs() < 0.1);
+        let (h, s, l) = rgb_to_hsl(255.0, 0.0, 0.0);
+        assert!((h - 0.0).abs() < 0.1);
+        assert!((s - 100.0).abs() < 0.1);
+        assert!((l - 50.0).abs() < 0.1);
     }
 
     #[test]
     fn test_hsl_to_rgb() {
-        let rgb = hsl_to_rgb(0.0, 100.0, 50.0);
-        assert!((rgb.r as f64 - 255.0).abs() < 1.0);
-        assert!((rgb.g as f64 - 0.0).abs() < 1.0);
-        assert!((rgb.b as f64 - 0.0).abs() < 1.0);
+        let (r, g, b) = hsl_to_rgb(0.0, 100.0, 50.0);
+        assert!((r as f64 - 255.0).abs() < 1.0);
+        assert!((g as f64 - 0.0).abs() < 1.0);
+        assert!((b as f64 - 0.0).abs() < 1.0);
     }
 
     #[test]

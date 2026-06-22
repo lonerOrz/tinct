@@ -1,66 +1,9 @@
 //! Common type definitions for tinct
 
-use crate::core::traits::{ColorSpace, Hsl, Rgb};
 use std::collections::HashMap;
 
 // Re-export palette::ColorFormat as the canonical type
 pub use crate::palette::ColorFormat;
-
-impl ColorSpace for ColorFormat {
-    fn to_rgb(&self) -> Rgb {
-        Rgb {
-            r: self.red,
-            g: self.green,
-            b: self.blue,
-            a: self.alpha,
-        }
-    }
-
-    fn to_hsl(&self) -> Hsl {
-        Hsl {
-            h: self.hue,
-            s: self.saturation,
-            l: self.lightness,
-            a: self.alpha,
-        }
-    }
-
-    fn to_hex(&self) -> String {
-        self.hex.clone()
-    }
-
-    fn to_hex8(&self) -> String {
-        self.hex8.clone()
-    }
-
-    fn red(&self) -> u8 {
-        self.red
-    }
-
-    fn green(&self) -> u8 {
-        self.green
-    }
-
-    fn blue(&self) -> u8 {
-        self.blue
-    }
-
-    fn alpha(&self) -> f64 {
-        self.alpha
-    }
-
-    fn hue(&self) -> f64 {
-        self.hue
-    }
-
-    fn saturation(&self) -> f64 {
-        self.saturation
-    }
-
-    fn lightness(&self) -> f64 {
-        self.lightness
-    }
-}
 
 /// Theme mode (dark or light)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
