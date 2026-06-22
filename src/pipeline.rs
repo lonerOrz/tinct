@@ -443,3 +443,238 @@ fn is_executable(path: &Path) -> bool {
 fn is_executable(_path: &Path) -> bool {
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AlgorithmConfig, ConfigSection};
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    fn default_algorithm() -> AlgorithmConfig {
+        AlgorithmConfig::default()
+    }
+
+    fn seed_theme_data() -> serde_json::Value {
+        json!({ "seed": "#6750A4" })
+    }
+
+    #[test]
+    fn test_validate_config_section_valid() {
+        let section = ConfigSection {
+            input_path: "input.css".to_string(),
+            output_path: "output.css".to_string(),
+            post_hook: None,
+        };
+        assert!(validate_config_section(&section, "test_section"));
+    }
+
+    #[test]
+    fn test_validate_config_section_empty_input() {
+        let section = ConfigSection {
+            input_path: String::new(),
+            output_path: "output.css".to_string(),
+            post_hook: None,
+        };
+        assert!(!validate_config_section(&section, "test_section"));
+    }
+
+    #[test]
+    fn test_validate_config_section_empty_output() {
+        let section = ConfigSection {
+            input_path: "input.css".to_string(),
+            output_path: String::new(),
+            post_hook: None,
+        };
+        assert!(!validate_config_section(&section, "test_section"));
+    }
+
+    #[test]
+    fn test_validate_config_section_both_empty() {
+        let section = ConfigSection {
+            input_path: String::new(),
+            output_path: String::new(),
+            post_hook: None,
+        };
+        assert!(!validate_config_section(&section, "test_section"));
+    }
+
+    #[test]
+    fn test_validate_config_all_valid() {
+        let mut config: crate::config::Config = HashMap::new();
+        let mut group = HashMap::new();
+        group.insert(
+            "section1".to_string(),
+            ConfigSection {
+                input_path: "a.css".to_string(),
+                output_path: "b.css".to_string(),
+                post_hook: None,
+            },
+        );
+        config.insert("group1".to_string(), group);
+        assert!(Pipeline::validate_config(&config));
+    }
+
+    #[test]
+    fn test_validate_config_one_invalid() {
+        let mut config: crate::config::Config = HashMap::new();
+        let mut group = HashMap::new();
+        group.insert(
+            "bad_section".to_string(),
+            ConfigSection {
+                input_path: String::new(),
+                output_path: "b.css".to_string(),
+                post_hook: None,
+            },
+        );
+        config.insert("group1".to_string(), group);
+        assert!(!Pipeline::validate_config(&config));
+    }
+
+    #[test]
+    fn test_build_theme_from_seed() {
+        let data = seed_theme_data();
+        let result = Pipeline::build_theme(&data, &default_algorithm());
+        assert!(result.is_ok());
+        let theme = result.unwrap();
+        let dark = theme.dark_colors();
+        let light = theme.light_colors();
+        assert!(!dark.is_empty());
+        assert!(!light.is_empty());
+        assert!(dark.contains_key("primary"));
+        assert!(light.contains_key("primary"));
+    }
+
+    #[test]
+    fn test_build_theme_dark_has_more_colors() {
+        let data = seed_theme_data();
+        let theme = Pipeline::build_theme(&data, &default_algorithm()).unwrap();
+        let dark = theme.dark_colors();
+        let light = theme.light_colors();
+        assert_eq!(dark.len(), light.len());
+    }
+
+    #[test]
+    fn test_create_theme_data_seed() {
+        let source = ThemeSource::Seed("#FF0000".to_string());
+        let data = Pipeline::create_theme_data(&source).unwrap();
+        assert_eq!(data["seed"], "#FF0000");
+    }
+
+    #[test]
+    fn test_create_theme_data_image_missing() {
+        let source = ThemeSource::Image {
+            path: "/nonexistent/image.png".to_string(),
+            scheme_type: SchemeType::TonalSpot,
+        };
+        let result = Pipeline::create_theme_data(&source);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Image not found"));
+    }
+
+    #[test]
+    fn test_create_theme_data_file_missing() {
+        let source = ThemeSource::File("/nonexistent/theme.json".to_string());
+        let result = Pipeline::create_theme_data(&source);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_theme_data_file_valid() {
+        let tmp = TempDir::new().unwrap();
+        let theme_path = tmp.path().join("theme.json");
+        fs::write(
+            &theme_path,
+            "{\"seed\": \"#123456\", \"primary\": \"#ABCDEF\"}",
+        )
+        .unwrap();
+
+        let source = ThemeSource::File(theme_path.to_str().unwrap().to_string());
+        let data = Pipeline::create_theme_data(&source).unwrap();
+        assert_eq!(data["seed"], "#123456");
+    }
+
+    #[test]
+    fn test_process_section_missing_input() {
+        let tmp = TempDir::new().unwrap();
+        let section = ConfigSection {
+            input_path: tmp
+                .path()
+                .join("nonexistent.css")
+                .to_str()
+                .unwrap()
+                .to_string(),
+            output_path: tmp.path().join("out.css").to_str().unwrap().to_string(),
+            post_hook: None,
+        };
+
+        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let engine = Arc::new(TemplateProcessor::new());
+        let output = Arc::new(FileOutput::new());
+
+        let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
+        assert!(!success);
+        assert!(error.unwrap().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_process_section_happy_path() {
+        let tmp = TempDir::new().unwrap();
+        let input = tmp.path().join("input.css");
+        let output_path = tmp.path().join("output.css");
+
+        fs::write(&input, "color: {{colors.primary.default.hex}};").unwrap();
+
+        let section = ConfigSection {
+            input_path: input.to_str().unwrap().to_string(),
+            output_path: output_path.to_str().unwrap().to_string(),
+            post_hook: None,
+        };
+
+        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let engine = Arc::new(TemplateProcessor::new());
+        let output = Arc::new(FileOutput::new());
+
+        let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
+        assert!(success, "process_section failed: {:?}", error);
+        assert!(output_path.exists());
+
+        let content = fs::read_to_string(&output_path).unwrap();
+        assert!(content.starts_with("color: #"));
+    }
+
+    #[test]
+    fn test_process_section_creates_parent_dirs() {
+        let tmp = TempDir::new().unwrap();
+        let input = tmp.path().join("input.css");
+        let output_path = tmp.path().join("deep").join("nested").join("out.css");
+
+        fs::write(&input, "body { }").unwrap();
+
+        let section = ConfigSection {
+            input_path: input.to_str().unwrap().to_string(),
+            output_path: output_path.to_str().unwrap().to_string(),
+            post_hook: None,
+        };
+
+        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let engine = Arc::new(TemplateProcessor::new());
+        let output = Arc::new(FileOutput::new());
+
+        let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
+        assert!(success, "process_section failed: {:?}", error);
+        assert!(output_path.exists());
+    }
+
+    #[test]
+    fn test_post_hook_empty_returns_true() {
+        assert!(run_post_hook("", "output.css", None));
+    }
+
+    #[test]
+    fn test_is_executable_nonexistent() {
+        let path = Path::new("/nonexistent/file");
+        assert!(!is_executable(path));
+    }
+}
