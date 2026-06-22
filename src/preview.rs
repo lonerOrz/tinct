@@ -6,28 +6,12 @@ use crate::core::{Mode, ThemeLoader};
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
 use crate::theme::JsonThemeLoader;
 use colored::*;
-use std::sync::Arc;
 
-/// Display a color preview showing all available colors in the theme as a matrix
-pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    // Create palette generator
-    let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
-
-    // Load theme
-    let theme_loader = JsonThemeLoader::new(palette_gen.clone());
-    let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
-
-    // Determine mode and get colors
-    let mode = if mode == "dark" {
-        Mode::Dark
-    } else {
-        Mode::Light
-    };
-    let colors = match mode {
-        Mode::Dark => theme.dark_colors(),
-        Mode::Light => theme.light_colors(),
-    };
-
+/// Display a color preview from an already-built color map (shared by pipeline).
+pub fn show_color_preview_from_theme(
+    colors: &std::collections::HashMap<String, crate::core::ColorFormat>,
+    mode: Mode,
+) {
     println!(
         "{}",
         "🎨 Material Design 3 Color Preview".bold().underline()
@@ -35,43 +19,51 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
     println!("🌙 Theme Mode: {}", mode.to_string().bold());
     println!();
 
-    // Display colors in MD3 style with actual color blocks
-    display_md3_cards_grid(&colors);
+    display_md3_cards_grid(colors);
+}
 
+/// Display a color preview showing all available colors in the theme as a matrix
+pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
+    let palette_gen = std::sync::Arc::new(LegacyPaletteGenerator::new(
+        AlgorithmParameters::default(),
+    ));
+    let theme_loader = JsonThemeLoader::new(palette_gen);
+    let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
+
+    let mode = parse_mode(mode);
+    let colors = match mode {
+        Mode::Dark => theme.dark_colors(),
+        Mode::Light => theme.light_colors(),
+    };
+
+    show_color_preview_from_theme(&colors, mode);
     Ok(())
 }
 
 /// Display a color preview from a JSON value (for seed-based preview)
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
-    // Create palette generator
-    let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
-
-    // Load theme from JSON value
-    let theme_loader = JsonThemeLoader::new(palette_gen.clone());
+    let palette_gen = std::sync::Arc::new(LegacyPaletteGenerator::new(
+        AlgorithmParameters::default(),
+    ));
+    let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
 
-    // Determine mode and get colors
-    let mode = if mode == "dark" {
-        Mode::Dark
-    } else {
-        Mode::Light
-    };
+    let mode = parse_mode(mode);
     let colors = match mode {
         Mode::Dark => theme.dark_colors(),
         Mode::Light => theme.light_colors(),
     };
 
-    println!(
-        "{}",
-        "🎨 Material Design 3 Color Preview".bold().underline()
-    );
-    println!("🌙 Theme Mode: {}", mode.to_string().bold());
-    println!();
-
-    // Display colors in MD3 style with actual color blocks
-    display_md3_cards_grid(&colors);
-
+    show_color_preview_from_theme(&colors, mode);
     Ok(())
+}
+
+fn parse_mode(mode: &str) -> Mode {
+    if mode == "dark" {
+        Mode::Dark
+    } else {
+        Mode::Light
+    }
 }
 
 /// Display colors in a card grid layout with true color blocks
@@ -434,7 +426,7 @@ mod tests {
         let color = create_test_color_format(255, 255, 255);
         let luminance =
             0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
-        assert!(luminance > 128.0); // White should be bright
+        assert!(luminance > 128.0);
     }
 
     #[test]
@@ -442,7 +434,7 @@ mod tests {
         let color = create_test_color_format(0, 0, 0);
         let luminance =
             0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
-        assert!(luminance < 128.0); // Black should be dark
+        assert!(luminance < 128.0);
     }
 
     #[test]
@@ -450,25 +442,14 @@ mod tests {
         let color = create_test_color_format(128, 128, 128);
         let luminance =
             0.299 * color.red as f64 + 0.587 * color.green as f64 + 0.114 * color.blue as f64;
-        assert!((luminance - 128.0).abs() < 1.0); // Gray should be around 128
+        assert!((luminance - 128.0).abs() < 1.0);
     }
 
     #[test]
-    fn test_mode_parsing() {
-        // Test mode parsing logic
-        let mode_dark = if "dark" == "dark" {
-            Mode::Dark
-        } else {
-            Mode::Light
-        };
-        assert_eq!(mode_dark, Mode::Dark);
-
-        let mode_light = if "light" == "dark" {
-            Mode::Dark
-        } else {
-            Mode::Light
-        };
-        assert_eq!(mode_light, Mode::Light);
+    fn test_parse_mode() {
+        assert_eq!(parse_mode("dark"), Mode::Dark);
+        assert_eq!(parse_mode("light"), Mode::Light);
+        assert_eq!(parse_mode("anything"), Mode::Light);
     }
 
     #[test]

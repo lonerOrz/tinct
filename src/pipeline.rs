@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use serde_json::json;
 
 use crate::config::{AlgorithmConfig, ConfigSection};
-use crate::core::{Mode, OutputFormat, TemplateEngine, ThemeLoader};
+use crate::core::{Mode, OutputFormat, TemplateEngine, Theme, ThemeLoader};
 use crate::image::{extract_source_color, SchemeType};
 use crate::log;
 use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
@@ -95,6 +95,9 @@ impl Pipeline {
         // Create theme data from source
         let theme_data = Self::create_theme_data(&theme_source)?;
 
+        // Build theme once — shared by preview and processing
+        let theme = Self::build_theme(&theme_data, &algorithm)?;
+
         // Print info
         if !log_level.is_quiet() {
             Self::print_info(&config_path, &theme_source, mode);
@@ -117,9 +120,9 @@ impl Pipeline {
 
         // Preview or process
         if preview {
-            Self::run_preview(&theme_data, mode)?;
+            Self::run_preview(&theme, mode)?;
         } else {
-            Self::run_processing(&theme_data, mode, &flat_config, &algorithm, log_level)?;
+            Self::run_processing(&theme, mode, &flat_config, log_level)?;
         }
 
         Ok(())
@@ -200,27 +203,13 @@ impl Pipeline {
         is_valid
     }
 
-    /// Show color preview and exit.
-    fn run_preview(theme_data: &serde_json::Value, mode: Mode) -> crate::Result<()> {
-        let mode_str = mode.to_string();
-        let result = crate::preview::show_color_preview_from_json(theme_data, &mode_str);
-        match result {
-            Ok(()) => Ok(()),
-            Err(e) => Err(crate::core::Error::Config(format!(
-                "Error showing color preview: {}",
-                e
-            ))),
-        }
-    }
-
-    /// Process all config sections in parallel.
-    fn run_processing(
+    /// Build a Theme from JSON data and algorithm config.
+    ///
+    /// Single entry point for theme construction — used by both preview and processing.
+    fn build_theme(
         theme_data: &serde_json::Value,
-        mode: Mode,
-        flat_config: &crate::config::Config,
         algorithm: &AlgorithmConfig,
-        log_level: LogVerbosity,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<Theme> {
         let harmony = ColorHarmony::parse(&algorithm.color_harmony).unwrap_or(ColorHarmony::Md3);
 
         let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters {
@@ -232,7 +221,29 @@ impl Pipeline {
             contrast_level: algorithm.contrast_level,
             color_harmony: harmony,
         }));
-        let theme_loader = Arc::new(JsonThemeLoader::new(palette_gen));
+        let theme_loader = JsonThemeLoader::new(palette_gen);
+        theme_loader
+            .load_value(theme_data)
+            .map_err(|e| crate::core::Error::Config(format!("Theme loading error: {}", e)))
+    }
+
+    /// Show color preview and exit.
+    fn run_preview(theme: &Theme, mode: Mode) -> crate::Result<()> {
+        let colors = match mode {
+            Mode::Dark => theme.dark_colors(),
+            Mode::Light => theme.light_colors(),
+        };
+        crate::preview::show_color_preview_from_theme(&colors, mode);
+        Ok(())
+    }
+
+    /// Process all config sections in parallel.
+    fn run_processing(
+        theme: &Theme,
+        mode: Mode,
+        flat_config: &crate::config::Config,
+        log_level: LogVerbosity,
+    ) -> crate::Result<()> {
         let template_engine = Arc::new(TemplateProcessor::new());
         let output = Arc::new(FileOutput::new());
 
@@ -255,9 +266,8 @@ impl Pipeline {
             .map(|(section_name, section)| {
                 let (success, error) = process_section(
                     section,
-                    theme_data,
+                    theme,
                     mode,
-                    &theme_loader,
                     &template_engine,
                     &output,
                 );
@@ -303,9 +313,8 @@ impl Pipeline {
 /// Process a single config section.
 fn process_section(
     section: &ConfigSection,
-    theme_data: &serde_json::Value,
+    theme: &Theme,
     mode: Mode,
-    theme_loader: &Arc<JsonThemeLoader>,
     template_engine: &Arc<TemplateProcessor>,
     output: &Arc<FileOutput>,
 ) -> (bool, Option<String>) {
@@ -328,17 +337,12 @@ fn process_section(
         }
     }
 
-    let theme = match theme_loader.load_value(theme_data) {
-        Ok(t) => t,
-        Err(e) => return (false, Some(format!("Theme loading error: {}", e))),
-    };
-
     let template_content = match fs::read_to_string(input_path) {
         Ok(c) => c,
         Err(e) => return (false, Some(format!("Error reading template: {}", e))),
     };
 
-    let output_content = match template_engine.render(&template_content, &theme, mode) {
+    let output_content = match template_engine.render(&template_content, theme, mode) {
         Ok(c) => c,
         Err(e) => return (false, Some(format!("Template rendering error: {}", e))),
     };
