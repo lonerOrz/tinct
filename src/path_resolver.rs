@@ -6,9 +6,9 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process;
 
 use crate::config::ConfigSection;
+use crate::core::Error;
 
 /// Resolve the theme path by checking multiple locations
 ///
@@ -17,20 +17,20 @@ use crate::config::ConfigSection;
 /// 2. Relative path from current directory
 /// 3. Project themes directory
 /// 4. User config directory (~/.config/tinct/themes/)
-pub fn resolve_theme_path(theme_name: &str) -> String {
+pub fn resolve_theme_path(theme_name: &str) -> Result<String, Error> {
     // Check absolute path
     if Path::new(theme_name).is_absolute() && Path::new(theme_name).exists() {
-        return theme_name.to_string();
+        return Ok(theme_name.to_string());
     }
 
     // Check relative path (must be a file, not a directory)
     let relative_path = Path::new(theme_name);
     if relative_path.exists() && relative_path.is_file() {
-        return relative_path
+        return Ok(relative_path
             .canonicalize()
             .unwrap_or_else(|_| PathBuf::from(theme_name))
             .to_string_lossy()
-            .to_string();
+            .to_string());
     }
 
     // Check project themes directory (only if it's a file, not a directory)
@@ -38,7 +38,7 @@ pub fn resolve_theme_path(theme_name: &str) -> String {
         .join("themes")
         .join(format!("{}.json", theme_name));
     if project_themes_path.is_file() {
-        return project_themes_path.to_string_lossy().to_string();
+        return Ok(project_themes_path.to_string_lossy().to_string());
     }
 
     // Check user config directory
@@ -49,15 +49,14 @@ pub fn resolve_theme_path(theme_name: &str) -> String {
             .join("themes")
             .join(format!("{}.json", theme_name));
         if user_themes_path.exists() {
-            return user_themes_path.to_string_lossy().to_string();
+            return Ok(user_themes_path.to_string_lossy().to_string());
         }
     }
 
-    eprintln!(
+    Err(Error::Config(format!(
         "Theme '{}' not found in any of these locations:\n  - Current directory\n  - Project themes/ directory\n  - ~/.config/tinct/themes/",
         theme_name
-    );
-    process::exit(1);
+    )))
 }
 
 /// Resolve the default config file path
@@ -205,5 +204,13 @@ mod tests {
         // Tilde should be expanded
         assert!(!section.input_path.starts_with("~"));
         assert!(!section.output_path.starts_with("~"));
+    }
+
+    #[test]
+    fn test_resolve_theme_path_missing() {
+        let result = resolve_theme_path("nonexistent_theme_xyz");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("not found"));
     }
 }

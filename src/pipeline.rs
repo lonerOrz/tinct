@@ -130,7 +130,7 @@ impl Pipeline {
                 Ok(json!({ "seed": hex }))
             }
             ThemeSource::File(theme_path) => {
-                let resolved = path_resolver::resolve_theme_path(theme_path);
+                let resolved = path_resolver::resolve_theme_path(theme_path)?;
                 let content = fs::read_to_string(&resolved).map_err(|e| {
                     crate::core::Error::Config(format!("Error reading theme file: {}", e))
                 })?;
