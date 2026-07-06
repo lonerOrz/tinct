@@ -36,7 +36,7 @@ use material_colors::palette::TonalPalette;
 use serde_json::Value;
 
 use super::params::{AlgorithmParameters, ColorHarmony};
-use super::types::{ColorEntry, ColorFormat, Palette};
+use super::types::{ColorFormat, Palette};
 
 /// Generate color palette from theme data using HCT color space
 ///
@@ -250,12 +250,10 @@ fn scheme_to_palette(
             })
     };
 
-    // Helper to create ColorEntry from scheme colors
-    // Pass the color role name directly, get_override will handle both formats
+    // Helper to create ColorFormat from scheme colors
     let create_entry = |get_color_fn: fn(&DynamicScheme) -> Argb,
                         role_name: Option<&str>|
-     -> Result<ColorEntry, String> {
-        // Check for override in theme using get_override
+     -> Result<ColorFormat, String> {
         let override_hex = role_name.and_then(&get_override);
 
         let argb = if let Some(hex) = override_hex {
@@ -265,10 +263,7 @@ fn scheme_to_palette(
         };
 
         let hex = argb.to_hex();
-
-        Ok(ColorEntry {
-            default: ColorFormat::from_hex(&hex)?,
-        })
+        ColorFormat::from_hex(&hex)
     };
 
     // Build palette using MD3 color roles
@@ -404,12 +399,12 @@ mod tests {
         let palette = generate_palette(&theme, false, false).unwrap();
 
         // Verify primary color was generated
-        assert!(!palette.primary.default.hex.is_empty());
-        assert!(palette.primary.default.hex.starts_with("#"));
+        assert!(!palette.primary.hex.is_empty());
+        assert!(palette.primary.hex.starts_with("#"));
 
         // Verify other colors exist
-        assert!(!palette.secondary.default.hex.is_empty());
-        assert!(!palette.tertiary.default.hex.is_empty());
+        assert!(!palette.secondary.hex.is_empty());
+        assert!(!palette.tertiary.hex.is_empty());
     }
 
     #[test]
@@ -422,7 +417,7 @@ mod tests {
         let palette = generate_palette(&theme, false, false).unwrap();
 
         // Error color should be the override
-        assert_eq!(palette.error.default.hex, "#F44336");
+        assert_eq!(palette.error.hex, "#F44336");
     }
 
     #[test]
@@ -434,6 +429,6 @@ mod tests {
         let palette = generate_palette(&theme, true, false).unwrap();
 
         // Dark mode should have dark surface
-        assert!(palette.surface.default.hex.starts_with("#"));
+        assert!(palette.surface.hex.starts_with("#"));
     }
 }

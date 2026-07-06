@@ -2,17 +2,8 @@
 //!
 //! Filters transform color values during template rendering.
 //! Supports syntax: `{{colors.primary.hex|lighten:10}}`
-//!
-//! # Available Filters
-//!
-//! - `set_alpha` - Modify alpha transparency (0.0-1.0)
-//! - `lighten` - Increase color lightness
-//! - `darken` - Decrease color lightness
-//! - `saturate` - Increase color saturation
-//! - `desaturate` - Decrease color saturation
 
 use crate::palette::ColorFormat;
-use std::collections::HashMap;
 
 /// Context for filter application
 pub struct FilterContext {
@@ -78,86 +69,43 @@ impl ColorFormatType {
     }
 }
 
-/// Trait for defining color filters (internal to template module)
-pub(crate) trait Filter: Send + Sync {
-    fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String;
-
-    fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
-        format_type.is_complete_color()
-    }
+/// Built-in color filters
+pub enum ColorFilter {
+    SetAlpha(f64),
+    Lighten(f64),
+    Darken(f64),
+    Saturate(f64),
+    Desaturate(f64),
 }
 
-/// Registry for managing filters
-pub struct FilterRegistry {
-    filters: HashMap<String, Box<dyn Filter>>,
-}
-
-impl Default for FilterRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl FilterRegistry {
-    pub fn new() -> Self {
-        let mut registry = FilterRegistry {
-            filters: HashMap::new(),
-        };
-        registry.register("set_alpha", Box::new(SetAlphaFilter));
-        registry.register("lighten", Box::new(LightenFilter));
-        registry.register("darken", Box::new(DarkenFilter));
-        registry.register("saturate", Box::new(SaturateFilter));
-        registry.register("desaturate", Box::new(DesaturateFilter));
-        registry
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn register(&mut self, name: &str, filter: Box<dyn Filter>) {
-        self.filters.insert(name.to_string(), filter);
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.filters.is_empty()
-    }
-
-    pub fn apply_filter(
-        &self,
-        value: &str,
-        name: &str,
-        param: Option<&str>,
-        color_format: &ColorFormat,
-        format_type: ColorFormatType,
-    ) -> String {
-        if let Some(filter) = self.filters.get(name) {
-            if filter.is_compatible(&format_type) {
-                let ctx = FilterContext {
-                    original_value: value.to_string(),
-                    format_type,
-                    color_format: color_format.clone(),
-                };
-                filter.apply(&ctx, param)
-            } else {
-                value.to_string()
-            }
-        } else {
-            value.to_string()
+impl ColorFilter {
+    pub fn from_name(name: &str, param: &str) -> Option<Self> {
+        let val = param.parse::<f64>().ok()?;
+        match name {
+            "set_alpha" => Some(ColorFilter::SetAlpha(val.clamp(0.0, 1.0))),
+            "lighten" => Some(ColorFilter::Lighten(val)),
+            "darken" => Some(ColorFilter::Darken(val)),
+            "saturate" => Some(ColorFilter::Saturate(val)),
+            "desaturate" => Some(ColorFilter::Desaturate(val)),
+            _ => None,
         }
     }
-}
 
-// --- Filter Implementations ---
+    pub fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
+        format_type.is_complete_color()
+    }
 
-struct SetAlphaFilter;
+    pub fn apply(&self, ctx: &FilterContext) -> String {
+        match self {
+            ColorFilter::SetAlpha(alpha_val) => Self::apply_set_alpha(ctx, *alpha_val),
+            ColorFilter::Lighten(amount) => Self::apply_lighten(ctx, *amount),
+            ColorFilter::Darken(amount) => Self::apply_darken(ctx, *amount),
+            ColorFilter::Saturate(amount) => Self::apply_saturate(ctx, *amount),
+            ColorFilter::Desaturate(amount) => Self::apply_desaturate(ctx, *amount),
+        }
+    }
 
-impl Filter for SetAlphaFilter {
-    fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
-        let Some(alpha_param) = param else {
-            return ctx.original_value.clone();
-        };
-        let Ok(alpha_val) = alpha_param.parse::<f64>() else {
-            return ctx.original_value.clone();
-        };
-        let alpha_val = alpha_val.clamp(0.0, 1.0);
+    fn apply_set_alpha(ctx: &FilterContext, alpha_val: f64) -> String {
         let alpha_byte = (alpha_val * 255.0).round() as u8;
 
         match ctx.format_type {
@@ -218,104 +166,35 @@ impl Filter for SetAlphaFilter {
         }
     }
 
-    fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
-        format_type.is_complete_color()
-    }
-}
-
-struct LightenFilter;
-
-impl Filter for LightenFilter {
-    fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
-        let Some(amount) = param else {
-            return ctx.original_value.clone();
-        };
-        let Ok(percent) = amount.parse::<f64>() else {
-            return ctx.original_value.clone();
-        };
-
+    fn apply_lighten(ctx: &FilterContext, amount: f64) -> String {
         let (h, s, l) = ctx.color_format.to_hsl();
-        let new_lightness = crate::color::clamp(l + percent, 0.0, 100.0);
+        let new_lightness = (l + amount).clamp(0.0, 100.0);
         let (nr, ng, nb) = crate::color::hsl_to_rgb(h, s, new_lightness);
-
         format_color(nr, ng, nb, ctx)
     }
 
-    fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
-        format_type.is_complete_color()
-    }
-}
-
-struct DarkenFilter;
-
-impl Filter for DarkenFilter {
-    fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
-        let Some(amount) = param else {
-            return ctx.original_value.clone();
-        };
-        let Ok(percent) = amount.parse::<f64>() else {
-            return ctx.original_value.clone();
-        };
-
+    fn apply_darken(ctx: &FilterContext, amount: f64) -> String {
         let (h, s, l) = ctx.color_format.to_hsl();
-        let new_lightness = crate::color::clamp(l - percent, 0.0, 100.0);
+        let new_lightness = (l - amount).clamp(0.0, 100.0);
         let (nr, ng, nb) = crate::color::hsl_to_rgb(h, s, new_lightness);
-
         format_color(nr, ng, nb, ctx)
     }
 
-    fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
-        format_type.is_complete_color()
-    }
-}
-
-struct SaturateFilter;
-
-impl Filter for SaturateFilter {
-    fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
-        let Some(amount) = param else {
-            return ctx.original_value.clone();
-        };
-        let Ok(percent) = amount.parse::<f64>() else {
-            return ctx.original_value.clone();
-        };
-
+    fn apply_saturate(ctx: &FilterContext, amount: f64) -> String {
         let (h, s, l) = ctx.color_format.to_hsl();
-        let new_saturation = crate::color::clamp(s + percent, 0.0, 100.0);
+        let new_saturation = (s + amount).clamp(0.0, 100.0);
         let (nr, ng, nb) = crate::color::hsl_to_rgb(h, new_saturation, l);
-
         format_color(nr, ng, nb, ctx)
     }
 
-    fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
-        format_type.is_complete_color()
-    }
-}
-
-struct DesaturateFilter;
-
-impl Filter for DesaturateFilter {
-    fn apply(&self, ctx: &FilterContext, param: Option<&str>) -> String {
-        let Some(amount) = param else {
-            return ctx.original_value.clone();
-        };
-        let Ok(percent) = amount.parse::<f64>() else {
-            return ctx.original_value.clone();
-        };
-
+    fn apply_desaturate(ctx: &FilterContext, amount: f64) -> String {
         let (h, s, l) = ctx.color_format.to_hsl();
-        let new_saturation = crate::color::clamp(s - percent, 0.0, 100.0);
+        let new_saturation = (s - amount).clamp(0.0, 100.0);
         let (nr, ng, nb) = crate::color::hsl_to_rgb(h, new_saturation, l);
-
         format_color(nr, ng, nb, ctx)
-    }
-
-    fn is_compatible(&self, format_type: &ColorFormatType) -> bool {
-        format_type.is_complete_color()
     }
 }
 
-/// Shared formatting logic: convert modified RGB back to the target format.
 fn format_color(r: u8, g: u8, b: u8, ctx: &FilterContext) -> String {
     let alpha_byte = (ctx.color_format.alpha * 255.0).round() as u8;
     let (h, s, l) = ctx.color_format.to_hsl();
@@ -386,23 +265,39 @@ mod tests {
         }
     }
 
+    fn apply(
+        name: &str,
+        param: &str,
+        value: &str,
+        color: &ColorFormat,
+        fmt: ColorFormatType,
+    ) -> String {
+        let Some(filter) = ColorFilter::from_name(name, param) else {
+            return value.to_string();
+        };
+        if !filter.is_compatible(&fmt) {
+            return value.to_string();
+        }
+        let ctx = FilterContext {
+            original_value: value.to_string(),
+            format_type: fmt,
+            color_format: color.clone(),
+        };
+        filter.apply(&ctx)
+    }
+
     #[test]
-    fn test_registry_creation() {
-        let registry = FilterRegistry::new();
-        let color = create_test_color();
-        let result =
-            registry.apply_filter("test", "unknown_filter", None, &color, ColorFormatType::Rgb);
-        assert_eq!(result, "test");
+    fn test_unknown_filter_returns_none() {
+        assert!(ColorFilter::from_name("unknown_filter", "").is_none());
     }
 
     #[test]
     fn test_set_alpha_filter() {
-        let registry = FilterRegistry::new();
         let color = create_test_color();
-        let result = registry.apply_filter(
-            "rgb(255, 87, 34)",
+        let result = apply(
             "set_alpha",
-            Some("0.5"),
+            "0.5",
+            "rgb(255, 87, 34)",
             &color,
             ColorFormatType::Rgba,
         );
@@ -411,12 +306,11 @@ mod tests {
 
     #[test]
     fn test_lighten_filter() {
-        let registry = FilterRegistry::new();
         let color = create_test_color();
-        let result = registry.apply_filter(
-            "rgb(255, 87, 34)",
+        let result = apply(
             "lighten",
-            Some("10"),
+            "10",
+            "rgb(255, 87, 34)",
             &color,
             ColorFormatType::Rgb,
         );
@@ -425,12 +319,11 @@ mod tests {
 
     #[test]
     fn test_darken_filter() {
-        let registry = FilterRegistry::new();
         let color = create_test_color();
-        let result = registry.apply_filter(
-            "rgb(255, 87, 34)",
+        let result = apply(
             "darken",
-            Some("10"),
+            "10",
+            "rgb(255, 87, 34)",
             &color,
             ColorFormatType::Rgb,
         );
@@ -439,12 +332,11 @@ mod tests {
 
     #[test]
     fn test_saturate_filter() {
-        let registry = FilterRegistry::new();
         let color = create_test_color();
-        let result = registry.apply_filter(
-            "rgb(255, 87, 34)",
+        let result = apply(
             "saturate",
-            Some("10"),
+            "10",
+            "rgb(255, 87, 34)",
             &color,
             ColorFormatType::Rgb,
         );
@@ -453,12 +345,11 @@ mod tests {
 
     #[test]
     fn test_desaturate_filter() {
-        let registry = FilterRegistry::new();
         let color = create_test_color();
-        let result = registry.apply_filter(
-            "rgb(255, 87, 34)",
+        let result = apply(
             "desaturate",
-            Some("10"),
+            "10",
+            "rgb(255, 87, 34)",
             &color,
             ColorFormatType::Rgb,
         );
@@ -467,15 +358,8 @@ mod tests {
 
     #[test]
     fn test_set_alpha_hex_to_hex8() {
-        let registry = FilterRegistry::new();
         let color = create_test_color();
-        let result = registry.apply_filter(
-            "#FF5722",
-            "set_alpha",
-            Some("0.5"),
-            &color,
-            ColorFormatType::Hex,
-        );
+        let result = apply("set_alpha", "0.5", "#FF5722", &color, ColorFormatType::Hex);
         assert_eq!(result, "#FF572280");
     }
 }

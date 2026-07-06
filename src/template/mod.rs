@@ -6,5 +6,5 @@
 pub(crate) mod filters;
 mod processor;
 
-pub use filters::{ColorFormatType, FilterContext, FilterRegistry};
+pub use filters::{ColorFilter, ColorFormatType, FilterContext};
 pub use processor::TemplateProcessor;

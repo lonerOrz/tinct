@@ -1,6 +1,6 @@
 //! File output format implementation
 
-use crate::core::{Error, OutputFormat, Result};
+use crate::core::{Error, Result};
 use std::path::Path;
 
 /// Output to a file
@@ -10,35 +10,30 @@ impl FileOutput {
     pub fn new() -> Self {
         Self
     }
-}
 
-impl Default for FileOutput {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl OutputFormat for FileOutput {
-    fn write(&self, content: &str, destination: &str) -> Result<()> {
-        // Expand path if it contains ~
+    pub fn write(&self, content: &str, destination: &str) -> Result<()> {
         let expanded = shellexpand::tilde(destination);
         let path = Path::new(expanded.as_ref());
 
-        // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| Error::Output(format!("Failed to create directory: {}", e)))?;
         }
 
-        // Write the file
         std::fs::write(path, content)
             .map_err(|e| Error::Output(format!("Failed to write file: {}", e)))?;
 
         Ok(())
     }
 
-    fn format_name(&self) -> &str {
+    pub fn format_name(&self) -> &str {
         "file"
+    }
+}
+
+impl Default for FileOutput {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

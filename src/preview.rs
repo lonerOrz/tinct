@@ -2,7 +2,7 @@
 //!
 //! Displays Material Design 3 color palettes in the terminal with actual color blocks.
 
-use crate::core::{Mode, ThemeLoader};
+use crate::core::Mode;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
 use crate::theme::JsonThemeLoader;
 use colored::*;
@@ -22,10 +22,8 @@ pub fn show_color_preview_from_theme(
     display_md3_cards_grid(colors);
 }
 
-/// Display a color preview showing all available colors in the theme as a matrix
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    let palette_gen =
-        std::sync::Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+    let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters::default());
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
 
@@ -35,14 +33,12 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
         Mode::Light => theme.light_colors(),
     };
 
-    show_color_preview_from_theme(&colors, mode);
+    show_color_preview_from_theme(colors, mode);
     Ok(())
 }
 
-/// Display a color preview from a JSON value (for seed-based preview)
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
-    let palette_gen =
-        std::sync::Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+    let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters::default());
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
 
@@ -52,7 +48,7 @@ pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Res
         Mode::Light => theme.light_colors(),
     };
 
-    show_color_preview_from_theme(&colors, mode);
+    show_color_preview_from_theme(colors, mode);
     Ok(())
 }
 

@@ -1,30 +1,26 @@
 //! Template processor implementation
 
-use crate::core::{ColorFormat, Mode, Result, TemplateEngine, Theme};
-use crate::template::filters::{ColorFormatType, FilterRegistry};
+use crate::core::{ColorFormat, Mode, Result, Theme};
+use crate::template::filters::{ColorFilter, ColorFormatType, FilterContext};
 use regex::Regex;
 
 /// Default template processor implementation
-pub struct TemplateProcessor {
-    filter_registry: FilterRegistry,
-}
+pub struct TemplateProcessor;
 
 impl TemplateProcessor {
     pub fn new() -> Self {
-        Self {
-            filter_registry: FilterRegistry::new(),
-        }
+        Self
     }
 }
 
 impl Default for TemplateProcessor {
     fn default() -> Self {
-        Self::new()
+        Self
     }
 }
 
-impl TemplateEngine for TemplateProcessor {
-    fn render(&self, template: &str, theme: &Theme, mode: Mode) -> Result<String> {
+impl TemplateProcessor {
+    pub fn render(&self, template: &str, theme: &Theme, mode: Mode) -> Result<String> {
         let mut content = template.to_string();
 
         // Process {{colors.XXX.default.XXX}} syntax - uses current mode colors
@@ -32,15 +28,13 @@ impl TemplateEngine for TemplateProcessor {
             Mode::Dark => theme.dark_colors(),
             Mode::Light => theme.light_colors(),
         };
-        content = self.process_color_placeholders(content, &current_mode_colors, "default")?;
+        content = self.process_color_placeholders(content, current_mode_colors, "default")?;
 
         // Process {{colors.XXX.dark.XXX}} syntax - always uses dark colors
-        let dark_colors = theme.dark_colors();
-        content = self.process_color_placeholders(content, &dark_colors, "dark")?;
+        content = self.process_color_placeholders(content, theme.dark_colors(), "dark")?;
 
         // Process {{colors.XXX.light.XXX}} syntax - always uses light colors
-        let light_colors = theme.light_colors();
-        content = self.process_color_placeholders(content, &light_colors, "light")?;
+        content = self.process_color_placeholders(content, theme.light_colors(), "light")?;
 
         // Process mode placeholders
         content = content.replace("{{mode}}", &mode.to_string());
@@ -52,9 +46,7 @@ impl TemplateEngine for TemplateProcessor {
 
         Ok(content)
     }
-}
 
-impl TemplateProcessor {
     fn process_color_placeholders(
         &self,
         content: String,
@@ -100,16 +92,23 @@ impl TemplateProcessor {
                     if let Some(color) = colors.get(key) {
                         let value = resolve_property(color, prop);
 
-                        if let Some(name) = filter_name {
+                        if let (Some(name), Some(param)) = (filter_name, filter_param) {
                             let format_type = ColorFormatType::from_property(prop)
                                 .unwrap_or(ColorFormatType::Rgb);
-                            self.filter_registry.apply_filter(
-                                &value,
-                                name,
-                                filter_param,
-                                color,
-                                format_type,
-                            )
+                            if let Some(filter) = ColorFilter::from_name(name, param) {
+                                if filter.is_compatible(&format_type) {
+                                    let ctx = FilterContext {
+                                        original_value: value.clone(),
+                                        format_type,
+                                        color_format: color.clone(),
+                                    };
+                                    filter.apply(&ctx)
+                                } else {
+                                    value.clone()
+                                }
+                            } else {
+                                value.clone()
+                            }
                         } else {
                             value
                         }
@@ -148,7 +147,7 @@ fn resolve_property(color: &ColorFormat, prop: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::palette::{ColorEntry, ColorFormat};
+    use crate::palette::ColorFormat;
 
     fn create_test_color(hex: &str) -> ColorFormat {
         ColorFormat {
@@ -175,8 +174,7 @@ mod tests {
 
     #[test]
     fn test_template_processor_new() {
-        let processor = TemplateProcessor::new();
-        assert!(!processor.filter_registry.is_empty());
+        let _processor = TemplateProcessor::new();
     }
 
     #[test]
@@ -185,10 +183,9 @@ mod tests {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
         let color = create_test_color("#FF5722");
-        theme.dark_palette.primary = ColorEntry {
-            default: color.clone(),
-        };
-        theme.light_palette.primary = ColorEntry { default: color };
+        theme.dark_palette.primary = color.clone();
+        theme.light_palette.primary = color;
+        theme.build_color_maps();
 
         let template = "Primary: {{colors.primary.default.hex}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
@@ -222,12 +219,9 @@ mod tests {
         let dark_color = create_test_color("#111111");
         let light_color = create_test_color("#EEEEEE");
 
-        theme.dark_palette.background = ColorEntry {
-            default: dark_color,
-        };
-        theme.light_palette.background = ColorEntry {
-            default: light_color,
-        };
+        theme.dark_palette.background = dark_color;
+        theme.light_palette.background = light_color;
+        theme.build_color_maps();
 
         let template =
             "Dark: {{colors.background.dark.hex}}, Light: {{colors.background.light.hex}}";
@@ -251,7 +245,8 @@ mod tests {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
         let color = create_test_color("#FF5722");
-        theme.dark_palette.primary = ColorEntry { default: color };
+        theme.dark_palette.primary = color;
+        theme.build_color_maps();
 
         // Test set_alpha filter
         let template = "Primary: {{colors.primary.default.hex|set_alpha:0.5}}";
@@ -269,7 +264,8 @@ mod tests {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
         let color = create_test_color("#FF5722");
-        theme.dark_palette.primary = ColorEntry { default: color };
+        theme.dark_palette.primary = color;
+        theme.build_color_maps();
 
         let template = "Primary: {{colors.primary.default.rgb|lighten:10}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();

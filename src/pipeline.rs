@@ -3,17 +3,15 @@
 //! `Pipeline::run(config)` handles theme creation, palette generation,
 //! template rendering, output, and post-hooks. One interface, one place to test.
 
-use std::env;
-use std::fs;
-use std::path::Path;
-use std::sync::Arc;
-
 use colored::*;
 use rayon::prelude::*;
 use serde_json::json;
+use std::env;
+use std::fs;
+use std::path::Path;
 
 use crate::config::{AlgorithmConfig, ConfigSection};
-use crate::core::{Mode, OutputFormat, TemplateEngine, Theme, ThemeLoader};
+use crate::core::{Mode, Theme};
 use crate::image::{extract_source_color, SchemeType};
 use crate::log;
 use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
@@ -189,15 +187,12 @@ impl Pipeline {
     ) -> crate::Result<Theme> {
         let harmony = ColorHarmony::parse(&algorithm.color_harmony).unwrap_or(ColorHarmony::Md3);
 
-        let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters {
-            contrast_threshold: algorithm.contrast_threshold,
+        let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters {
             saturation_adjustment: algorithm.saturation_adjustment,
-            lightness_adjustment: algorithm.lightness_adjustment,
             hue_shift: algorithm.hue_shift,
-            min_contrast_ratio: algorithm.min_contrast_ratio,
             contrast_level: algorithm.contrast_level,
             color_harmony: harmony,
-        }));
+        });
         let theme_loader = JsonThemeLoader::new(palette_gen);
         theme_loader
             .load_value(theme_data)
@@ -210,7 +205,7 @@ impl Pipeline {
             Mode::Dark => theme.dark_colors(),
             Mode::Light => theme.light_colors(),
         };
-        crate::preview::show_color_preview_from_theme(&colors, mode);
+        crate::preview::show_color_preview_from_theme(colors, mode);
         Ok(())
     }
 
@@ -221,10 +216,9 @@ impl Pipeline {
         flat_config: &crate::config::Config,
         log_level: crate::log::LogLevel,
     ) -> crate::Result<()> {
-        let template_engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let template_engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
-        // Flatten all sections into a single list for parallel processing
         let sections: Vec<_> = flat_config
             .values()
             .flat_map(|group| {
@@ -287,8 +281,8 @@ fn process_section(
     section: &ConfigSection,
     theme: &Theme,
     mode: Mode,
-    template_engine: &Arc<TemplateProcessor>,
-    output: &Arc<FileOutput>,
+    template_engine: &TemplateProcessor,
+    output: &FileOutput,
 ) -> (bool, Option<String>) {
     let input_path = &section.input_path;
     let output_path = &section.output_path;
@@ -610,8 +604,8 @@ mod tests {
         };
 
         let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
         let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
         assert!(!success);
@@ -633,8 +627,8 @@ mod tests {
         };
 
         let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
         let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
         assert!(success, "process_section failed: {:?}", error);
@@ -659,8 +653,8 @@ mod tests {
         };
 
         let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
         let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
         assert!(success, "process_section failed: {:?}", error);

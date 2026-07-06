@@ -11,25 +11,13 @@ pub struct ImageConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlgorithmConfig {
-    /// Color contrast threshold (0.0-1.0)
-    #[serde(default = "default_contrast_threshold")]
-    pub contrast_threshold: f64,
-
     /// Saturation adjustment (-100 to 100)
     #[serde(default = "default_saturation_adjustment")]
     pub saturation_adjustment: i8,
 
-    /// Lightness adjustment (-100 to 100)
-    #[serde(default = "default_lightness_adjustment")]
-    pub lightness_adjustment: i8,
-
     /// Hue shift (-180 to 180)
     #[serde(default = "default_hue_shift")]
     pub hue_shift: i16,
-
-    /// Minimum contrast ratio for readability
-    #[serde(default = "default_min_contrast_ratio")]
-    pub min_contrast_ratio: f64,
 
     /// MD3 contrast level (-1.0 to 1.0)
     #[serde(default = "default_contrast_level")]
@@ -40,24 +28,12 @@ pub struct AlgorithmConfig {
     pub color_harmony: String,
 }
 
-fn default_contrast_threshold() -> f64 {
-    0.15
-}
-
 fn default_saturation_adjustment() -> i8 {
-    0
-}
-
-fn default_lightness_adjustment() -> i8 {
     0
 }
 
 fn default_hue_shift() -> i16 {
     0
-}
-
-fn default_min_contrast_ratio() -> f64 {
-    4.5
 }
 
 fn default_contrast_level() -> f64 {
@@ -95,35 +71,20 @@ impl ConfigRoot {
         // Extract algorithm config if present
         // Use serde defaults by deserializing, fallback to hardcoded defaults
         let mut algorithm = AlgorithmConfig {
-            contrast_threshold: default_contrast_threshold(),
             saturation_adjustment: default_saturation_adjustment(),
-            lightness_adjustment: default_lightness_adjustment(),
             hue_shift: default_hue_shift(),
-            min_contrast_ratio: default_min_contrast_ratio(),
             contrast_level: default_contrast_level(),
             color_harmony: default_color_harmony(),
         };
         if let Some(table) = value.get("algorithm").and_then(|v| v.as_table()) {
-            if let Some(v) = table.get("contrast_threshold").and_then(|v| v.as_float()) {
-                algorithm.contrast_threshold = v;
-            }
             if let Some(v) = table
                 .get("saturation_adjustment")
                 .and_then(|v| v.as_integer())
             {
                 algorithm.saturation_adjustment = v as i8;
             }
-            if let Some(v) = table
-                .get("lightness_adjustment")
-                .and_then(|v| v.as_integer())
-            {
-                algorithm.lightness_adjustment = v as i8;
-            }
             if let Some(v) = table.get("hue_shift").and_then(|v| v.as_integer()) {
                 algorithm.hue_shift = v as i16;
-            }
-            if let Some(v) = table.get("min_contrast_ratio").and_then(|v| v.as_float()) {
-                algorithm.min_contrast_ratio = v;
             }
             if let Some(v) = table.get("contrast_level").and_then(|v| v.as_float()) {
                 algorithm.contrast_level = v;
@@ -220,11 +181,8 @@ output_path = "output.css"
     fn test_config_parse_with_algorithm() {
         let config_content = r#"
 [algorithm]
-contrast_threshold = 0.2
 saturation_adjustment = 10
-lightness_adjustment = -5
 hue_shift = 15
-min_contrast_ratio = 4.0
 
 [templates.test]
 input_path = "input.css"
@@ -233,11 +191,8 @@ output_path = "output.css"
         let result = ConfigRoot::parse(config_content);
         assert!(result.is_ok());
         let config = result.unwrap();
-        assert_eq!(config.algorithm.contrast_threshold, 0.2);
         assert_eq!(config.algorithm.saturation_adjustment, 10);
-        assert_eq!(config.algorithm.lightness_adjustment, -5);
         assert_eq!(config.algorithm.hue_shift, 15);
-        assert_eq!(config.algorithm.min_contrast_ratio, 4.0);
     }
 
     #[test]
@@ -268,11 +223,8 @@ post_hook = "./script.sh"
         assert!(result.is_ok());
         let config = result.unwrap();
         // Check default values
-        assert!((config.algorithm.contrast_threshold - 0.15).abs() < 0.001);
         assert_eq!(config.algorithm.saturation_adjustment, 0);
-        assert_eq!(config.algorithm.lightness_adjustment, 0);
         assert_eq!(config.algorithm.hue_shift, 0);
-        assert!((config.algorithm.min_contrast_ratio - 4.5).abs() < 0.001);
     }
 
     #[test]

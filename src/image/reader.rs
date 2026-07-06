@@ -130,10 +130,7 @@ mod tests {
     #[test]
     fn test_read_image_filter_types() {
         let file = create_test_png();
-        for filter in [
-            ResizeFilter::Triangle,
-            ResizeFilter::Nearest,
-        ] {
+        for filter in [ResizeFilter::Triangle, ResizeFilter::Nearest] {
             let pixels = read_image(file.path(), filter).unwrap();
             assert!(!pixels.is_empty());
         }
