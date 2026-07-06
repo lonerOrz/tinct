@@ -38,7 +38,7 @@ cargo build --release
 
 ### 2. Install via Nix (for Nix or NixOS users)
 
-```bash
+```nix
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -139,29 +139,49 @@ Combine seed with color overrides for precise control.
 
 **Available override options:**
 
-| Field | Description | Example |
-|-------|-------------|---------|
-| `seed` | Seed color for palette generation | `"#7aa2f7"` |
-| `Primary` | Override primary color | `"#7aa2f7"` |
-| `Secondary` | Override secondary color | `"#bb9af7"` |
-| `Tertiary` | Override tertiary color | `"#9ece6a"` |
-| `Error` | Override error color | `"#f7768e"` |
-| `Surface` | Override surface color | `"#1a1b26"` |
-| `Background` | Override background color | `"#1a1b26"` |
-| `SurfaceVariant` | Override surface variant | `"#24283b"` |
-| `Outline` | Override outline color | `"#565f89"` |
-| `OutlineVariant` | Override outline variant | `"#b4b5b9"` |
-| `Shadow` | Override shadow color | `"#000000"` |
-| `Scrim` | Override scrim color | `"#00000080"` |
-| `InverseSurface` | Override inverse surface | `"#ebdbb2"` |
-| `InverseOnSurface` | Override inverse on surface | `"#3c3836"` |
-| `InversePrimary` | Override inverse primary | `"#7aa2f7"` |
+| Field              | Description                       | Example       |
+| ------------------ | --------------------------------- | ------------- |
+| `seed`             | Seed color for palette generation | `"#7aa2f7"`   |
+| `Primary`          | Override primary color            | `"#7aa2f7"`   |
+| `Secondary`        | Override secondary color          | `"#bb9af7"`   |
+| `Tertiary`         | Override tertiary color           | `"#9ece6a"`   |
+| `Error`            | Override error color              | `"#f7768e"`   |
+| `Surface`          | Override surface color            | `"#1a1b26"`   |
+| `Background`       | Override background color         | `"#1a1b26"`   |
+| `SurfaceVariant`   | Override surface variant          | `"#24283b"`   |
+| `Outline`          | Override outline color            | `"#565f89"`   |
+| `OutlineVariant`   | Override outline variant          | `"#b4b5b9"`   |
+| `Shadow`           | Override shadow color             | `"#000000"`   |
+| `Scrim`            | Override scrim color              | `"#00000080"` |
+| `InverseSurface`   | Override inverse surface          | `"#ebdbb2"`   |
+| `InverseOnSurface` | Override inverse on surface       | `"#3c3836"`   |
+| `InversePrimary`   | Override inverse primary          | `"#7aa2f7"`   |
 
 **Note:** Color names support both lowercase (`"primary"`) and PascalCase (`"Primary"`).
 
-### Algorithm Configuration
+## Configuration File
 
-You can adjust the color generation algorithm in your `config.toml`:
+The configuration file is written in TOML format and is located at `~/.config/tinct/config.toml` by default. It contains template injection definitions, color generation algorithm tuning, and image extraction preferences.
+
+### 1. Template File Configurations
+
+Configure the template paths, destination output paths, and execution hooks for each application.
+
+```toml
+[templates.alacritty]
+input_path = "~/.config/tinct/templates/alacritty.toml"
+output_path = "~/.config/alacritty/alacritty.toml"
+post_hook = "echo 'Alacritty theme injected successfully!'"
+
+[templates.waybar]
+input_path = "~/.config/tinct/templates/waybar.css"
+output_path = "~/.config/waybar/style.css"
+post_hook = "killall -SIGUSR2 waybar"
+```
+
+### 2. Algorithm Configuration
+
+You can adjust the color generation algorithm behavior:
 
 ```toml
 [algorithm]
@@ -173,42 +193,24 @@ color_harmony = "md3"       # Harmony mode (md3, analogous, complementary, triad
 
 **Algorithm parameters:**
 
-| Parameter | Range | Default | Effect |
-|-----------|-------|---------|--------|
-| `hue_shift` | -180 ~ 180 | `0` | Rotates all colors' hue |
-| `saturation_adjustment` | -100 ~ 100 | `0` | Adjusts color saturation (chroma) |
-| `contrast_level` | -1.0 ~ 1.0 | `0.0` | MD3 contrast level for accessibility |
-| `color_harmony` | see below | `md3` | Secondary/tertiary hue relationships |
+| Parameter               | Range      | Default | Effect                               |
+| ----------------------- | ---------- | ------- | ------------------------------------ |
+| `hue_shift`             | -180 ~ 180 | `0`     | Rotates all colors' hue              |
+| `saturation_adjustment` | -100 ~ 100 | `0`     | Adjusts color saturation (chroma)    |
+| `contrast_level`        | -1.0 ~ 1.0 | `0.0`   | MD3 contrast level for accessibility |
+| `color_harmony`         | see below  | `md3`   | Secondary/tertiary hue relationships |
 
 **Color Harmony modes:**
 
-| Mode | Description | Secondary Hue | Tertiary Hue |
-|------|-------------|---------------|--------------|
-| `md3` | Material Design 3 standard | MD3 hue table (2-20°) | MD3 hue table (5-40°) |
-| `analogous` | Close, harmonious colors | +15° | +30° |
-| `complementary` | Opposite colors | +180° | +180° |
-| `triadic` | Evenly spaced | +120° | +240° |
-| `split-complementary` | Split opposite | +150° | +210° |
+| Mode                  | Description                | Secondary Hue         | Tertiary Hue          |
+| --------------------- | -------------------------- | --------------------- | --------------------- |
+| `md3`                 | Material Design 3 standard | MD3 hue table (2-20°) | MD3 hue table (5-40°) |
+| `analogous`           | Close, harmonious colors   | +15°                  | +30°                  |
+| `complementary`       | Opposite colors            | +180°                 | +180°                 |
+| `triadic`             | Evenly spaced              | +120°                 | +240°                 |
+| `split-complementary` | Split opposite             | +150°                 | +210°                 |
 
-**Examples:**
-
-```toml
-# Warm Gruvbox theme
-[algorithm]
-hue_shift = 15
-saturation_adjustment = 10
-
-# Cool Nord theme
-[algorithm]
-hue_shift = -10
-saturation_adjustment = -20
-
-# High saturation theme
-[algorithm]
-saturation_adjustment = 50
-```
-
-### Image Configuration
+### 3. Image Configuration
 
 Extract colors from wallpaper images using the `[image]` section:
 
@@ -219,58 +221,26 @@ scheme_type = "vibrant"    # Color extraction scheme
 
 **Scheme types:**
 
-| Scheme | Pipeline | Description |
-|--------|----------|-------------|
-| `tonal-spot` | Wu + WSMeans + Score | MD3 standard, balanced |
-| `vibrant` | K-means + Chroma | High saturation colors |
-| `faithful` | K-means + Count | Area-dominant colors |
-| `muted` | K-means + Muted | Low saturation, subtle |
+| Scheme          | Pipeline                | Description              |
+| --------------- | ----------------------- | ------------------------ |
+| `tonal-spot`    | Wu + WSMeans + Score    | MD3 standard, balanced   |
+| `vibrant`       | K-means + Chroma        | High saturation colors   |
+| `faithful`      | K-means + Count         | Area-dominant colors     |
+| `muted`         | K-means + Muted         | Low saturation, subtle   |
 | `dysfunctional` | K-means + Dysfunctional | 2nd most dominant family |
-| `content` | Wu + Score | MD3 Content variant |
-| `fruit-salad` | Wu + Score | MD3 Fruit Salad variant |
-| `rainbow` | Wu + Score | MD3 Rainbow variant |
-| `monochrome` | Wu + Score | MD3 Monochrome variant |
+| `content`       | Wu + WSMeans + Score    | MD3 Content variant      |
+| `fruit-salad`   | Wu + WSMeans + Score    | MD3 Fruit Salad variant  |
+| `rainbow`       | Wu + WSMeans + Score    | MD3 Rainbow variant      |
+| `monochrome`    | Wu + WSMeans + Score    | MD3 Monochrome variant   |
 
 **Priority chain:** CLI `--scheme-type` > config `[image].scheme_type` > default (`tonal-spot`)
 
 **Notes:**
+
 - `hue_shift = 30` rotates colors 30° toward orange
 - `saturation_adjustment = 50` increases saturation by 50%
 - `saturation_adjustment = -50` decreases saturation by 50% (more muted)
 - `lightness_adjustment` is not supported (would break MD3 contrast ratios)
-
-### Example Themes
-
-**Gruvbox Dark:**
-```json
-{
-  "seed": "#b8bb26",
-  "error": "#fb4934",
-  "surface": "#282828",
-  "background": "#282828"
-}
-```
-
-**Nord:**
-```json
-{
-  "seed": "#88c0d0",
-  "error": "#bf616a",
-  "surface": "#2e3440",
-  "background": "#2e3440"
-}
-```
-
-**Dracula:**
-```json
-{
-  "seed": "#bd93f9",
-  "error": "#ff5555",
-  "surface": "#282a36",
-  "background": "#282a36"
-}
-```
-
 
 ## Template Color Format
 
@@ -278,7 +248,7 @@ In tinct's template files, you can use the following color formats to reference 
 
 ### Color Roles
 
-Available color roles include:
+#### Material Design 3 Color Roles
 
 - `primary` - Primary brand color
 - `on_primary` - Text/icon color that appears on top of primary
@@ -317,41 +287,67 @@ Available color roles include:
 - `shadow` - Shadow color
 - `scrim` - Scrim overlay color
 
+#### Terminal ANSI Color Roles
+
+You can also use these standard ANSI terminal color values, mapped intelligently from the generated palette:
+
+- `black` / `bright_black`
+- `red` / `bright_red`
+- `green` / `bright_green`
+- `yellow` / `bright_yellow`
+- `blue` / `bright_blue`
+- `magenta` / `bright_magenta`
+- `cyan` / `bright_cyan`
+- `white` / `bright_white`
+
 ### Color Format Attributes
 
 For each color role, you can use the following format attributes:
 
-| Attribute    | Example Placeholder                           | Output Example             |
-| ------------ | --------------------------------------------- | -------------------------- |
-| Hex complete | `{{colors.primary.default.hex}}`              | `#ff5722`                  |
-| Hex stripped | `{{colors.primary.default.hex_stripped}}`     | `ff5722`                   |
-| Hex8 complete | `{{colors.primary.default.hex8}}`             | `#ff5722ff`                |
-| Hex8 stripped | `{{colors.primary.default.hex8_stripped}}`    | `ff5722ff`                 |
-| RGB          | `{{colors.primary.default.rgb}}`              | `rgb(255, 87, 34)`         |
-| RGBA         | `{{colors.primary.default.rgba}}`             | `rgba(255, 87, 34, 1.0)`   |
-| Red          | `{{colors.primary.default.red}}`              | `255`                      |
-| Green        | `{{colors.primary.default.green}}`            | `87`                       |
-| Blue         | `{{colors.primary.default.blue}}`             | `34`                       |
-| Alpha        | `{{colors.primary.default.alpha}}`            | `1.0`                      |
-| HSL          | `{{colors.primary.default.hsl}}`              | `hsl(14, 100%, 57%)`       |
-| HSLA         | `{{colors.primary.default.hsla}}`             | `hsla(14, 100%, 57%, 1.0)` |
-| Hue          | `{{colors.primary.default.hue}}`              | `14`                       |
-| Saturation   | `{{colors.primary.default.saturation}}`       | `100`                      |
-| Lightness    | `{{colors.primary.default.lightness}}`        | `57`                       |
+| Attribute     | Example Placeholder                        | Output Example             |
+| ------------- | ------------------------------------------ | -------------------------- |
+| Hex complete  | `{{colors.primary.default.hex}}`           | `#ff5722`                  |
+| Hex stripped  | `{{colors.primary.default.hex_stripped}}`  | `ff5722`                   |
+| Hex8 complete | `{{colors.primary.default.hex8}}`          | `#ff5722ff`                |
+| Hex8 stripped | `{{colors.primary.default.hex8_stripped}}` | `ff5722ff`                 |
+| RGB           | `{{colors.primary.default.rgb}}`           | `rgb(255, 87, 34)`         |
+| RGBA          | `{{colors.primary.default.rgba}}`          | `rgba(255, 87, 34, 1.0)`   |
+| Red           | `{{colors.primary.default.red}}`           | `255`                      |
+| Green         | `{{colors.primary.default.green}}`         | `87`                       |
+| Blue          | `{{colors.primary.default.blue}}`          | `34`                       |
+| Alpha         | `{{colors.primary.default.alpha}}`         | `1.0`                      |
+| HSL           | `{{colors.primary.default.hsl}}`           | `hsl(14, 100%, 57%)`       |
+| HSLA          | `{{colors.primary.default.hsla}}`          | `hsla(14, 100%, 57%, 1.0)` |
+| Hue           | `{{colors.primary.default.hue}}`           | `14`                       |
+| Saturation    | `{{colors.primary.default.saturation}}`    | `100`                      |
+| Lightness     | `{{colors.primary.default.lightness}}`     | `57`                       |
 
 ### Template Filters
 
-tinct supports a modular filter system to transform color values:
+tinct supports a modular filter system to transform color values.
 
-| Filter     | Example Placeholder                                 | Output Example           |
-| ---------- | --------------------------------------------------- | ------------------------ |
-| Set Alpha  | `{{colors.primary.default.rgba \| set_alpha: 0.5}}` | `rgba(255, 87, 34, 0.5)` |
-| Lighten    | `{{colors.primary.default.rgb \| lighten: 10}}`     | Lightened RGB color      |
-| Darken     | `{{colors.primary.default.rgb \| darken: 10}}`      | Darkened RGB color       |
-| Saturate   | `{{colors.primary.default.rgb \| saturate: 10}}`    | More saturated RGB color |
-| Desaturate | `{{colors.primary.default.rgb \| desaturate: 10}}`  | Less saturated RGB color |
+> **Note on Syntax**: To ensure the parser parses filters correctly, do not put whitespace directly after the pipe `|` character (e.g. use `{{colors.primary.default.rgba|set_alpha:0.5}}` instead of `| set_alpha`).
 
-**Note:** If you want to use transparency in `rgba()`, you need to reference the `.red`, `.green`, `.blue` components separately, otherwise it will generate invalid CSS.
+| Filter     | Example Placeholder                              | Output Example           |
+| ---------- | ------------------------------------------------ | ------------------------ |
+| Set Alpha  | `{{colors.primary.default.rgba\|set_alpha:0.5}}` | `rgba(255, 87, 34, 0.5)` |
+| Lighten    | `{{colors.primary.default.rgb\|lighten:10}}`     | Lightened RGB color      |
+| Darken     | `{{colors.primary.default.rgb\|darken:10}}`      | Darkened RGB color       |
+| Saturate   | `{{colors.primary.default.rgb\|saturate:10}}`    | More saturated RGB color |
+| Desaturate | `{{colors.primary.default.rgb\|desaturate:10}}`  | Less saturated RGB color |
+
+**Note on Transparency:** The most convenient way to add transparency to a color is by using the `|set_alpha` filter directly on the role placeholder. However, you can also manually format them in CSS by accessing individual RGB components separately:
+
+```css
+.semi-transparent-overlay {
+  background-color: rgba(
+    {{colors.surface.default.red}},
+    {{colors.surface.default.green}},
+    {{colors.surface.default.blue}},
+    0.8
+  );
+}
+```
 
 ### Mode-related Placeholders
 
@@ -376,19 +372,6 @@ tinct supports a modular filter system to transform color values:
 .surface-background {
     background-color: {{colors.surface.default.rgb}};
     border: 1px solid {{colors.outline.default.hex}};
-}
-```
-
-- **RGBA Colors (with components)**
-
-```css
-.semi-transparent-overlay {
-  background-color: rgba(
-    {{colors.surface.default.red}},
-    {{colors.surface.default.green}},
-    {{colors.surface.default.blue}},
-    0.8
-  );
 }
 ```
 
@@ -427,3 +410,7 @@ BSD 3-Clause License
 ---
 
 > If you find `tinct` useful, please give it a ⭐ and share! 🎉
+
+```
+
+```
