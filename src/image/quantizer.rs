@@ -30,17 +30,6 @@ fn argb_from_rgb(r: u8, g: u8, b: u8) -> u32 {
     (0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
-/// Extract RGB from ARGB integer.
-#[allow(dead_code)]
-#[inline]
-fn rgb_from_argb(argb: u32) -> (u8, u8, u8) {
-    (
-        ((argb >> 16) & 0xFF) as u8,
-        ((argb >> 8) & 0xFF) as u8,
-        (argb & 0xFF) as u8,
-    )
-}
-
 /// A box in RGB color space for Wu quantization.
 #[derive(Debug, Clone, Copy)]
 struct Box {

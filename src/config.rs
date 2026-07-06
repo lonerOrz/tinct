@@ -76,12 +76,6 @@ pub struct ConfigSection {
     pub post_hook: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[allow(dead_code)]
-pub struct ConfigGroup {
-    pub sections: HashMap<String, ConfigSection>,
-}
-
 // Use a completely different approach - parse algorithm and templates separately
 #[derive(Debug, Clone)]
 pub struct ConfigRoot {

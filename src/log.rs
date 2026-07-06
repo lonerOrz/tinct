@@ -32,27 +32,9 @@ pub fn init_logger(level: LogLevel) {
     LOGGER.get_or_init(|| Logger::new(level));
 }
 
-#[allow(dead_code)]
-pub fn is_verbose() -> bool {
-    if let Some(logger) = LOGGER.get() {
-        logger.level == LogLevel::Verbose
-    } else {
-        false
-    }
-}
-
 // Info module
 pub mod info {
     use super::*;
-
-    #[allow(dead_code)]
-    pub fn message(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!("{} [{}] {}", "ℹ".blue(), section.blue(), msg.blue());
-            }
-        }
-    }
 
     pub fn success(section: &str, msg: &str) {
         if let Some(logger) = LOGGER.get() {
@@ -168,12 +150,6 @@ mod tests {
         assert_ne!(LogLevel::Quiet, LogLevel::Normal);
         assert_ne!(LogLevel::Normal, LogLevel::Verbose);
         assert_ne!(LogLevel::Quiet, LogLevel::Verbose);
-    }
-
-    #[test]
-    fn test_is_verbose_default() {
-        // Without initialization, is_verbose should return false
-        assert!(!is_verbose());
     }
 
     #[test]

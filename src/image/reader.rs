@@ -51,8 +51,6 @@ pub fn read_image(path: &Path, filter: ResizeFilter) -> Result<Vec<Rgb>, String>
     let filter_type = match filter {
         ResizeFilter::Triangle => FilterType::Triangle,
         ResizeFilter::Nearest => FilterType::Nearest,
-        ResizeFilter::CatmullRom => FilterType::CatmullRom,
-        ResizeFilter::Lanczos3 => FilterType::Lanczos3,
     };
 
     let img = reader
@@ -93,10 +91,6 @@ pub enum ResizeFilter {
     Triangle,
     /// Nearest neighbor — preserves distinct color regions for k-means.
     Nearest,
-    /// Catmull-Rom cubic — sharper edges.
-    CatmullRom,
-    /// Lanczos 3-lobed — highest quality.
-    Lanczos3,
 }
 
 #[cfg(test)]
@@ -139,8 +133,6 @@ mod tests {
         for filter in [
             ResizeFilter::Triangle,
             ResizeFilter::Nearest,
-            ResizeFilter::CatmullRom,
-            ResizeFilter::Lanczos3,
         ] {
             let pixels = read_image(file.path(), filter).unwrap();
             assert!(!pixels.is_empty());
