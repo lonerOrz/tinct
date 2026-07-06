@@ -38,18 +38,22 @@ use serde_json::Value;
 use super::params::{AlgorithmParameters, ColorHarmony};
 use super::types::{ColorFormat, Palette};
 
+/// Extract seed hex from theme: prefer "seed", fallback to "Primary".
+pub fn extract_seed_hex(theme: &Value) -> Option<&str> {
+    theme
+        .get("seed")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
+}
+
 /// Generate color palette from theme data using HCT color space
 ///
 /// Seed color priority:
 /// 1. `seed` field (if present)
 /// 2. `Primary` field (as fallback seed)
 pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
-    // Get seed color: prefer explicit "seed", fallback to "Primary"
-    let seed_hex = theme
-        .get("seed")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
-        .ok_or("Theme must contain either 'seed' or 'Primary' color")?;
+    let seed_hex =
+        extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     // Parse seed color from hex
     let seed_argb = parse_hex_color(seed_hex)?;
@@ -70,12 +74,8 @@ pub fn generate_palette_with_params(
     is_dark_mode: bool,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
-    // Get seed color: prefer explicit "seed", fallback to "Primary"
-    let seed_hex = theme
-        .get("seed")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
-        .ok_or("Theme must contain either 'seed' or 'Primary' color")?;
+    let seed_hex =
+        extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     // Parse seed color
     let seed_argb = parse_hex_color(seed_hex)?;

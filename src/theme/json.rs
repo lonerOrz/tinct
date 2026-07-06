@@ -6,7 +6,7 @@
 //! - Format 3: `{ "seed": "#7aa2f7", "Primary": "#7aa2f7", ... }`
 
 use crate::core::{Error, Mode, Result, Theme};
-use crate::palette::LegacyPaletteGenerator;
+use crate::palette::{extract_seed_hex, LegacyPaletteGenerator};
 use serde_json::Value;
 
 /// A theme loader for JSON format theme files
@@ -34,12 +34,7 @@ impl JsonThemeLoader {
             .unwrap_or("unknown")
             .to_string();
 
-        let source_color = json
-            .get("seed")
-            .and_then(|v| v.as_str())
-            .or_else(|| json.get("Primary").and_then(|v| v.as_str()))
-            .unwrap_or("#000000")
-            .to_string();
+        let source_color = extract_seed_hex(&json).unwrap_or("#000000").to_string();
 
         let dark_palette = self.palette_generator.generate(&json, Mode::Dark)?;
         let light_palette = self.palette_generator.generate(&json, Mode::Light)?;
@@ -60,12 +55,7 @@ impl JsonThemeLoader {
             .unwrap_or("theme")
             .to_string();
 
-        let source_color = json
-            .get("seed")
-            .and_then(|v| v.as_str())
-            .or_else(|| json.get("Primary").and_then(|v| v.as_str()))
-            .unwrap_or("#000000")
-            .to_string();
+        let source_color = extract_seed_hex(json).unwrap_or("#000000").to_string();
 
         let dark_palette = self.palette_generator.generate(json, Mode::Dark)?;
         let light_palette = self.palette_generator.generate(json, Mode::Light)?;
