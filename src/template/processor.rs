@@ -126,6 +126,10 @@ impl TemplateProcessor {
                         value
                     }
                 } else {
+                    crate::log::general::info(&format!(
+                        "Warning: color '{}' not found in palette, using #000000",
+                        key
+                    ));
                     "#000000".to_string()
                 }
             })
