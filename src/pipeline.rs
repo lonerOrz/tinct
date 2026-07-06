@@ -54,8 +54,8 @@ impl Pipeline {
     pub fn run(config: PipelineConfig) -> crate::Result<()> {
         let PipelineConfig {
             config_path,
-            mut flat_config,
-            config_dir,
+            flat_config,
+            config_dir: _,
             mode,
             preview,
             log_level,

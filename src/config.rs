@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use toml::Value;
 
 /// Image extraction configuration
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -52,100 +53,59 @@ pub struct ConfigSection {
     pub post_hook: Option<String>,
 }
 
-// Use a completely different approach - parse algorithm and templates separately
+/// Raw config with serde flatten — algorithm/image are deserialized by serde,
+/// everything else (template groups) is captured as `toml::Value` for post-processing.
+#[derive(Debug, Clone, Deserialize)]
+struct ConfigRootRaw {
+    #[serde(default)]
+    algorithm: AlgorithmConfig,
+    #[serde(default)]
+    image: ImageConfig,
+    #[serde(flatten)]
+    other: HashMap<String, toml::Value>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ConfigRoot {
     pub algorithm: AlgorithmConfig,
-    #[allow(dead_code)]
     pub image: ImageConfig,
     pub groups: HashMap<String, HashMap<String, ConfigSection>>,
 }
 
 impl ConfigRoot {
     pub fn parse(config_content: &str) -> Result<Self, String> {
-        use toml::Value;
-
-        let value: Value =
+        let raw: ConfigRootRaw =
             toml::from_str(config_content).map_err(|e| format!("Invalid TOML format: {}", e))?;
 
-        // Extract algorithm config if present
-        // Use serde defaults by deserializing, fallback to hardcoded defaults
-        let mut algorithm = AlgorithmConfig {
-            saturation_adjustment: default_saturation_adjustment(),
-            hue_shift: default_hue_shift(),
-            contrast_level: default_contrast_level(),
-            color_harmony: default_color_harmony(),
-        };
-        if let Some(table) = value.get("algorithm").and_then(|v| v.as_table()) {
-            if let Some(v) = table
-                .get("saturation_adjustment")
-                .and_then(|v| v.as_integer())
-            {
-                algorithm.saturation_adjustment = v as i8;
-            }
-            if let Some(v) = table.get("hue_shift").and_then(|v| v.as_integer()) {
-                algorithm.hue_shift = v as i16;
-            }
-            if let Some(v) = table.get("contrast_level").and_then(|v| v.as_float()) {
-                algorithm.contrast_level = v;
-            }
-            if let Some(v) = table.get("color_harmony").and_then(|v| v.as_str()) {
-                algorithm.color_harmony = v.to_string();
-            }
-        }
-
-        // Extract image config if present
-        let mut image = ImageConfig::default();
-        if let Some(table) = value.get("image").and_then(|v| v.as_table()) {
-            if let Some(v) = table.get("scheme_type").and_then(|v| v.as_str()) {
-                image.scheme_type = Some(v.to_string());
-            }
-        }
-
-        // Extract template groups - process tables that contain template sections
-        let mut groups = HashMap::new();
-        if let Value::Table(table) = &value {
-            for (group_key, group_value) in table {
-                // Skip the algorithm and image sections
-                if group_key != "algorithm" && group_key != "image" {
-                    // Process if this is a table containing template sections
-                    if let Value::Table(sub_table) = group_value {
-                        let mut section_map = HashMap::new();
-
-                        // Process each template section within this group
-                        for (section_name, section_value) in sub_table {
-                            // Only try to parse as ConfigSection if it has the required fields
-                            if let Value::Table(section_fields) = section_value {
-                                // Check if this table has the required fields for a ConfigSection
-                                if section_fields.contains_key("input_path")
-                                    && section_fields.contains_key("output_path")
-                                {
-                                    // Convert the table to a proper TOML string representation for parsing
-                                    let toml_doc = toml::to_string(&section_fields)
-                                        .unwrap_or_else(|_| String::from(""));
-
-                                    if let Ok(config_section) =
-                                        toml::from_str::<ConfigSection>(&toml_doc)
-                                    {
-                                        section_map.insert(section_name.clone(), config_section);
-                                    }
-                                }
+        // Post-process flattened entries into template groups
+        let mut groups: HashMap<String, HashMap<String, ConfigSection>> = HashMap::new();
+        for (group_key, val) in raw.other {
+            if let Value::Table(table) = val {
+                let mut sections = HashMap::new();
+                for (section_name, fields) in table {
+                    if let Value::Table(field_map) = &fields {
+                        // Silently skip sections without required fields
+                        if field_map.contains_key("input_path")
+                            && field_map.contains_key("output_path")
+                        {
+                            let s = toml::from_str::<ConfigSection>(
+                                &toml::to_string(&fields).unwrap_or_default(),
+                            );
+                            if let Ok(s) = s {
+                                sections.insert(section_name, s);
                             }
                         }
-
-                        if !section_map.is_empty() {
-                            groups.insert(group_key.clone(), section_map);
-                        }
                     }
+                }
+                if !sections.is_empty() {
+                    groups.insert(group_key, sections);
                 }
             }
         }
 
-        // No debug output in release version - only for development
-
         Ok(ConfigRoot {
-            algorithm,
-            image,
+            algorithm: raw.algorithm,
+            image: raw.image,
             groups,
         })
     }
