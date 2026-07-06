@@ -33,14 +33,6 @@ pub fn resolve_theme_path(theme_name: &str) -> Result<String, Error> {
             .to_string());
     }
 
-    // Check project themes directory (only if it's a file, not a directory)
-    let project_themes_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("themes")
-        .join(format!("{}.json", theme_name));
-    if project_themes_path.is_file() {
-        return Ok(project_themes_path.to_string_lossy().to_string());
-    }
-
     // Check user config directory
     if let Ok(home_dir) = env::var("HOME") {
         let user_themes_path = Path::new(&home_dir)

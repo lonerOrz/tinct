@@ -6,9 +6,8 @@
 use colored::*;
 use rayon::prelude::*;
 use serde_json::json;
-use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::{AlgorithmConfig, ConfigSection};
 use crate::core::{Mode, Theme};
@@ -198,7 +197,8 @@ impl Pipeline {
             Mode::Dark => theme.dark_colors(),
             Mode::Light => theme.light_colors(),
         };
-        crate::preview::show_color_preview_from_theme(colors, mode);
+        crate::preview::show_color_preview_from_theme(colors, mode)
+            .map_err(|e| crate::core::Error::Config(format!("Preview error: {}", e)))?;
         Ok(())
     }
 
@@ -339,8 +339,8 @@ fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>)
     let post_hook_cmd = post_hook.replace("{{output_file}}", output_file);
 
     if post_hook_cmd.starts_with("./") {
-        let script_dir = Path::new(env!("CARGO_MANIFEST_DIR")).to_str().unwrap();
-        let post_hook_path = Path::new(script_dir).join(&post_hook_cmd);
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let post_hook_path = cwd.join(&post_hook_cmd);
 
         if post_hook_path.exists() && is_executable(&post_hook_path) {
             if let Some(name) = section_name {

@@ -22,9 +22,20 @@ fn main() {
 
     // Resolve config path and parse
     let config_path = tinct::resolve_config_file_path(args.config.as_ref());
-    let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
-    let config_root = tinct::config::ConfigRoot::parse(&config_content)
-        .expect("Invalid TOML format in config file");
+    let config_content = match fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Could not read config file '{}': {}", config_path, e);
+            process::exit(1);
+        }
+    };
+    let config_root = match tinct::config::ConfigRoot::parse(&config_content) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Invalid config file '{}': {}", config_path, e);
+            process::exit(1);
+        }
+    };
 
     // Resolve config directory
     let config_dir = std::path::Path::new(&config_path)
