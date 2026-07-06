@@ -36,7 +36,14 @@ fn main() {
     // Extract algorithm config before moving config_root
     let algorithm = config_root.algorithm.clone();
     let image_config = config_root.image.clone();
-    let flat_config = config_root.into_flat_config();
+    let mut flat_config = config_root.into_flat_config();
+
+    // Resolve paths relative to config file
+    for group in flat_config.values_mut() {
+        for section in group.values_mut() {
+            tinct::path_resolver::resolve_config_paths(section, &config_dir);
+        }
+    }
 
     // Determine theme source
     let image_scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);

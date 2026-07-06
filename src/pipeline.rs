@@ -78,13 +78,6 @@ impl Pipeline {
             Self::print_info(&config_path, &theme_source, mode);
         }
 
-        // Resolve paths relative to config file
-        for (_group_name, group) in flat_config.iter_mut() {
-            for (_section_name, section) in group.iter_mut() {
-                path_resolver::resolve_config_paths(section, &config_dir);
-            }
-        }
-
         // Validate config sections
         let is_valid = Self::validate_config(&flat_config);
         if !is_valid && !preview {
