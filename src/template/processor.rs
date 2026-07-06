@@ -3,6 +3,37 @@
 use crate::core::{ColorFormat, Mode, Result, Theme};
 use crate::template::filters::{ColorFilter, ColorFormatType, FilterContext};
 use regex::Regex;
+use std::sync::LazyLock;
+
+const COLOR_PROPERTIES: &[&str] = &[
+    "hex",
+    "hex_stripped",
+    "hex8",
+    "hex8_stripped",
+    "rgb",
+    "rgba",
+    "hsl",
+    "hsla",
+    "red",
+    "green",
+    "blue",
+    "alpha",
+    "hue",
+    "saturation",
+    "lightness",
+];
+
+/// Pre-compiled regex per mode suffix — 3 compilations instead of 45.
+static MODE_REGEXES: LazyLock<[Regex; 3]> = LazyLock::new(|| {
+    let suffixes = ["default", "dark", "light"];
+    suffixes.map(|s| {
+        let pattern = format!(
+            r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{s}\.([a-zA-Z0-9_]+)\s*(?:\|([a-zA-Z_]+)(?::([^}}]*))?)?\s*\}}\}}",
+            s = s
+        );
+        Regex::new(&pattern).unwrap()
+    })
+});
 
 /// Default template processor implementation
 pub struct TemplateProcessor;
@@ -28,16 +59,23 @@ impl TemplateProcessor {
             Mode::Dark => theme.dark_colors(),
             Mode::Light => theme.light_colors(),
         };
-        content = self.process_color_placeholders(content, current_mode_colors, "default")?;
+        content =
+            self.process_color_placeholders(content, &MODE_REGEXES[0], current_mode_colors)?;
 
         // Process {{colors.XXX.dark.XXX}} syntax - always uses dark colors
-        content = self.process_color_placeholders(content, theme.dark_colors(), "dark")?;
+        content =
+            self.process_color_placeholders(content, &MODE_REGEXES[1], theme.dark_colors())?;
 
         // Process {{colors.XXX.light.XXX}} syntax - always uses light colors
-        content = self.process_color_placeholders(content, theme.light_colors(), "light")?;
+        content =
+            self.process_color_placeholders(content, &MODE_REGEXES[2], theme.light_colors())?;
 
         // Process mode placeholders
-        content = content.replace("{{mode}}", &mode.to_string());
+        let mode_str = match mode {
+            Mode::Dark => "dark",
+            Mode::Light => "light",
+        };
+        content = content.replace("{{mode}}", mode_str);
         content = content.replace("{{is_dark}}", if mode.is_dark() { "true" } else { "false" });
         content = content.replace(
             "{{is_light}}",
@@ -50,76 +88,48 @@ impl TemplateProcessor {
     fn process_color_placeholders(
         &self,
         content: String,
+        re: &Regex,
         colors: &std::collections::HashMap<String, ColorFormat>,
-        mode_suffix: &str,
     ) -> Result<String> {
-        let mut result = content;
+        Ok(re
+            .replace_all(&content, |caps: &regex::Captures| {
+                let key = &caps[1];
+                let prop = &caps[2];
+                let filter_name = caps.get(3).map(|m| m.as_str());
+                let filter_param = caps.get(4).map(|m| m.as_str());
 
-        let properties = [
-            "hex",
-            "hex_stripped",
-            "hex8",
-            "hex8_stripped",
-            "rgb",
-            "rgba",
-            "hsl",
-            "hsla",
-            "red",
-            "green",
-            "blue",
-            "alpha",
-            "hue",
-            "saturation",
-            "lightness",
-        ];
+                if !COLOR_PROPERTIES.contains(&prop) {
+                    return caps[0].to_string(); // preserve unknown placeholders
+                }
 
-        for prop in &properties {
-            // Match {{colors.NAME.SUFFIX.PROP}} or {{colors.NAME.SUFFIX.PROP|filter:param}}
-            let pattern = format!(
-                r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{}\.{}\s*(?:\|([a-zA-Z_]+)(?::([^}}]*))?)?\s*\}}\}}",
-                mode_suffix, prop
-            );
-            let re = Regex::new(&pattern).map_err(|e| {
-                crate::core::Error::Template(format!("Invalid regex pattern: {}", e))
-            })?;
+                if let Some(color) = colors.get(key) {
+                    let value = resolve_property(color, prop);
 
-            result = re
-                .replace_all(&result, |caps: &regex::Captures| {
-                    let key = &caps[1];
-                    let filter_name = caps.get(2).map(|m| m.as_str());
-                    let filter_param = caps.get(3).map(|m| m.as_str());
-
-                    if let Some(color) = colors.get(key) {
-                        let value = resolve_property(color, prop);
-
-                        if let (Some(name), Some(param)) = (filter_name, filter_param) {
-                            let format_type = ColorFormatType::from_property(prop)
-                                .unwrap_or(ColorFormatType::Rgb);
-                            if let Some(filter) = ColorFilter::from_name(name, param) {
-                                if filter.is_compatible(&format_type) {
-                                    let ctx = FilterContext {
-                                        original_value: value.clone(),
-                                        format_type,
-                                        color_format: color.clone(),
-                                    };
-                                    filter.apply(&ctx)
-                                } else {
-                                    value.clone()
-                                }
+                    if let (Some(name), Some(param)) = (filter_name, filter_param) {
+                        let format_type =
+                            ColorFormatType::from_property(prop).unwrap_or(ColorFormatType::Rgb);
+                        if let Some(filter) = ColorFilter::from_name(name, param) {
+                            if filter.is_compatible(&format_type) {
+                                let ctx = FilterContext {
+                                    original_value: value.clone(),
+                                    format_type,
+                                    color_format: color.clone(),
+                                };
+                                filter.apply(&ctx)
                             } else {
-                                value.clone()
+                                value
                             }
                         } else {
                             value
                         }
                     } else {
-                        "#000000".to_string()
+                        value
                     }
-                })
-                .to_string();
-        }
-
-        Ok(result)
+                } else {
+                    "#000000".to_string()
+                }
+            })
+            .to_string())
     }
 }
 

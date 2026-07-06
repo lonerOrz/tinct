@@ -99,6 +99,13 @@ fn parse_hex_color(hex: &str) -> Result<Argb, String> {
         .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))
 }
 
+/// Convert snake_case key to PascalCase for theme lookup.
+fn pascal_case(key: &str) -> Option<String> {
+    let mut chars = key.chars();
+    let first = chars.next()?;
+    Some(format!("{}{}", first.to_uppercase(), chars.as_str()))
+}
+
 /// Calculate secondary hue based on MD3 algorithm
 /// This creates more harmonious color relationships
 fn calculate_secondary_hue(hue: f64) -> f64 {
@@ -234,20 +241,11 @@ fn scheme_to_palette(
     theme: &Value,
 ) -> Result<Palette, String> {
     // Helper to get override color from theme
-    let get_override = |key: &str| -> Option<String> {
-        // Support both lowercase ("primary") and PascalCase ("Primary")
+    let get_override = |key: &str| -> Option<&str> {
         theme
             .get(key)
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .or_else(|| {
-                // Try PascalCase (first letter uppercase)
-                let pascal_case = format!("{}{}", &key[..1].to_uppercase(), &key[1..]);
-                theme
-                    .get(&pascal_case)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-            })
+            .or_else(|| pascal_case(key).and_then(|k| theme.get(k).and_then(|v| v.as_str())))
     };
 
     // Helper to create ColorFormat from scheme colors
@@ -257,7 +255,7 @@ fn scheme_to_palette(
         let override_hex = role_name.and_then(&get_override);
 
         let argb = if let Some(hex) = override_hex {
-            parse_hex_color(&hex)?
+            parse_hex_color(hex)?
         } else {
             get_color_fn(scheme)
         };
