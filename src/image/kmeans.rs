@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use super::wsmeans::{lab_distance_squared, lab_to_rgb, rgb_to_lab};
 use crate::color::{estimate_chroma, estimate_hue, hue_distance, Rgb};
+use rayon::prelude::*;
 
 /// Downsample pixels for faster processing.
 pub fn downsample_pixels(pixels: &[Rgb], factor: usize) -> Vec<Rgb> {
@@ -63,19 +64,23 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
     let mut counts = vec![0i64; actual_k];
 
     for _ in 0..iterations {
-        // Assign colors to nearest centroid
-        for (idx, &color) in colors_lab.iter().enumerate() {
-            let mut min_dist = f64::MAX;
-            let mut min_cluster = 0usize;
-            for (i, &centroid) in centroids.iter().enumerate() {
-                let dist = lab_distance_squared(color, centroid);
-                if dist < min_dist {
-                    min_dist = dist;
-                    min_cluster = i;
+        // Assign colors to nearest centroid (parallel)
+        assignments
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, assignment)| {
+                let color = colors_lab[idx];
+                let mut min_dist = f64::MAX;
+                let mut min_cluster = 0usize;
+                for (i, &centroid) in centroids.iter().enumerate() {
+                    let dist = lab_distance_squared(color, centroid);
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_cluster = i;
+                    }
                 }
-            }
-            assignments[idx] = min_cluster;
-        }
+                *assignment = min_cluster;
+            });
 
         // Update centroids (weighted mean in Lab space)
         let mut new_centroids = vec![(0.0, 0.0, 0.0); actual_k];
