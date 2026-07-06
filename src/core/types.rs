@@ -44,14 +44,16 @@ pub struct Theme {
 
 impl Theme {
     pub fn new(name: String, source_color: String) -> Self {
-        Self {
+        let mut theme = Self {
             name,
             source_color,
             dark_palette: crate::palette::Palette::empty(),
             light_palette: crate::palette::Palette::empty(),
             dark_color_map: HashMap::new(),
             light_color_map: HashMap::new(),
-        }
+        };
+        theme.build_color_maps();
+        theme
     }
 
     pub fn with_palettes(
