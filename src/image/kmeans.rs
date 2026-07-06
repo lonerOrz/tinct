@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use super::wsmeans::{lab_distance_squared, lab_to_rgb, rgb_to_lab};
-use crate::color::{estimate_chroma, estimate_hue, hue_distance, Rgb};
+use crate::color::{Rgb, estimate_chroma, estimate_hue, hue_distance};
 use rayon::prelude::*;
 
 /// Downsample pixels for faster processing.

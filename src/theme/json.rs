@@ -6,7 +6,7 @@
 //! - Format 3: `{ "seed": "#7aa2f7", "Primary": "#7aa2f7", ... }`
 
 use crate::core::{Error, Mode, Result, Theme};
-use crate::palette::{extract_seed_hex, LegacyPaletteGenerator};
+use crate::palette::{LegacyPaletteGenerator, extract_seed_hex};
 use serde_json::Value;
 
 /// A theme loader for JSON format theme files

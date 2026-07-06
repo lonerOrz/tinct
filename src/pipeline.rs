@@ -9,15 +9,15 @@ use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::FileOutput;
 use crate::config::{AlgorithmConfig, ConfigSection};
 use crate::core::{Mode, Theme};
-use crate::image::{extract_source_color, SchemeType};
+use crate::image::{SchemeType, extract_source_color};
 use crate::log;
 use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
 use crate::path_resolver;
 use crate::template::TemplateProcessor;
 use crate::theme::JsonThemeLoader;
-use crate::FileOutput;
 
 /// Pre-parsed configuration for the pipeline.
 ///
@@ -242,7 +242,7 @@ impl Pipeline {
             if !log_level.is_quiet() {
                 if *success {
                     log::info::processed_successfully(section_name);
-                } else if let Some(ref msg) = error {
+                } else if let Some(msg) = error {
                     log::error::message(section_name, msg);
                 } else {
                     log::error::message(section_name, "failed to process");
@@ -252,11 +252,11 @@ impl Pipeline {
 
         // Run post-hooks sequentially after all processing
         for (section_name, section) in sections.iter() {
-            if let Some(ref post_hook) = section.post_hook {
-                if !post_hook.is_empty() {
-                    let output_path = &section.output_path;
-                    run_post_hook(post_hook, output_path, Some(section_name));
-                }
+            if let Some(ref post_hook) = section.post_hook
+                && !post_hook.is_empty()
+            {
+                let output_path = &section.output_path;
+                run_post_hook(post_hook, output_path, Some(section_name));
             }
         }
 
@@ -287,13 +287,13 @@ fn process_section(
         );
     }
 
-    if let Some(parent) = Path::new(output_path).parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            return (
-                false,
-                Some(format!("Error creating output directory: {}", e)),
-            );
-        }
+    if let Some(parent) = Path::new(output_path).parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        return (
+            false,
+            Some(format!("Error creating output directory: {}", e)),
+        );
     }
 
     let template_content = match fs::read_to_string(input_path) {

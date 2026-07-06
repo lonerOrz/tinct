@@ -91,11 +91,11 @@ pub fn resolve_config_paths(section: &mut ConfigSection, config_dir: &str) {
     }
 
     // Resolve post_hook path if it starts with ./
-    if let Some(ref mut hook) = section.post_hook {
-        if hook.starts_with("./") {
-            let hook_path = Path::new(config_dir).join(&*hook);
-            *hook = resolve_hook_path(hook, &hook_path);
-        }
+    if let Some(ref mut hook) = section.post_hook
+        && hook.starts_with("./")
+    {
+        let hook_path = Path::new(config_dir).join(&*hook);
+        *hook = resolve_hook_path(hook, &hook_path);
     }
 }
 

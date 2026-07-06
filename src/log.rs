@@ -37,15 +37,15 @@ pub mod info {
     use super::*;
 
     pub fn success(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!(
-                    "{} [{}] {}",
-                    "✓".green().bold(),
-                    section.blue(),
-                    msg.green()
-                );
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Normal as u8
+        {
+            println!(
+                "{} [{}] {}",
+                "✓".green().bold(),
+                section.blue(),
+                msg.green()
+            );
         }
     }
 
@@ -59,11 +59,11 @@ pub mod error {
     use super::*;
 
     pub fn message(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Quiet as u8 {
-                // Always show errors
-                eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Quiet as u8
+        {
+            // Always show errors
+            eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
         }
     }
 
@@ -77,28 +77,28 @@ pub mod hook {
     use super::*;
 
     pub fn executing(section: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Verbose as u8 {
-                println!(
-                    "{} [{}] {}",
-                    "→".blue(),
-                    section.blue(),
-                    "Hook command executing...".blue()
-                );
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Verbose as u8
+        {
+            println!(
+                "{} [{}] {}",
+                "→".blue(),
+                section.blue(),
+                "Hook command executing...".blue()
+            );
         }
     }
 
     pub fn success(section: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!(
-                    "{} [{}] {}",
-                    "✓".green().bold(),
-                    section.blue(),
-                    "Hook command executed successfully".green()
-                );
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Normal as u8
+        {
+            println!(
+                "{} [{}] {}",
+                "✓".green().bold(),
+                section.blue(),
+                "Hook command executed successfully".green()
+            );
         }
     }
 }
@@ -109,10 +109,10 @@ pub mod general {
     use colored::Colorize;
 
     pub fn info(msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!("{}", msg);
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Normal as u8
+        {
+            println!("{}", msg);
         }
     }
 

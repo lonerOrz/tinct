@@ -1,7 +1,7 @@
 //! Adapter for the legacy palette generator module
 
 use crate::core::{Error, Mode, Result};
-use crate::palette::{generate_palette_with_params, AlgorithmParameters, ColorHarmony, Palette};
+use crate::palette::{AlgorithmParameters, ColorHarmony, Palette, generate_palette_with_params};
 use serde_json::Value;
 
 /// Adapter that wraps the legacy palette generator function

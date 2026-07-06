@@ -34,5 +34,5 @@ pub use pipeline::{Pipeline, PipelineConfig};
 pub use template::{ColorFilter, ColorFormatType, FilterContext, TemplateProcessor};
 pub use theme::JsonThemeLoader;
 
-pub use image::{extract_source_color, SchemeType};
+pub use image::{SchemeType, extract_source_color};
 pub use path_resolver::{resolve_config_file_path, resolve_config_paths, resolve_theme_path};
