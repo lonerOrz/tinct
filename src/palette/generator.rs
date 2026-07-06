@@ -36,24 +36,24 @@ use material_colors::palette::TonalPalette;
 use serde_json::Value;
 
 use super::params::{AlgorithmParameters, ColorHarmony};
-use super::types::{ColorEntry, ColorFormat, Palette};
+use super::types::{ColorFormat, Palette};
+
+/// Extract seed hex from theme: prefer "seed", fallback to "Primary".
+pub fn extract_seed_hex(theme: &Value) -> Option<&str> {
+    theme
+        .get("seed")
+        .and_then(|v| v.as_str())
+        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
+}
 
 /// Generate color palette from theme data using HCT color space
 ///
 /// Seed color priority:
 /// 1. `seed` field (if present)
 /// 2. `Primary` field (as fallback seed)
-pub fn generate_palette(
-    theme: &Value,
-    is_dark_mode: bool,
-    _is_strict: bool,
-) -> Result<Palette, String> {
-    // Get seed color: prefer explicit "seed", fallback to "Primary"
-    let seed_hex = theme
-        .get("seed")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
-        .ok_or("Theme must contain either 'seed' or 'Primary' color")?;
+pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
+    let seed_hex =
+        extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     // Parse seed color from hex
     let seed_argb = parse_hex_color(seed_hex)?;
@@ -61,7 +61,7 @@ pub fn generate_palette(
     let scheme =
         generate_scheme_with_params(seed_argb, is_dark_mode, &AlgorithmParameters::default());
 
-    scheme_to_palette(&scheme, is_dark_mode, theme)
+    scheme_to_palette(&scheme, theme)
 }
 
 /// Generate color palette with algorithm parameters
@@ -74,12 +74,8 @@ pub fn generate_palette_with_params(
     is_dark_mode: bool,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
-    // Get seed color: prefer explicit "seed", fallback to "Primary"
-    let seed_hex = theme
-        .get("seed")
-        .and_then(|v| v.as_str())
-        .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
-        .ok_or("Theme must contain either 'seed' or 'Primary' color")?;
+    let seed_hex =
+        extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     // Parse seed color
     let seed_argb = parse_hex_color(seed_hex)?;
@@ -88,7 +84,7 @@ pub fn generate_palette_with_params(
     let scheme = generate_scheme_with_params(seed_argb, is_dark_mode, &params);
 
     // Convert to palette
-    scheme_to_palette(&scheme, is_dark_mode, theme)
+    scheme_to_palette(&scheme, theme)
 }
 
 /// Parse hex color string to Argb
@@ -97,6 +93,13 @@ fn parse_hex_color(hex: &str) -> Result<Argb, String> {
     u32::from_str_radix(hex, 16)
         .map(Argb::from_u32)
         .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))
+}
+
+/// Convert snake_case key to PascalCase for theme lookup.
+fn pascal_case(key: &str) -> Option<String> {
+    let mut chars = key.chars();
+    let first = chars.next()?;
+    Some(format!("{}{}", first.to_uppercase(), chars.as_str()))
 }
 
 /// Calculate secondary hue based on MD3 algorithm
@@ -228,47 +231,29 @@ fn generate_scheme_with_params(
 }
 
 /// Convert material-colors scheme to our Palette format
-fn scheme_to_palette(
-    scheme: &DynamicScheme,
-    _is_dark_mode: bool,
-    theme: &Value,
-) -> Result<Palette, String> {
+fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, String> {
     // Helper to get override color from theme
-    let get_override = |key: &str| -> Option<String> {
-        // Support both lowercase ("primary") and PascalCase ("Primary")
+    let get_override = |key: &str| -> Option<&str> {
         theme
             .get(key)
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .or_else(|| {
-                // Try PascalCase (first letter uppercase)
-                let pascal_case = format!("{}{}", &key[..1].to_uppercase(), &key[1..]);
-                theme
-                    .get(&pascal_case)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-            })
+            .or_else(|| pascal_case(key).and_then(|k| theme.get(k).and_then(|v| v.as_str())))
     };
 
-    // Helper to create ColorEntry from scheme colors
-    // Pass the color role name directly, get_override will handle both formats
+    // Helper to create ColorFormat from scheme colors
     let create_entry = |get_color_fn: fn(&DynamicScheme) -> Argb,
                         role_name: Option<&str>|
-     -> Result<ColorEntry, String> {
-        // Check for override in theme using get_override
+     -> Result<ColorFormat, String> {
         let override_hex = role_name.and_then(&get_override);
 
         let argb = if let Some(hex) = override_hex {
-            parse_hex_color(&hex)?
+            parse_hex_color(hex)?
         } else {
             get_color_fn(scheme)
         };
 
         let hex = argb.to_hex();
-
-        Ok(ColorEntry {
-            default: ColorFormat::from_hex(&hex)?,
-        })
+        ColorFormat::from_hex(&hex)
     };
 
     // Build palette using MD3 color roles
@@ -401,15 +386,15 @@ mod tests {
             "seed": "#FF5722"
         });
 
-        let palette = generate_palette(&theme, false, false).unwrap();
+        let palette = generate_palette(&theme, false).unwrap();
 
         // Verify primary color was generated
-        assert!(!palette.primary.default.hex.is_empty());
-        assert!(palette.primary.default.hex.starts_with("#"));
+        assert!(!palette.primary.hex.is_empty());
+        assert!(palette.primary.hex.starts_with("#"));
 
         // Verify other colors exist
-        assert!(!palette.secondary.default.hex.is_empty());
-        assert!(!palette.tertiary.default.hex.is_empty());
+        assert!(!palette.secondary.hex.is_empty());
+        assert!(!palette.tertiary.hex.is_empty());
     }
 
     #[test]
@@ -419,10 +404,10 @@ mod tests {
             "error": "#F44336"
         });
 
-        let palette = generate_palette(&theme, false, false).unwrap();
+        let palette = generate_palette(&theme, false).unwrap();
 
         // Error color should be the override
-        assert_eq!(palette.error.default.hex, "#F44336");
+        assert_eq!(palette.error.hex, "#F44336");
     }
 
     #[test]
@@ -431,9 +416,9 @@ mod tests {
             "seed": "#2196F3"
         });
 
-        let palette = generate_palette(&theme, true, false).unwrap();
+        let palette = generate_palette(&theme, true).unwrap();
 
         // Dark mode should have dark surface
-        assert!(palette.surface.default.hex.starts_with("#"));
+        assert!(palette.surface.hex.starts_with("#"));
     }
 }

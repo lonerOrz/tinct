@@ -1,4 +1,4 @@
-//! K-means clustering in Lab space with 5 scoring modes.
+//! K-means clustering in Lab space with 4 scoring modes.
 //!
 //! Ported from Python's `palette.py` — provides k-means clustering
 //! and scoring functions for non-MD3 scheme types:
@@ -6,12 +6,12 @@
 //! - `count`: area-dominant, picks by pixel count
 //! - `dysfunctional`: picks 2nd most dominant color family
 //! - `muted`: like count but without chroma filtering
-//! - `population`: matugen-like, representative colors
 
 use std::collections::HashMap;
 
 use super::wsmeans::{lab_distance_squared, lab_to_rgb, rgb_to_lab};
-use crate::color::{estimate_chroma, estimate_hue, hue_distance, Rgb};
+use crate::color::{Rgb, estimate_chroma, estimate_hue, hue_distance};
+use rayon::prelude::*;
 
 /// Downsample pixels for faster processing.
 pub fn downsample_pixels(pixels: &[Rgb], factor: usize) -> Vec<Rgb> {
@@ -64,19 +64,23 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
     let mut counts = vec![0i64; actual_k];
 
     for _ in 0..iterations {
-        // Assign colors to nearest centroid
-        for (idx, &color) in colors_lab.iter().enumerate() {
-            let mut min_dist = f64::MAX;
-            let mut min_cluster = 0usize;
-            for (i, &centroid) in centroids.iter().enumerate() {
-                let dist = lab_distance_squared(color, centroid);
-                if dist < min_dist {
-                    min_dist = dist;
-                    min_cluster = i;
+        // Assign colors to nearest centroid (parallel)
+        assignments
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, assignment)| {
+                let color = colors_lab[idx];
+                let mut min_dist = f64::MAX;
+                let mut min_cluster = 0usize;
+                for (i, &centroid) in centroids.iter().enumerate() {
+                    let dist = lab_distance_squared(color, centroid);
+                    if dist < min_dist {
+                        min_dist = dist;
+                        min_cluster = i;
+                    }
                 }
-            }
-            assignments[idx] = min_cluster;
-        }
+                *assignment = min_cluster;
+            });
 
         // Update centroids (weighted mean in Lab space)
         let mut new_centroids = vec![(0.0, 0.0, 0.0); actual_k];
@@ -371,127 +375,6 @@ pub fn score_colors_muted(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
         .collect();
     result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     result
-}
-
-/// Score colors using Material Design's Score algorithm.
-#[allow(dead_code)]
-pub fn score_colors_population(
-    colors_with_counts: &[(Rgb, i64)],
-    _total_pixels: usize,
-) -> Vec<(Rgb, f64)> {
-    const TARGET_CHROMA: f64 = 48.0;
-    const WEIGHT_PROPORTION: f64 = 0.7;
-    const WEIGHT_CHROMA_ABOVE: f64 = 0.3;
-    const WEIGHT_CHROMA_BELOW: f64 = 0.1;
-    const CUTOFF_CHROMA: f64 = 5.0;
-    const CUTOFF_EXCITED_PROPORTION: f64 = 0.01;
-
-    // Build per-hue population histogram
-    let mut hue_population = vec![0i64; 360];
-    let mut population_sum: i64 = 0;
-
-    let mut colors_hct: Vec<(Rgb, f64, f64, i64)> = Vec::new(); // (rgb, hue, chroma, count)
-
-    for &(rgb, count) in colors_with_counts {
-        let (r, g, b) = rgb;
-        let chroma = estimate_chroma(r, g, b);
-        let hue = estimate_hue(r, g, b);
-        let hue_bucket = (hue.round() as usize) % 360;
-        hue_population[hue_bucket] += count;
-        population_sum += count;
-        colors_hct.push((rgb, hue, chroma, count));
-    }
-
-    if colors_hct.is_empty() || population_sum == 0 {
-        let mut result: Vec<(Rgb, f64)> = colors_with_counts
-            .iter()
-            .map(|&(rgb, count)| (rgb, count as f64))
-            .collect();
-        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        return result;
-    }
-
-    // Calculate "excited proportions"
-    let mut hue_excited_proportions = vec![0.0f64; 360];
-    for (hue, &pop) in hue_population.iter().enumerate().take(360) {
-        let proportion = pop as f64 / population_sum as f64;
-        for offset in -14..=15 {
-            let neighbor = ((hue as i32 + offset).rem_euclid(360)) as usize;
-            hue_excited_proportions[neighbor] += proportion;
-        }
-    }
-
-    // Score each color
-    let mut scored: Vec<(Rgb, f64, f64, f64)> = Vec::new(); // (rgb, hue, chroma, score)
-    for &(rgb, hue, chroma, count) in &colors_hct {
-        let _ = count;
-        let hue_bucket = (hue.round() as usize) % 360;
-        let proportion = hue_excited_proportions[hue_bucket];
-
-        if chroma < CUTOFF_CHROMA {
-            continue;
-        }
-        if proportion <= CUTOFF_EXCITED_PROPORTION {
-            continue;
-        }
-
-        let proportion_score = proportion * 100.0 * WEIGHT_PROPORTION;
-        let chroma_score = if chroma < TARGET_CHROMA {
-            (chroma - TARGET_CHROMA) * WEIGHT_CHROMA_BELOW
-        } else {
-            (chroma - TARGET_CHROMA) * WEIGHT_CHROMA_ABOVE
-        };
-
-        let score = proportion_score + chroma_score;
-        scored.push((rgb, hue, chroma, score));
-    }
-
-    if scored.is_empty() {
-        let mut result: Vec<(Rgb, f64)> = colors_with_counts
-            .iter()
-            .map(|&(rgb, count)| (rgb, count as f64))
-            .collect();
-        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        return result;
-    }
-
-    scored.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
-
-    // Deduplicate by hue distance
-    let mut chosen: Vec<(Rgb, f64)> = Vec::new();
-
-    for min_hue_diff in (15..=90).rev() {
-        chosen.clear();
-        for &(rgb, hue, chroma, score) in &scored {
-            let _ = chroma;
-            let is_far_enough = chosen.iter().all(|(c_rgb, _)| {
-                let ch = estimate_hue(c_rgb.0, c_rgb.1, c_rgb.2);
-                hue_distance(hue, ch) >= min_hue_diff as f64
-            });
-
-            if is_far_enough {
-                chosen.push((rgb, score));
-            }
-
-            if chosen.len() >= 4 {
-                break;
-            }
-        }
-
-        if chosen.len() >= 4 {
-            break;
-        }
-    }
-
-    if chosen.is_empty() {
-        chosen = scored
-            .iter()
-            .take(4)
-            .map(|&(rgb, _, _, score)| (rgb, score))
-            .collect();
-    }
-
-    chosen
 }
 
 #[cfg(test)]

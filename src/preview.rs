@@ -2,7 +2,7 @@
 //!
 //! Displays Material Design 3 color palettes in the terminal with actual color blocks.
 
-use crate::core::{Mode, ThemeLoader};
+use crate::core::Mode;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
 use crate::theme::JsonThemeLoader;
 use colored::*;
@@ -11,7 +11,7 @@ use colored::*;
 pub fn show_color_preview_from_theme(
     colors: &std::collections::HashMap<String, crate::core::ColorFormat>,
     mode: Mode,
-) {
+) -> Result<(), String> {
     println!(
         "{}",
         "🎨 Material Design 3 Color Preview".bold().underline()
@@ -19,13 +19,11 @@ pub fn show_color_preview_from_theme(
     println!("🌙 Theme Mode: {}", mode.to_string().bold());
     println!();
 
-    display_md3_cards_grid(colors);
+    display_md3_cards_grid(colors)
 }
 
-/// Display a color preview showing all available colors in the theme as a matrix
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    let palette_gen =
-        std::sync::Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+    let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters::default());
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
 
@@ -35,14 +33,11 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
         Mode::Light => theme.light_colors(),
     };
 
-    show_color_preview_from_theme(&colors, mode);
-    Ok(())
+    show_color_preview_from_theme(colors, mode)
 }
 
-/// Display a color preview from a JSON value (for seed-based preview)
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
-    let palette_gen =
-        std::sync::Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+    let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters::default());
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
 
@@ -52,8 +47,7 @@ pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Res
         Mode::Light => theme.light_colors(),
     };
 
-    show_color_preview_from_theme(&colors, mode);
-    Ok(())
+    show_color_preview_from_theme(colors, mode)
 }
 
 fn parse_mode(mode: &str) -> Mode {
@@ -64,8 +58,72 @@ fn parse_mode(mode: &str) -> Mode {
     }
 }
 
+const REQUIRED_COLOR_KEYS: &[&str] = &[
+    "primary",
+    "on_primary",
+    "primary_container",
+    "on_primary_container",
+    "secondary",
+    "on_secondary",
+    "secondary_container",
+    "on_secondary_container",
+    "tertiary",
+    "on_tertiary",
+    "tertiary_container",
+    "on_tertiary_container",
+    "error",
+    "on_error",
+    "error_container",
+    "on_error_container",
+    "primary_fixed",
+    "primary_fixed_dim",
+    "on_primary_fixed",
+    "on_primary_fixed_variant",
+    "secondary_fixed",
+    "secondary_fixed_dim",
+    "on_secondary_fixed",
+    "on_secondary_fixed_variant",
+    "tertiary_fixed",
+    "tertiary_fixed_dim",
+    "on_tertiary_fixed",
+    "on_tertiary_fixed_variant",
+    "surface_dim",
+    "surface",
+    "surface_bright",
+    "surface_variant",
+    "on_surface_variant",
+    "surface_container_lowest",
+    "surface_container_low",
+    "surface_container",
+    "surface_container_high",
+    "surface_container_highest",
+    "background",
+    "on_background",
+    "outline",
+    "outline_variant",
+    "inverse_surface",
+    "inverse_on_surface",
+    "inverse_primary",
+    "shadow",
+    "scrim",
+];
+
 /// Display colors in a card grid layout with true color blocks
-fn display_md3_cards_grid(colors: &std::collections::HashMap<String, crate::core::ColorFormat>) {
+fn display_md3_cards_grid(
+    colors: &std::collections::HashMap<String, crate::core::ColorFormat>,
+) -> Result<(), String> {
+    let missing: Vec<&str> = REQUIRED_COLOR_KEYS
+        .iter()
+        .filter(|k| !colors.contains_key(**k))
+        .copied()
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "Color preview requires {} color roles, missing: {:?}",
+            REQUIRED_COLOR_KEYS.len(),
+            missing
+        ));
+    }
     // Define color cards based on the MD3 documentation structure
     let cards: Vec<Vec<(&str, &crate::core::ColorFormat)>> = vec![
         // Primary card
@@ -316,6 +374,7 @@ fn display_md3_cards_grid(colors: &std::collections::HashMap<String, crate::core
     println!("{}", "📊 Terminal Color Palette".bold().underline());
     println!();
     print_terminal_palette(colors);
+    Ok(())
 }
 
 /// Print terminal color palette with actual color blocks

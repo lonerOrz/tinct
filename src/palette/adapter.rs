@@ -1,7 +1,7 @@
 //! Adapter for the legacy palette generator module
 
-use crate::core::{Error, Mode, PaletteGenerator, Result};
-use crate::palette::{generate_palette_with_params, AlgorithmParameters, ColorHarmony, Palette};
+use crate::core::{Error, Mode, Result};
+use crate::palette::{AlgorithmParameters, ColorHarmony, Palette, generate_palette_with_params};
 use serde_json::Value;
 
 /// Adapter that wraps the legacy palette generator function
@@ -17,28 +17,23 @@ impl LegacyPaletteGenerator {
     pub fn with_defaults() -> Self {
         Self {
             params: AlgorithmParameters {
-                contrast_threshold: 0.15,
                 saturation_adjustment: 0,
-                lightness_adjustment: 0,
                 hue_shift: 0,
-                min_contrast_ratio: 4.5,
                 contrast_level: 0.0,
                 color_harmony: ColorHarmony::Md3,
             },
         }
+    }
+
+    pub fn generate(&self, theme: &Value, mode: Mode) -> Result<Palette> {
+        generate_palette_with_params(theme, mode.is_dark(), self.params.clone())
+            .map_err(Error::Palette)
     }
 }
 
 impl Default for LegacyPaletteGenerator {
     fn default() -> Self {
         Self::with_defaults()
-    }
-}
-
-impl PaletteGenerator for LegacyPaletteGenerator {
-    fn generate(&self, theme: &Value, mode: Mode) -> Result<Palette> {
-        generate_palette_with_params(theme, mode.is_dark(), self.params.clone())
-            .map_err(Error::Palette)
     }
 }
 
@@ -50,33 +45,26 @@ mod tests {
     #[test]
     fn test_legacy_palette_generator_new() {
         let params = AlgorithmParameters {
-            contrast_threshold: 0.2,
             saturation_adjustment: 10,
-            lightness_adjustment: 5,
             hue_shift: 15,
-            min_contrast_ratio: 5.0,
             contrast_level: 0.0,
             color_harmony: ColorHarmony::Md3,
         };
         let generator = LegacyPaletteGenerator::new(params.clone());
-        assert_eq!(generator.params.contrast_threshold, 0.2);
         assert_eq!(generator.params.saturation_adjustment, 10);
     }
 
     #[test]
     fn test_legacy_palette_generator_with_defaults() {
         let generator = LegacyPaletteGenerator::with_defaults();
-        assert_eq!(generator.params.contrast_threshold, 0.15);
         assert_eq!(generator.params.saturation_adjustment, 0);
-        assert_eq!(generator.params.lightness_adjustment, 0);
         assert_eq!(generator.params.hue_shift, 0);
-        assert_eq!(generator.params.min_contrast_ratio, 4.5);
     }
 
     #[test]
     fn test_legacy_palette_generator_default() {
         let generator = LegacyPaletteGenerator::default();
-        assert_eq!(generator.params.contrast_threshold, 0.15);
+        assert_eq!(generator.params.saturation_adjustment, 0);
     }
 
     #[test]
@@ -126,11 +114,8 @@ mod tests {
     #[test]
     fn test_legacy_palette_generator_generate_with_hue_shift() {
         let params = AlgorithmParameters {
-            contrast_threshold: 0.15,
             saturation_adjustment: 0,
-            lightness_adjustment: 0,
             hue_shift: 180,
-            min_contrast_ratio: 4.5,
             contrast_level: 0.0,
             color_harmony: ColorHarmony::Md3,
         };
@@ -152,11 +137,8 @@ mod tests {
     #[test]
     fn test_legacy_palette_generator_generate_with_saturation() {
         let params = AlgorithmParameters {
-            contrast_threshold: 0.15,
             saturation_adjustment: 50,
-            lightness_adjustment: 0,
             hue_shift: 0,
-            min_contrast_ratio: 4.5,
             contrast_level: 0.0,
             color_harmony: ColorHarmony::Md3,
         };

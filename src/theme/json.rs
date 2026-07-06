@@ -5,92 +5,67 @@
 //! - Format 2: `{ "Primary": "#7aa2f7", "Secondary": "#bb9af7" }`
 //! - Format 3: `{ "seed": "#7aa2f7", "Primary": "#7aa2f7", ... }`
 
-use crate::core::{Error, Mode, PaletteGenerator, Result, Theme, ThemeLoader};
+use crate::core::{Error, Mode, Result, Theme};
+use crate::palette::{LegacyPaletteGenerator, extract_seed_hex};
 use serde_json::Value;
-use std::sync::Arc;
 
 /// A theme loader for JSON format theme files
 pub struct JsonThemeLoader {
-    palette_generator: Arc<dyn PaletteGenerator>,
+    palette_generator: LegacyPaletteGenerator,
 }
 
 impl JsonThemeLoader {
     /// Create a new JSON theme loader
-    pub fn new(palette_generator: Arc<dyn PaletteGenerator>) -> Self {
+    pub fn new(palette_generator: LegacyPaletteGenerator) -> Self {
         Self { palette_generator }
     }
-}
 
-impl ThemeLoader for JsonThemeLoader {
-    fn load(&self, source: &str) -> Result<Theme> {
-        // Read the JSON file
+    /// Load a theme from a JSON file
+    pub fn load(&self, source: &str) -> Result<Theme> {
         let content = std::fs::read_to_string(source)
             .map_err(|e| Error::Theme(format!("Failed to read theme file: {}", e)))?;
 
-        // Parse JSON
         let json: Value = serde_json::from_str(&content)
             .map_err(|e| Error::Theme(format!("Invalid JSON format: {}", e)))?;
 
-        // Extract theme name from file path
         let name = std::path::Path::new(source)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown")
             .to_string();
 
-        // Get source color from Primary (or seed for display purposes)
-        let source_color = json
-            .get("seed")
-            .and_then(|v| v.as_str())
-            .or_else(|| json.get("Primary").and_then(|v| v.as_str()))
-            .unwrap_or("#000000")
-            .to_string();
+        let source_color = extract_seed_hex(&json).unwrap_or("#000000").to_string();
 
-        // Generate palettes for both modes (MD3 algorithm generates different colors based on mode)
         let dark_palette = self.palette_generator.generate(&json, Mode::Dark)?;
         let light_palette = self.palette_generator.generate(&json, Mode::Light)?;
 
-        Ok(Theme {
+        Ok(Theme::with_palettes(
             name,
             source_color,
             dark_palette,
             light_palette,
-        })
+        ))
     }
 
-    fn load_value(&self, json: &Value) -> Result<Theme> {
-        // Extract theme name (use "seed-color" as fallback)
+    /// Load a theme from a JSON value
+    pub fn load_value(&self, json: &Value) -> Result<Theme> {
         let name = json
             .get("seed")
             .and_then(|v| v.as_str())
             .unwrap_or("theme")
             .to_string();
 
-        // Get source color from Primary (or seed for display purposes)
-        let source_color = json
-            .get("seed")
-            .and_then(|v| v.as_str())
-            .or_else(|| json.get("Primary").and_then(|v| v.as_str()))
-            .unwrap_or("#000000")
-            .to_string();
+        let source_color = extract_seed_hex(json).unwrap_or("#000000").to_string();
 
-        // Generate palettes for both modes
         let dark_palette = self.palette_generator.generate(json, Mode::Dark)?;
         let light_palette = self.palette_generator.generate(json, Mode::Light)?;
 
-        Ok(Theme {
+        Ok(Theme::with_palettes(
             name,
             source_color,
             dark_palette,
             light_palette,
-        })
-    }
-
-    fn can_load(&self, source: &str) -> bool {
-        std::path::Path::new(source)
-            .extension()
-            .map(|ext| ext == "json")
-            .unwrap_or(false)
+        ))
     }
 }
 
@@ -102,19 +77,8 @@ mod tests {
     use tempfile::NamedTempFile;
 
     fn create_test_loader() -> JsonThemeLoader {
-        let generator = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters::default()));
+        let generator = LegacyPaletteGenerator::new(AlgorithmParameters::default());
         JsonThemeLoader::new(generator)
-    }
-
-    #[test]
-    fn test_can_load_json_file() {
-        let loader = create_test_loader();
-
-        assert!(loader.can_load("theme.json"));
-        assert!(loader.can_load("/path/to/theme.json"));
-        assert!(!loader.can_load("theme.txt"));
-        assert!(!loader.can_load("theme.toml"));
-        assert!(!loader.can_load("no_extension"));
     }
 
     #[test]

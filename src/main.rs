@@ -22,9 +22,20 @@ fn main() {
 
     // Resolve config path and parse
     let config_path = tinct::resolve_config_file_path(args.config.as_ref());
-    let config_content = fs::read_to_string(&config_path).expect("Could not read config file");
-    let config_root = tinct::config::ConfigRoot::parse(&config_content)
-        .expect("Invalid TOML format in config file");
+    let config_content = match fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Could not read config file '{}': {}", config_path, e);
+            process::exit(1);
+        }
+    };
+    let config_root = match tinct::config::ConfigRoot::parse(&config_content) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Invalid config file '{}': {}", config_path, e);
+            process::exit(1);
+        }
+    };
 
     // Resolve config directory
     let config_dir = std::path::Path::new(&config_path)
@@ -36,7 +47,14 @@ fn main() {
     // Extract algorithm config before moving config_root
     let algorithm = config_root.algorithm.clone();
     let image_config = config_root.image.clone();
-    let flat_config = config_root.into_flat_config();
+    let mut flat_config = config_root.into_flat_config();
+
+    // Resolve paths relative to config file
+    for group in flat_config.values_mut() {
+        for section in group.values_mut() {
+            tinct::path_resolver::resolve_config_paths(section, &config_dir);
+        }
+    }
 
     // Determine theme source
     let image_scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);

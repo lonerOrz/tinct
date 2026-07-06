@@ -425,7 +425,7 @@ pub fn score_colors(
     }
 
     // Score each color
-    let mut scored: Vec<(u32, f64, f64)> = Vec::new(); // (argb, score, chroma)
+    let mut scored: Vec<(u32, f64, f64, f64)> = Vec::new(); // (argb, score, chroma, hue)
     for &(argb, hue, chroma) in &colors_data {
         let hue_bucket = (hue.round() as usize) % 360;
         let proportion = hue_excited_proportions[hue_bucket];
@@ -447,7 +447,7 @@ pub fn score_colors(
         };
 
         let score = proportion_score + chroma_score;
-        scored.push((argb, score, chroma));
+        scored.push((argb, score, chroma, hue));
     }
 
     if scored.is_empty() {
@@ -467,21 +467,14 @@ pub fn score_colors(
 
     for &min_diff in &min_hue_diffs {
         chosen.clear();
-        for &(argb, score, _chroma) in &scored {
-            let _ = score;
-            let h = estimate_hue(
-                ((argb >> 16) & 0xFF) as u8,
-                ((argb >> 8) & 0xFF) as u8,
-                (argb & 0xFF) as u8,
-            );
-
+        for &(argb, _score, _chroma, hue) in &scored {
             let is_far_enough = chosen.iter().all(|&chosen_argb| {
                 let ch = estimate_hue(
                     ((chosen_argb >> 16) & 0xFF) as u8,
                     ((chosen_argb >> 8) & 0xFF) as u8,
                     (chosen_argb & 0xFF) as u8,
                 );
-                hue_distance(h, ch) >= min_diff as f64
+                hue_distance(hue, ch) >= min_diff as f64
             });
 
             if is_far_enough {
@@ -502,7 +495,7 @@ pub fn score_colors(
         chosen = scored
             .into_iter()
             .take(desired)
-            .map(|(a, _, _)| a)
+            .map(|(a, _, _, _)| a)
             .collect();
     }
 

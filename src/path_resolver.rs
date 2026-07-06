@@ -33,14 +33,6 @@ pub fn resolve_theme_path(theme_name: &str) -> Result<String, Error> {
             .to_string());
     }
 
-    // Check project themes directory (only if it's a file, not a directory)
-    let project_themes_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("themes")
-        .join(format!("{}.json", theme_name));
-    if project_themes_path.is_file() {
-        return Ok(project_themes_path.to_string_lossy().to_string());
-    }
-
     // Check user config directory
     if let Ok(home_dir) = env::var("HOME") {
         let user_themes_path = Path::new(&home_dir)
@@ -99,11 +91,11 @@ pub fn resolve_config_paths(section: &mut ConfigSection, config_dir: &str) {
     }
 
     // Resolve post_hook path if it starts with ./
-    if let Some(ref mut hook) = section.post_hook {
-        if hook.starts_with("./") {
-            let hook_path = Path::new(config_dir).join(&*hook);
-            *hook = resolve_hook_path(hook, &hook_path);
-        }
+    if let Some(ref mut hook) = section.post_hook
+        && hook.starts_with("./")
+    {
+        let hook_path = Path::new(config_dir).join(&*hook);
+        *hook = resolve_hook_path(hook, &hook_path);
     }
 }
 

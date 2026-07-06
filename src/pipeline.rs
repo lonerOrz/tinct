@@ -3,24 +3,21 @@
 //! `Pipeline::run(config)` handles theme creation, palette generation,
 //! template rendering, output, and post-hooks. One interface, one place to test.
 
-use std::env;
-use std::fs;
-use std::path::Path;
-use std::sync::Arc;
-
 use colored::*;
 use rayon::prelude::*;
 use serde_json::json;
+use std::fs;
+use std::path::{Path, PathBuf};
 
+use crate::FileOutput;
 use crate::config::{AlgorithmConfig, ConfigSection};
-use crate::core::{Mode, OutputFormat, TemplateEngine, Theme, ThemeLoader};
-use crate::image::{extract_source_color, SchemeType};
+use crate::core::{Mode, Theme};
+use crate::image::{SchemeType, extract_source_color};
 use crate::log;
 use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
 use crate::path_resolver;
 use crate::template::TemplateProcessor;
 use crate::theme::JsonThemeLoader;
-use crate::FileOutput;
 
 /// Pre-parsed configuration for the pipeline.
 ///
@@ -56,8 +53,8 @@ impl Pipeline {
     pub fn run(config: PipelineConfig) -> crate::Result<()> {
         let PipelineConfig {
             config_path,
-            mut flat_config,
-            config_dir,
+            flat_config,
+            config_dir: _,
             mode,
             preview,
             log_level,
@@ -78,13 +75,6 @@ impl Pipeline {
         // Print info
         if !log_level.is_quiet() {
             Self::print_info(&config_path, &theme_source, mode);
-        }
-
-        // Resolve paths relative to config file
-        for (_group_name, group) in flat_config.iter_mut() {
-            for (_section_name, section) in group.iter_mut() {
-                path_resolver::resolve_config_paths(section, &config_dir);
-            }
         }
 
         // Validate config sections
@@ -189,15 +179,12 @@ impl Pipeline {
     ) -> crate::Result<Theme> {
         let harmony = ColorHarmony::parse(&algorithm.color_harmony).unwrap_or(ColorHarmony::Md3);
 
-        let palette_gen = Arc::new(LegacyPaletteGenerator::new(AlgorithmParameters {
-            contrast_threshold: algorithm.contrast_threshold,
+        let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters {
             saturation_adjustment: algorithm.saturation_adjustment,
-            lightness_adjustment: algorithm.lightness_adjustment,
             hue_shift: algorithm.hue_shift,
-            min_contrast_ratio: algorithm.min_contrast_ratio,
             contrast_level: algorithm.contrast_level,
             color_harmony: harmony,
-        }));
+        });
         let theme_loader = JsonThemeLoader::new(palette_gen);
         theme_loader
             .load_value(theme_data)
@@ -210,7 +197,8 @@ impl Pipeline {
             Mode::Dark => theme.dark_colors(),
             Mode::Light => theme.light_colors(),
         };
-        crate::preview::show_color_preview_from_theme(&colors, mode);
+        crate::preview::show_color_preview_from_theme(colors, mode)
+            .map_err(|e| crate::core::Error::Config(format!("Preview error: {}", e)))?;
         Ok(())
     }
 
@@ -221,10 +209,9 @@ impl Pipeline {
         flat_config: &crate::config::Config,
         log_level: crate::log::LogLevel,
     ) -> crate::Result<()> {
-        let template_engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let template_engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
-        // Flatten all sections into a single list for parallel processing
         let sections: Vec<_> = flat_config
             .values()
             .flat_map(|group| {
@@ -255,7 +242,7 @@ impl Pipeline {
             if !log_level.is_quiet() {
                 if *success {
                     log::info::processed_successfully(section_name);
-                } else if let Some(ref msg) = error {
+                } else if let Some(msg) = error {
                     log::error::message(section_name, msg);
                 } else {
                     log::error::message(section_name, "failed to process");
@@ -265,11 +252,11 @@ impl Pipeline {
 
         // Run post-hooks sequentially after all processing
         for (section_name, section) in sections.iter() {
-            if let Some(ref post_hook) = section.post_hook {
-                if !post_hook.is_empty() {
-                    let output_path = &section.output_path;
-                    run_post_hook(post_hook, output_path, Some(section_name));
-                }
+            if let Some(ref post_hook) = section.post_hook
+                && !post_hook.is_empty()
+            {
+                let output_path = &section.output_path;
+                run_post_hook(post_hook, output_path, Some(section_name));
             }
         }
 
@@ -287,8 +274,8 @@ fn process_section(
     section: &ConfigSection,
     theme: &Theme,
     mode: Mode,
-    template_engine: &Arc<TemplateProcessor>,
-    output: &Arc<FileOutput>,
+    template_engine: &TemplateProcessor,
+    output: &FileOutput,
 ) -> (bool, Option<String>) {
     let input_path = &section.input_path;
     let output_path = &section.output_path;
@@ -300,13 +287,13 @@ fn process_section(
         );
     }
 
-    if let Some(parent) = Path::new(output_path).parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            return (
-                false,
-                Some(format!("Error creating output directory: {}", e)),
-            );
-        }
+    if let Some(parent) = Path::new(output_path).parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        return (
+            false,
+            Some(format!("Error creating output directory: {}", e)),
+        );
     }
 
     let template_content = match fs::read_to_string(input_path) {
@@ -352,8 +339,8 @@ fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>)
     let post_hook_cmd = post_hook.replace("{{output_file}}", output_file);
 
     if post_hook_cmd.starts_with("./") {
-        let script_dir = Path::new(env!("CARGO_MANIFEST_DIR")).to_str().unwrap();
-        let post_hook_path = Path::new(script_dir).join(&post_hook_cmd);
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let post_hook_path = cwd.join(&post_hook_cmd);
 
         if post_hook_path.exists() && is_executable(&post_hook_path) {
             if let Some(name) = section_name {
@@ -610,8 +597,8 @@ mod tests {
         };
 
         let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
         let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
         assert!(!success);
@@ -633,8 +620,8 @@ mod tests {
         };
 
         let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
         let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
         assert!(success, "process_section failed: {:?}", error);
@@ -659,8 +646,8 @@ mod tests {
         };
 
         let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = Arc::new(TemplateProcessor::new());
-        let output = Arc::new(FileOutput::new());
+        let engine = TemplateProcessor::new();
+        let output = FileOutput::new();
 
         let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
         assert!(success, "process_section failed: {:?}", error);

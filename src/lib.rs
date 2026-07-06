@@ -24,17 +24,15 @@ pub use config::*;
 pub use log::*;
 pub use preview::*;
 
-pub use core::{
-    Error, Mode, OutputFormat, PaletteGenerator, Result, TemplateEngine, Theme, ThemeLoader,
-};
+pub use core::{Error, Mode, Result, Theme};
 
-pub use output::{FileOutput, TerminalOutput};
+pub use output::FileOutput;
 pub use palette::{
-    AlgorithmParameters, ColorEntry, ColorFormat, ColorHarmony, LegacyPaletteGenerator, Palette,
+    AlgorithmParameters, ColorFormat, ColorHarmony, LegacyPaletteGenerator, Palette,
 };
 pub use pipeline::{Pipeline, PipelineConfig};
-pub use template::{ColorFormatType, FilterContext, FilterRegistry, TemplateProcessor};
+pub use template::{ColorFilter, ColorFormatType, FilterContext, TemplateProcessor};
 pub use theme::JsonThemeLoader;
 
-pub use image::{extract_source_color, SchemeType};
+pub use image::{SchemeType, extract_source_color};
 pub use path_resolver::{resolve_config_file_path, resolve_config_paths, resolve_theme_path};

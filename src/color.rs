@@ -201,7 +201,7 @@ pub fn get_contrast_rating(color1: &str, color2: &str) -> Result<String, String>
 }
 
 /// Generate appropriate text color for a given background
-pub fn generate_on_color(base: &str, _is_dark: bool) -> Result<String, String> {
+pub fn generate_on_color(base: &str) -> Result<String, String> {
     let light = is_light_color(base)?;
 
     if light {

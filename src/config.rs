@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use toml::Value;
 
 /// Image extraction configuration
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -11,25 +12,13 @@ pub struct ImageConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct AlgorithmConfig {
-    /// Color contrast threshold (0.0-1.0)
-    #[serde(default = "default_contrast_threshold")]
-    pub contrast_threshold: f64,
-
     /// Saturation adjustment (-100 to 100)
     #[serde(default = "default_saturation_adjustment")]
     pub saturation_adjustment: i8,
 
-    /// Lightness adjustment (-100 to 100)
-    #[serde(default = "default_lightness_adjustment")]
-    pub lightness_adjustment: i8,
-
     /// Hue shift (-180 to 180)
     #[serde(default = "default_hue_shift")]
     pub hue_shift: i16,
-
-    /// Minimum contrast ratio for readability
-    #[serde(default = "default_min_contrast_ratio")]
-    pub min_contrast_ratio: f64,
 
     /// MD3 contrast level (-1.0 to 1.0)
     #[serde(default = "default_contrast_level")]
@@ -40,24 +29,12 @@ pub struct AlgorithmConfig {
     pub color_harmony: String,
 }
 
-fn default_contrast_threshold() -> f64 {
-    0.15
-}
-
 fn default_saturation_adjustment() -> i8 {
-    0
-}
-
-fn default_lightness_adjustment() -> i8 {
     0
 }
 
 fn default_hue_shift() -> i16 {
     0
-}
-
-fn default_min_contrast_ratio() -> f64 {
-    4.5
 }
 
 fn default_contrast_level() -> f64 {
@@ -76,121 +53,59 @@ pub struct ConfigSection {
     pub post_hook: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[allow(dead_code)]
-pub struct ConfigGroup {
-    pub sections: HashMap<String, ConfigSection>,
+/// Raw config with serde flatten — algorithm/image are deserialized by serde,
+/// everything else (template groups) is captured as `toml::Value` for post-processing.
+#[derive(Debug, Clone, Deserialize)]
+struct ConfigRootRaw {
+    #[serde(default)]
+    algorithm: AlgorithmConfig,
+    #[serde(default)]
+    image: ImageConfig,
+    #[serde(flatten)]
+    other: HashMap<String, toml::Value>,
 }
 
-// Use a completely different approach - parse algorithm and templates separately
 #[derive(Debug, Clone)]
 pub struct ConfigRoot {
     pub algorithm: AlgorithmConfig,
-    #[allow(dead_code)]
     pub image: ImageConfig,
     pub groups: HashMap<String, HashMap<String, ConfigSection>>,
 }
 
 impl ConfigRoot {
     pub fn parse(config_content: &str) -> Result<Self, String> {
-        use toml::Value;
-
-        let value: Value =
+        let raw: ConfigRootRaw =
             toml::from_str(config_content).map_err(|e| format!("Invalid TOML format: {}", e))?;
 
-        // Extract algorithm config if present
-        // Use serde defaults by deserializing, fallback to hardcoded defaults
-        let mut algorithm = AlgorithmConfig {
-            contrast_threshold: default_contrast_threshold(),
-            saturation_adjustment: default_saturation_adjustment(),
-            lightness_adjustment: default_lightness_adjustment(),
-            hue_shift: default_hue_shift(),
-            min_contrast_ratio: default_min_contrast_ratio(),
-            contrast_level: default_contrast_level(),
-            color_harmony: default_color_harmony(),
-        };
-        if let Some(table) = value.get("algorithm").and_then(|v| v.as_table()) {
-            if let Some(v) = table.get("contrast_threshold").and_then(|v| v.as_float()) {
-                algorithm.contrast_threshold = v;
-            }
-            if let Some(v) = table
-                .get("saturation_adjustment")
-                .and_then(|v| v.as_integer())
-            {
-                algorithm.saturation_adjustment = v as i8;
-            }
-            if let Some(v) = table
-                .get("lightness_adjustment")
-                .and_then(|v| v.as_integer())
-            {
-                algorithm.lightness_adjustment = v as i8;
-            }
-            if let Some(v) = table.get("hue_shift").and_then(|v| v.as_integer()) {
-                algorithm.hue_shift = v as i16;
-            }
-            if let Some(v) = table.get("min_contrast_ratio").and_then(|v| v.as_float()) {
-                algorithm.min_contrast_ratio = v;
-            }
-            if let Some(v) = table.get("contrast_level").and_then(|v| v.as_float()) {
-                algorithm.contrast_level = v;
-            }
-            if let Some(v) = table.get("color_harmony").and_then(|v| v.as_str()) {
-                algorithm.color_harmony = v.to_string();
-            }
-        }
-
-        // Extract image config if present
-        let mut image = ImageConfig::default();
-        if let Some(table) = value.get("image").and_then(|v| v.as_table()) {
-            if let Some(v) = table.get("scheme_type").and_then(|v| v.as_str()) {
-                image.scheme_type = Some(v.to_string());
-            }
-        }
-
-        // Extract template groups - process tables that contain template sections
-        let mut groups = HashMap::new();
-        if let Value::Table(table) = &value {
-            for (group_key, group_value) in table {
-                // Skip the algorithm and image sections
-                if group_key != "algorithm" && group_key != "image" {
-                    // Process if this is a table containing template sections
-                    if let Value::Table(sub_table) = group_value {
-                        let mut section_map = HashMap::new();
-
-                        // Process each template section within this group
-                        for (section_name, section_value) in sub_table {
-                            // Only try to parse as ConfigSection if it has the required fields
-                            if let Value::Table(section_fields) = section_value {
-                                // Check if this table has the required fields for a ConfigSection
-                                if section_fields.contains_key("input_path")
-                                    && section_fields.contains_key("output_path")
-                                {
-                                    // Convert the table to a proper TOML string representation for parsing
-                                    let toml_doc = toml::to_string(&section_fields)
-                                        .unwrap_or_else(|_| String::from(""));
-
-                                    if let Ok(config_section) =
-                                        toml::from_str::<ConfigSection>(&toml_doc)
-                                    {
-                                        section_map.insert(section_name.clone(), config_section);
-                                    }
-                                }
+        // Post-process flattened entries into template groups
+        let mut groups: HashMap<String, HashMap<String, ConfigSection>> = HashMap::new();
+        for (group_key, val) in raw.other {
+            if let Value::Table(table) = val {
+                let mut sections = HashMap::new();
+                for (section_name, fields) in table {
+                    if let Value::Table(field_map) = &fields {
+                        // Silently skip sections without required fields
+                        if field_map.contains_key("input_path")
+                            && field_map.contains_key("output_path")
+                        {
+                            let s = toml::from_str::<ConfigSection>(
+                                &toml::to_string(&fields).unwrap_or_default(),
+                            );
+                            if let Ok(s) = s {
+                                sections.insert(section_name, s);
                             }
                         }
-
-                        if !section_map.is_empty() {
-                            groups.insert(group_key.clone(), section_map);
-                        }
                     }
+                }
+                if !sections.is_empty() {
+                    groups.insert(group_key, sections);
                 }
             }
         }
 
-        // No debug output in release version - only for development
-
         Ok(ConfigRoot {
-            algorithm,
-            image,
+            algorithm: raw.algorithm,
+            image: raw.image,
             groups,
         })
     }
@@ -226,11 +141,8 @@ output_path = "output.css"
     fn test_config_parse_with_algorithm() {
         let config_content = r#"
 [algorithm]
-contrast_threshold = 0.2
 saturation_adjustment = 10
-lightness_adjustment = -5
 hue_shift = 15
-min_contrast_ratio = 4.0
 
 [templates.test]
 input_path = "input.css"
@@ -239,11 +151,8 @@ output_path = "output.css"
         let result = ConfigRoot::parse(config_content);
         assert!(result.is_ok());
         let config = result.unwrap();
-        assert_eq!(config.algorithm.contrast_threshold, 0.2);
         assert_eq!(config.algorithm.saturation_adjustment, 10);
-        assert_eq!(config.algorithm.lightness_adjustment, -5);
         assert_eq!(config.algorithm.hue_shift, 15);
-        assert_eq!(config.algorithm.min_contrast_ratio, 4.0);
     }
 
     #[test]
@@ -274,11 +183,8 @@ post_hook = "./script.sh"
         assert!(result.is_ok());
         let config = result.unwrap();
         // Check default values
-        assert!((config.algorithm.contrast_threshold - 0.15).abs() < 0.001);
         assert_eq!(config.algorithm.saturation_adjustment, 0);
-        assert_eq!(config.algorithm.lightness_adjustment, 0);
         assert_eq!(config.algorithm.hue_shift, 0);
-        assert!((config.algorithm.min_contrast_ratio - 4.5).abs() < 0.001);
     }
 
     #[test]

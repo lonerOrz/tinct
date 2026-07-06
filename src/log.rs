@@ -32,38 +32,20 @@ pub fn init_logger(level: LogLevel) {
     LOGGER.get_or_init(|| Logger::new(level));
 }
 
-#[allow(dead_code)]
-pub fn is_verbose() -> bool {
-    if let Some(logger) = LOGGER.get() {
-        logger.level == LogLevel::Verbose
-    } else {
-        false
-    }
-}
-
 // Info module
 pub mod info {
     use super::*;
 
-    #[allow(dead_code)]
-    pub fn message(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!("{} [{}] {}", "ℹ".blue(), section.blue(), msg.blue());
-            }
-        }
-    }
-
     pub fn success(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!(
-                    "{} [{}] {}",
-                    "✓".green().bold(),
-                    section.blue(),
-                    msg.green()
-                );
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Normal as u8
+        {
+            println!(
+                "{} [{}] {}",
+                "✓".green().bold(),
+                section.blue(),
+                msg.green()
+            );
         }
     }
 
@@ -77,11 +59,11 @@ pub mod error {
     use super::*;
 
     pub fn message(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Quiet as u8 {
-                // Always show errors
-                eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Quiet as u8
+        {
+            // Always show errors
+            eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
         }
     }
 
@@ -95,28 +77,28 @@ pub mod hook {
     use super::*;
 
     pub fn executing(section: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Verbose as u8 {
-                println!(
-                    "{} [{}] {}",
-                    "→".blue(),
-                    section.blue(),
-                    "Hook command executing...".blue()
-                );
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Verbose as u8
+        {
+            println!(
+                "{} [{}] {}",
+                "→".blue(),
+                section.blue(),
+                "Hook command executing...".blue()
+            );
         }
     }
 
     pub fn success(section: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!(
-                    "{} [{}] {}",
-                    "✓".green().bold(),
-                    section.blue(),
-                    "Hook command executed successfully".green()
-                );
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Normal as u8
+        {
+            println!(
+                "{} [{}] {}",
+                "✓".green().bold(),
+                section.blue(),
+                "Hook command executed successfully".green()
+            );
         }
     }
 }
@@ -127,10 +109,10 @@ pub mod general {
     use colored::Colorize;
 
     pub fn info(msg: &str) {
-        if let Some(logger) = LOGGER.get() {
-            if logger.level as u8 >= LogLevel::Normal as u8 {
-                println!("{}", msg);
-            }
+        if let Some(logger) = LOGGER.get()
+            && logger.level as u8 >= LogLevel::Normal as u8
+        {
+            println!("{}", msg);
         }
     }
 
@@ -168,12 +150,6 @@ mod tests {
         assert_ne!(LogLevel::Quiet, LogLevel::Normal);
         assert_ne!(LogLevel::Normal, LogLevel::Verbose);
         assert_ne!(LogLevel::Quiet, LogLevel::Verbose);
-    }
-
-    #[test]
-    fn test_is_verbose_default() {
-        // Without initialization, is_verbose should return false
-        assert!(!is_verbose());
     }
 
     #[test]
