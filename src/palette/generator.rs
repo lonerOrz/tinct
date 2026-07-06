@@ -43,11 +43,7 @@ use super::types::{ColorFormat, Palette};
 /// Seed color priority:
 /// 1. `seed` field (if present)
 /// 2. `Primary` field (as fallback seed)
-pub fn generate_palette(
-    theme: &Value,
-    is_dark_mode: bool,
-    _is_strict: bool,
-) -> Result<Palette, String> {
+pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
     // Get seed color: prefer explicit "seed", fallback to "Primary"
     let seed_hex = theme
         .get("seed")
@@ -61,7 +57,7 @@ pub fn generate_palette(
     let scheme =
         generate_scheme_with_params(seed_argb, is_dark_mode, &AlgorithmParameters::default());
 
-    scheme_to_palette(&scheme, is_dark_mode, theme)
+    scheme_to_palette(&scheme, theme)
 }
 
 /// Generate color palette with algorithm parameters
@@ -88,7 +84,7 @@ pub fn generate_palette_with_params(
     let scheme = generate_scheme_with_params(seed_argb, is_dark_mode, &params);
 
     // Convert to palette
-    scheme_to_palette(&scheme, is_dark_mode, theme)
+    scheme_to_palette(&scheme, theme)
 }
 
 /// Parse hex color string to Argb
@@ -235,11 +231,7 @@ fn generate_scheme_with_params(
 }
 
 /// Convert material-colors scheme to our Palette format
-fn scheme_to_palette(
-    scheme: &DynamicScheme,
-    _is_dark_mode: bool,
-    theme: &Value,
-) -> Result<Palette, String> {
+fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, String> {
     // Helper to get override color from theme
     let get_override = |key: &str| -> Option<&str> {
         theme
@@ -394,7 +386,7 @@ mod tests {
             "seed": "#FF5722"
         });
 
-        let palette = generate_palette(&theme, false, false).unwrap();
+        let palette = generate_palette(&theme, false).unwrap();
 
         // Verify primary color was generated
         assert!(!palette.primary.hex.is_empty());
@@ -412,7 +404,7 @@ mod tests {
             "error": "#F44336"
         });
 
-        let palette = generate_palette(&theme, false, false).unwrap();
+        let palette = generate_palette(&theme, false).unwrap();
 
         // Error color should be the override
         assert_eq!(palette.error.hex, "#F44336");
@@ -424,7 +416,7 @@ mod tests {
             "seed": "#2196F3"
         });
 
-        let palette = generate_palette(&theme, true, false).unwrap();
+        let palette = generate_palette(&theme, true).unwrap();
 
         // Dark mode should have dark surface
         assert!(palette.surface.hex.starts_with("#"));
