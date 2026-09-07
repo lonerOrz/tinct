@@ -3,10 +3,15 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { nixpkgs, ... }:
+    { nixpkgs, rust-overlay, ... }:
     let
       systems = [
         "x86_64-linux"
@@ -16,24 +21,37 @@
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      mkPkgs =
+      pkgsFor =
         system:
         import nixpkgs {
           inherit system;
+          overlays = [ rust-overlay.overlays.default ];
         };
+
+      rustToolchain =
+        pkgs:
+        pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" ];
+        };
+
+      packageMeta = (fromTOML (builtins.readFile ./Cargo.toml)).package;
     in
     {
       packages = forAllSystems (
         system:
         let
-          pkgs = mkPkgs system;
+          pkgs = pkgsFor system;
+          rust = rustToolchain pkgs;
 
-          cargoMeta = builtins.fromTOML (builtins.readFile ./Cargo.toml);
-          pname = cargoMeta.package.name;
-          version = cargoMeta.package.version;
-
-          tinct = pkgs.rustPlatform.buildRustPackage {
-            inherit pname version;
+          rustPlatform = pkgs.makeRustPlatform {
+            cargo = rust;
+            rustc = rust;
+          };
+        in
+        {
+          default = rustPlatform.buildRustPackage {
+            pname = packageMeta.name;
+            version = packageMeta.version;
 
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
@@ -46,31 +64,27 @@
               maintainers = [ pkgs.lib.maintainers.lonerOrz ];
             };
           };
-        in
-        {
-          default = tinct;
-          inherit tinct;
         }
       );
 
       devShells = forAllSystems (
         system:
         let
-          pkgs = mkPkgs system;
+          pkgs = pkgsFor system;
+          rust = rustToolchain pkgs;
         in
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              cargo
-              rustc
+              rust
               rust-analyzer
-              rustfmt
-              clippy
               cargo-watch
               cargo-criterion
               nixfmt
               yamlfmt
             ];
+
+            RUST_SRC_PATH = "${rust}/lib/rustlib/src/rust/library";
           };
         }
       );
@@ -78,13 +92,14 @@
       formatter = forAllSystems (
         system:
         let
-          pkgs = mkPkgs system;
+          pkgs = pkgsFor system;
+          rust = rustToolchain pkgs;
         in
         pkgs.writeShellApplication {
           name = "format";
 
           runtimeInputs = with pkgs; [
-            cargo
+            rust
             nixfmt
             yamlfmt
             git
@@ -93,22 +108,13 @@
           text = ''
             set -euo pipefail
 
-            # Rust
-            if [ -f Cargo.toml ]; then
-              cargo fmt --all
-            fi
+            [ -f Cargo.toml ] && cargo fmt --all
 
-            # Nix
             git ls-files '*.nix' -z |
-              while IFS= read -r -d "" file; do
-                nixfmt "$file"
-              done
+              xargs -0 -r -n1 nixfmt
 
-            # YAML
             git ls-files '*.yaml' '*.yml' -z |
-              while IFS= read -r -d "" file; do
-                yamlfmt "$file"
-              done
+              xargs -0 -r -n1 yamlfmt
           '';
         }
       );

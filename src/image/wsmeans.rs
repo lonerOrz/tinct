@@ -31,7 +31,7 @@ impl Random {
     }
 
     fn next_range(&mut self, range: usize) -> usize {
-        if range & (range.wrapping_neg()) == range {
+        if range.isolate_lowest_one() == range {
             ((range as i64 * self.next(31) as i64) >> 31) as usize
         } else {
             loop {
