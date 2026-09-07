@@ -2,7 +2,7 @@
 
 A theme injector tool that applies Material Design 3 color palettes to various configuration files.
 
-![Preview](Assets/preview.png)
+![Preview](.github/assets/preview.png)
 
 ## Description
 

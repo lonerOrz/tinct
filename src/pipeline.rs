@@ -160,7 +160,7 @@ impl Pipeline {
     /// Validate all config sections.
     fn validate_config(config: &crate::config::Config) -> bool {
         let mut is_valid = true;
-        for (_group_name, group) in config.iter() {
+        for group in config.values() {
             for (section_name, section) in group.iter() {
                 if !validate_config_section(section, section_name) {
                     is_valid = false;
@@ -193,11 +193,11 @@ impl Pipeline {
 
     /// Show color preview and exit.
     fn run_preview(theme: &Theme, mode: Mode) -> crate::Result<()> {
-        let colors = match mode {
-            Mode::Dark => theme.dark_colors(),
-            Mode::Light => theme.light_colors(),
+        let palette = match mode {
+            Mode::Dark => &theme.dark_palette,
+            Mode::Light => &theme.light_palette,
         };
-        crate::preview::show_color_preview_from_theme(colors, mode)
+        crate::preview::show_color_preview_from_theme(palette, mode)
             .map_err(|e| crate::core::Error::Config(format!("Preview error: {}", e)))?;
         Ok(())
     }

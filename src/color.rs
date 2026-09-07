@@ -4,6 +4,260 @@ pub type Rgb = (u8, u8, u8);
 /// HSL components as (h, s, l)
 pub type Hsl = (f64, f64, f64);
 
+/// Lean color value: RGB + alpha. All derived formats computed on demand.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub alpha: f64, // 0.0–1.0
+}
+
+/// Enum representing different color output formats
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ColorProperty {
+    Hex,
+    HexStripped,
+    Hex8,
+    Hex8Stripped,
+    Rgb,
+    Rgba,
+    Red,
+    Green,
+    Blue,
+    Alpha,
+    Hsl,
+    Hsla,
+    Hue,
+    Saturation,
+    Lightness,
+}
+
+impl ColorProperty {
+    pub fn from_property(property: &str) -> Option<Self> {
+        match property {
+            "hex" => Some(ColorProperty::Hex),
+            "hex_stripped" => Some(ColorProperty::HexStripped),
+            "hex8" => Some(ColorProperty::Hex8),
+            "hex8_stripped" => Some(ColorProperty::Hex8Stripped),
+            "rgb" => Some(ColorProperty::Rgb),
+            "rgba" => Some(ColorProperty::Rgba),
+            "red" => Some(ColorProperty::Red),
+            "green" => Some(ColorProperty::Green),
+            "blue" => Some(ColorProperty::Blue),
+            "alpha" => Some(ColorProperty::Alpha),
+            "hsl" => Some(ColorProperty::Hsl),
+            "hsla" => Some(ColorProperty::Hsla),
+            "hue" => Some(ColorProperty::Hue),
+            "saturation" => Some(ColorProperty::Saturation),
+            "lightness" => Some(ColorProperty::Lightness),
+            _ => None,
+        }
+    }
+
+    /// Returns true for formats that represent a full color value (not a channel).
+    pub fn is_complete_color(&self) -> bool {
+        matches!(
+            self,
+            ColorProperty::Hex
+                | ColorProperty::HexStripped
+                | ColorProperty::Hex8
+                | ColorProperty::Hex8Stripped
+                | ColorProperty::Rgb
+                | ColorProperty::Rgba
+                | ColorProperty::Hsl
+                | ColorProperty::Hsla
+        )
+    }
+}
+
+/// Built-in color filters
+#[derive(Debug, Clone, Copy)]
+pub enum ColorFilter {
+    SetAlpha(f64),
+    Lighten(f64),
+    Darken(f64),
+    Saturate(f64),
+    Desaturate(f64),
+}
+
+impl ColorFilter {
+    pub fn from_name(name: &str, param: &str) -> Option<Self> {
+        let val = param.parse::<f64>().ok()?;
+        match name {
+            "set_alpha" => Some(ColorFilter::SetAlpha(val.clamp(0.0, 1.0))),
+            "lighten" => Some(ColorFilter::Lighten(val)),
+            "darken" => Some(ColorFilter::Darken(val)),
+            "saturate" => Some(ColorFilter::Saturate(val)),
+            "desaturate" => Some(ColorFilter::Desaturate(val)),
+            _ => None,
+        }
+    }
+
+    pub fn is_compatible(&self, format_type: &ColorProperty) -> bool {
+        format_type.is_complete_color()
+    }
+
+    /// Apply this filter to a color and return the formatted result.
+    pub fn apply_to(&self, color: Color, prop: ColorProperty) -> String {
+        let filtered = color.apply_filter(self);
+        filtered.format(&prop)
+    }
+}
+
+impl Color {
+    pub const fn new(r: u8, g: u8, b: u8, alpha: f64) -> Self {
+        Self { r, g, b, alpha }
+    }
+
+    pub fn rgb(&self) -> Rgb {
+        (self.r, self.g, self.b)
+    }
+
+    /// Hex string e.g. "#FF5722"
+    pub fn hex(&self) -> String {
+        rgb_to_hex(self.r as f64, self.g as f64, self.b as f64)
+    }
+
+    /// 8-digit hex with alpha e.g. "#FF572280"
+    pub fn hex8(&self) -> String {
+        let a = (self.alpha * 255.0).round() as u8;
+        format!("#{:02X}{:02X}{:02X}{:02X}", self.r, self.g, self.b, a)
+    }
+
+    /// Stripped hex without '#' e.g. "FF5722"
+    pub fn hex_stripped(&self) -> String {
+        self.hex().trim_start_matches('#').to_string()
+    }
+
+    /// Stripped 8-digit hex e.g. "FF572280"
+    pub fn hex8_stripped(&self) -> String {
+        self.hex8().trim_start_matches('#').to_string()
+    }
+
+    /// rgb(r, g, b) string
+    pub fn rgb_str(&self) -> String {
+        format!("rgb({}, {}, {})", self.r, self.g, self.b)
+    }
+
+    /// rgba(r, g, b, a) string
+    pub fn rgba_str(&self) -> String {
+        format!(
+            "rgba({}, {}, {}, {:.1})",
+            self.r, self.g, self.b, self.alpha
+        )
+    }
+
+    /// hsl(h, s%, l%) string
+    pub fn hsl_str(&self) -> String {
+        let (h, s, l) = self.hsl();
+        let h_i = h.round() as u32 % 360;
+        let s_i = (s * 100.0).round().clamp(0.0, 100.0) as u32;
+        let l_i = (l * 100.0).round().clamp(0.0, 100.0) as u32;
+        format!("hsl({}, {}%, {}%)", h_i, s_i, l_i)
+    }
+
+    /// hsla(h, s%, l%, a) string
+    pub fn hsla_str(&self) -> String {
+        let (h, s, l) = self.hsl();
+        let h_i = h.round() as u32 % 360;
+        let s_i = (s * 100.0).round().clamp(0.0, 100.0) as u32;
+        let l_i = (l * 100.0).round().clamp(0.0, 100.0) as u32;
+        format!("hsla({}, {}%, {}%, {:.1})", h_i, s_i, l_i, self.alpha)
+    }
+
+    /// HSL tuple (h: 0–360, s: 0–1, l: 0–1)
+    pub fn hsl(&self) -> Hsl {
+        rgb_to_hsl(self.r as f64, self.g as f64, self.b as f64)
+    }
+
+    /// Hue in degrees 0–360
+    pub fn hue(&self) -> f64 {
+        self.hsl().0
+    }
+
+    /// Saturation 0–1
+    pub fn saturation(&self) -> f64 {
+        self.hsl().1
+    }
+
+    /// Lightness 0–1
+    pub fn lightness(&self) -> f64 {
+        self.hsl().2
+    }
+
+    /// Create from hex string (#RRGGBB or #RRGGBBAA)
+    pub fn from_hex(hex: &str) -> Result<Self, String> {
+        let hex_stripped = hex.trim_start_matches('#');
+        if hex_stripped.len() == 8 {
+            let r = u8::from_str_radix(&hex_stripped[0..2], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            let g = u8::from_str_radix(&hex_stripped[2..4], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            let b = u8::from_str_radix(&hex_stripped[4..6], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            let a = u8::from_str_radix(&hex_stripped[6..8], 16)
+                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+            Ok(Self::new(r, g, b, a as f64 / 255.0))
+        } else if hex_stripped.len() == 6 {
+            let (r, g, b) = hex_to_rgb(hex)?;
+            Ok(Self::new(r, g, b, 1.0))
+        } else {
+            Err(format!("Invalid hex color format: {}", hex))
+        }
+    }
+
+    /// Apply a color filter (lighten/darken/saturate/desaturate) and return new Color
+    pub fn apply_filter(&self, filter: &ColorFilter) -> Self {
+        let (h, s, l) = self.hsl();
+        match filter {
+            ColorFilter::Lighten(amount) => {
+                let new_l = (l + amount).clamp(0.0, 100.0);
+                let (nr, ng, nb) = hsl_to_rgb(h, s, new_l);
+                Self::new(nr, ng, nb, self.alpha)
+            }
+            ColorFilter::Darken(amount) => {
+                let new_l = (l - amount).clamp(0.0, 100.0);
+                let (nr, ng, nb) = hsl_to_rgb(h, s, new_l);
+                Self::new(nr, ng, nb, self.alpha)
+            }
+            ColorFilter::Saturate(amount) => {
+                let new_s = (s + amount).clamp(0.0, 100.0);
+                let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
+                Self::new(nr, ng, nb, self.alpha)
+            }
+            ColorFilter::Desaturate(amount) => {
+                let new_s = (s - amount).clamp(0.0, 100.0);
+                let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
+                Self::new(nr, ng, nb, self.alpha)
+            }
+            ColorFilter::SetAlpha(a) => Self::new(self.r, self.g, self.b, a.clamp(0.0, 1.0)),
+        }
+    }
+
+    /// Format this color according to a ColorProperty
+    pub fn format(&self, prop: &ColorProperty) -> String {
+        use ColorProperty as P;
+        match prop {
+            P::Hex => self.hex(),
+            P::HexStripped => self.hex_stripped(),
+            P::Hex8 => self.hex8(),
+            P::Hex8Stripped => self.hex8_stripped(),
+            P::Rgb => self.rgb_str(),
+            P::Rgba => self.rgba_str(),
+            P::Hsl => self.hsl_str(),
+            P::Hsla => self.hsla_str(),
+            P::Red => self.r.to_string(),
+            P::Green => self.g.to_string(),
+            P::Blue => self.b.to_string(),
+            P::Alpha => self.alpha.to_string(),
+            P::Hue => format!("{:.0}", self.hue()),
+            P::Saturation => format!("{:.0}", self.saturation() * 100.0),
+            P::Lightness => format!("{:.0}", self.lightness() * 100.0),
+        }
+    }
+}
+
 /// Circular hue distance (0-180).
 #[inline]
 pub fn hue_distance(h1: f64, h2: f64) -> f64 {
@@ -320,5 +574,45 @@ mod tests {
     fn test_estimate_hue() {
         let hue = estimate_hue(255, 0, 0);
         assert!((0.0..=360.0).contains(&hue));
+    }
+
+    #[test]
+    fn test_color_from_hex() {
+        let c = Color::from_hex("#FF5722").unwrap();
+        assert_eq!(c.r, 255);
+        assert_eq!(c.g, 87);
+        assert_eq!(c.b, 34);
+        assert!((c.alpha - 1.0).abs() < 0.001);
+
+        let c8 = Color::from_hex("#FF572280").unwrap();
+        assert_eq!(c8.r, 255);
+        assert!((c8.alpha - 0.502).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_color_formats() {
+        let c = Color::new(255, 87, 34, 1.0);
+        assert_eq!(c.hex(), "#FF5722");
+        assert_eq!(c.hex_stripped(), "FF5722");
+        assert_eq!(c.hex8(), "#FF5722FF");
+        assert_eq!(c.hex8_stripped(), "FF5722FF");
+        assert_eq!(c.rgb_str(), "rgb(255, 87, 34)");
+        assert_eq!(c.rgba_str(), "rgba(255, 87, 34, 1.0)");
+    }
+
+    #[test]
+    fn test_color_lighten() {
+        use crate::color::ColorFilter;
+        let c = Color::new(200, 200, 200, 1.0);
+        let lit = c.apply_filter(&ColorFilter::Lighten(20.0));
+        assert!(lit.lightness() > c.lightness());
+    }
+
+    #[test]
+    fn test_color_darken() {
+        use crate::color::ColorFilter;
+        let c = Color::new(50, 50, 50, 1.0);
+        let d = c.apply_filter(&ColorFilter::Darken(20.0));
+        assert!(d.lightness() < c.lightness());
     }
 }

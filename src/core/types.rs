@@ -2,9 +2,6 @@
 
 use std::collections::HashMap;
 
-// Re-export palette::ColorFormat as the canonical type
-pub use crate::palette::ColorFormat;
-
 /// Theme mode (dark or light)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum)]
 pub enum Mode {
@@ -31,29 +28,24 @@ impl std::fmt::Display for Mode {
     }
 }
 
-/// A color theme containing all color values for both modes
+/// A color theme containing all color values for both modes.
+/// Palette-derived maps are computed on demand — no redundant storage.
 #[derive(Debug, Clone)]
 pub struct Theme {
     pub name: String,
     pub source_color: String,
     pub dark_palette: crate::palette::Palette,
     pub light_palette: crate::palette::Palette,
-    dark_color_map: HashMap<String, ColorFormat>,
-    light_color_map: HashMap<String, ColorFormat>,
 }
 
 impl Theme {
     pub fn new(name: String, source_color: String) -> Self {
-        let mut theme = Self {
+        Self {
             name,
             source_color,
             dark_palette: crate::palette::Palette::empty(),
             light_palette: crate::palette::Palette::empty(),
-            dark_color_map: HashMap::new(),
-            light_color_map: HashMap::new(),
-        };
-        theme.build_color_maps();
-        theme
+        }
     }
 
     pub fn with_palettes(
@@ -62,43 +54,39 @@ impl Theme {
         dark_palette: crate::palette::Palette,
         light_palette: crate::palette::Palette,
     ) -> Self {
-        let mut theme = Self {
+        Self {
             name,
             source_color,
             dark_palette,
             light_palette,
-            dark_color_map: HashMap::new(),
-            light_color_map: HashMap::new(),
-        };
-        theme.build_color_maps();
-        theme
+        }
     }
 
-    pub fn build_color_maps(&mut self) {
-        self.dark_color_map = self.dark_palette.to_map();
-        self.light_color_map = self.light_palette.to_map();
+    /// Get dark-mode colors as string-keyed map (derived from palette on demand).
+    pub fn dark_colors(&self) -> HashMap<String, crate::color::Color> {
+        self.dark_palette.to_map()
     }
 
-    pub fn dark_colors(&self) -> &HashMap<String, ColorFormat> {
-        &self.dark_color_map
+    /// Get light-mode colors as string-keyed map (derived from palette on demand).
+    pub fn light_colors(&self) -> HashMap<String, crate::color::Color> {
+        self.light_palette.to_map()
     }
 
-    pub fn light_colors(&self) -> &HashMap<String, ColorFormat> {
-        &self.light_color_map
-    }
-
-    pub fn get_color(&self, name: &str, mode: Mode) -> Option<ColorFormat> {
+    /// Get a single color by role name and mode.
+    pub fn get_color(&self, name: &str, mode: Mode) -> Option<crate::color::Color> {
         let map = match mode {
-            Mode::Dark => &self.dark_color_map,
-            Mode::Light => &self.light_color_map,
+            Mode::Dark => self.dark_palette.to_map(),
+            Mode::Light => self.light_palette.to_map(),
         };
-        map.get(name).cloned()
+        map.get(name).copied()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::color::Color;
+    use crate::palette::ColorRole;
 
     #[test]
     fn test_mode_display() {
@@ -119,42 +107,28 @@ mod tests {
         let theme = Theme::new("test".to_string(), "#FF5722".to_string());
         assert_eq!(theme.name, "test");
         assert_eq!(theme.source_color, "#FF5722");
-        // Palette entries exist but have empty hex values
-        assert!(theme.dark_palette.primary.hex.is_empty());
-        assert!(theme.light_palette.primary.hex.is_empty());
+        assert!(theme.dark_colors().is_empty());
+        assert!(theme.light_colors().is_empty());
     }
 
     #[test]
     fn test_theme_get_color() {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
-        let color = crate::palette::ColorFormat {
-            hex: "#FF5722".to_string(),
-            hex_stripped: "FF5722".to_string(),
-            hex8: "#FF5722FF".to_string(),
-            hex8_stripped: "FF5722FF".to_string(),
-            rgb: "rgb(255, 87, 34)".to_string(),
-            rgba: "rgba(255, 87, 34, 1.0)".to_string(),
-            hsl: "hsl(14, 100%, 57%)".to_string(),
-            hsla: "hsla(14, 100%, 57%, 1.0)".to_string(),
-            red: 255,
-            green: 87,
-            blue: 34,
-            alpha: 1.0,
-            hue: 14.0,
-            saturation: 100.0,
-            lightness: 57.0,
-            original_hue: Some(14),
-            original_saturation: Some(100),
-            original_lightness: Some(57),
-        };
-
-        theme.dark_palette.primary = color.clone();
-        theme.light_palette.primary = color;
-        theme.build_color_maps();
+        let color = Color::new(255, 87, 34, 1.0);
+        theme.dark_palette.insert(ColorRole::Primary, color.clone());
+        theme.light_palette.insert(ColorRole::Primary, color);
+        theme
+            .dark_palette
+            .insert(ColorRole::Background, Color::new(30, 30, 30, 1.0));
 
         assert!(theme.get_color("primary", Mode::Dark).is_some());
         assert!(theme.get_color("primary", Mode::Light).is_some());
         assert!(theme.get_color("nonexistent", Mode::Dark).is_none());
+
+        // Verify maps are derived, not cached
+        let dark = theme.dark_colors();
+        assert!(dark.contains_key("primary"));
+        assert!(dark.contains_key("background"));
     }
 }

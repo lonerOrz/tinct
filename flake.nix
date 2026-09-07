@@ -3,65 +3,60 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
-    inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+    { nixpkgs, ... }:
+    let
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
 
-      imports = [
-        inputs.treefmt-nix.flakeModule
-      ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      perSystem =
-        {
-          config,
-          self',
-          inputs',
-          pkgs,
-          system,
-          ...
-        }:
+      mkPkgs =
+        system:
+        import nixpkgs {
+          inherit system;
+        };
+    in
+    {
+      packages = forAllSystems (
+        system:
         let
-          lib = pkgs.lib;
-        in
-        {
-          packages = {
-            default = self'.packages.tinct;
-            tinct = pkgs.rustPlatform.buildRustPackage {
-              pname = "tinct";
-              version = "0.1.0";
-              src = ./.;
-              cargoLock.lockFile = ./Cargo.lock;
-              meta = {
-                description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files";
-                homepage = "https://github.com/lonerOrz/tinct";
-                mainProgram = "tinct";
-                license = lib.licenses.bsd3;
-                maintainers = with lib.maintainers; [ lonerOrz ];
-                platforms = [
-                  "x86_64-linux"
-                  "aarch64-linux"
-                  "x86_64-darwin"
-                  "aarch64-darwin"
-                ];
-              };
+          pkgs = mkPkgs system;
+
+          tinct = pkgs.rustPlatform.buildRustPackage {
+            pname = "tinct";
+            version = "0.1.0";
+
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+
+            meta = {
+              description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files";
+              homepage = "https://github.com/lonerOrz/tinct";
+              mainProgram = "tinct";
+              license = pkgs.lib.licenses.bsd3;
+              maintainers = [ pkgs.lib.maintainers.lonerOrz ];
             };
           };
+        in
+        {
+          default = tinct;
+          inherit tinct;
+        }
+      );
 
-          devShells.default = pkgs.mkShell {
-            inputsFrom = [ self'.packages.default ];
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = mkPkgs system;
+        in
+        {
+          default = pkgs.mkShell {
             packages = with pkgs; [
               cargo
               rustc
@@ -70,16 +65,49 @@
               clippy
               cargo-watch
               cargo-criterion
+              nixfmt
+              yamlfmt
             ];
           };
+        }
+      );
 
-          treefmt = {
-            projectRootFile = "flake.nix";
-            programs = {
-              rustfmt.enable = true;
-              nixfmt.enable = true;
-            };
-          };
-        };
+      formatter = forAllSystems (
+        system:
+        let
+          pkgs = mkPkgs system;
+        in
+        pkgs.writeShellApplication {
+          name = "format";
+
+          runtimeInputs = with pkgs; [
+            cargo
+            nixfmt
+            yamlfmt
+            git
+          ];
+
+          text = ''
+            set -euo pipefail
+
+            # Rust
+            if [ -f Cargo.toml ]; then
+              cargo fmt --all
+            fi
+
+            # Nix
+            git ls-files '*.nix' -z |
+              while IFS= read -r -d "" file; do
+                nixfmt "$file"
+              done
+
+            # YAML
+            git ls-files '*.yaml' '*.yml' -z |
+              while IFS= read -r -d "" file; do
+                yamlfmt "$file"
+              done
+          '';
+        }
+      );
     };
 }
