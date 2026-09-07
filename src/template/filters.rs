@@ -77,12 +77,12 @@ mod tests {
     }
 
     #[test]
-    fn test_set_alpha_hex_to_hex8() {
+    fn test_set_alpha_hex_returns_six_digit() {
         let color = create_test_color();
-        // set_alpha with hex format: alpha is applied to color but hex is still 6-digit
+        // set_alpha with hex format: hex must always be 6-digit, never auto-promote
         let result = apply("set_alpha", "0.5", &color, ColorProperty::Hex);
         assert_eq!(result, "#FF5722");
-        // Use Hex8 property to get alpha in output
+        // Hex8 property produces 8-digit hex
         let result8 = apply("set_alpha", "0.5", &color, ColorProperty::Hex8);
         assert_eq!(result8, "#FF572280");
     }

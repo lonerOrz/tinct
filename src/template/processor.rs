@@ -2,21 +2,18 @@
 
 use crate::color::Color;
 use crate::core::{Mode, Result, Theme};
-use crate::template::filters::{ColorFilter, ColorProperty, FilterContext};
+use crate::template::filters::{ColorFilter, ColorProperty};
 use regex::Regex;
-use std::collections::HashMap;
 use std::sync::LazyLock;
 
-/// Pre-compiled regex per mode suffix — 3 compilations instead of 45.
-static MODE_REGEXES: LazyLock<[Regex; 3]> = LazyLock::new(|| {
-    let suffixes = ["default", "dark", "light"];
-    suffixes.map(|s| {
-        let pattern = format!(
-            r"\{{\{{\s*colors\.([a-zA-Z0-9_]+)\.{s}\.([a-zA-Z0-9_]+)\s*(?:\|([a-zA-Z_]+)(?::([^}}]*))?)?\s*\}}\}}",
-            s = s
-        );
-        Regex::new(&pattern).unwrap()
-    })
+/// Unified regex for all color placeholders across all mode suffixes.
+/// Capture groups: $1=color role, $2=mode (default|dark|light), $3=property,
+/// $4=filter name (optional), $5=filter param (optional).
+static COLOR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"\{\{\s*colors\.([a-zA-Z0-9_]+)\.(default|dark|light)\.([a-zA-Z0-9_]+)\s*(?:\|([a-zA-Z_]+)(?::([^}]*))?)?\s*\}\}",
+    )
+    .unwrap()
 });
 
 /// Default template processor implementation
@@ -36,81 +33,41 @@ impl Default for TemplateProcessor {
 
 impl TemplateProcessor {
     pub fn render(&self, template: &str, theme: &Theme, mode: Mode) -> Result<String> {
-        let mut content = template.to_string();
-
-        // Process {{colors.XXX.default.XXX}} syntax - uses current mode colors
-        let current_mode_colors = match mode {
-            Mode::Dark => theme.dark_colors(),
-            Mode::Light => theme.light_colors(),
-        };
-        let mut current_with_seed = current_mode_colors;
-        if let Ok(c) = crate::color::Color::from_hex(&theme.source_color) {
-            current_with_seed.insert("source_color".to_string(), c);
+        // Build color maps once, inject source_color into both.
+        let mut dark_colors = theme.dark_colors();
+        let mut light_colors = theme.light_colors();
+        if let Ok(c) = Color::from_hex(&theme.source_color) {
+            dark_colors.insert("source_color".to_string(), c);
+            light_colors.insert("source_color".to_string(), c);
         }
-        content =
-            self.process_color_placeholders(content, &MODE_REGEXES[0], &current_with_seed)?;
 
-        // Process {{colors.XXX.dark.XXX}} syntax - always uses dark colors
-        let mut dark_with_seed = theme.dark_colors();
-        if let Ok(c) = crate::color::Color::from_hex(&theme.source_color) {
-            dark_with_seed.insert("source_color".to_string(), c);
-        }
-        content =
-            self.process_color_placeholders(content, &MODE_REGEXES[1], &dark_with_seed)?;
+        let content = COLOR_REGEX.replace_all(template, |caps: &regex::Captures| {
+            let key = &caps[1];
+            let mode_suffix = &caps[2];
+            let prop = &caps[3];
+            let filter_name = caps.get(4).map(|m| m.as_str());
+            let filter_param = caps.get(5).map(|m| m.as_str());
 
-        // Process {{colors.XXX.light.XXX}} syntax - always uses light colors
-        let mut light_with_seed = theme.light_colors();
-        if let Ok(c) = crate::color::Color::from_hex(&theme.source_color) {
-            light_with_seed.insert("source_color".to_string(), c);
-        }
-        content =
-            self.process_color_placeholders(content, &MODE_REGEXES[2], &light_with_seed)?;
+            let prop_enum = match ColorProperty::from_property(prop) {
+                Some(p) => p,
+                None => return caps[0].to_string(),
+            };
 
-        // Process mode placeholders
-        let mode_str = match mode {
-            Mode::Dark => "dark",
-            Mode::Light => "light",
-        };
-        content = content.replace("{{mode}}", mode_str);
-        content = content.replace("{{is_dark}}", if mode.is_dark() { "true" } else { "false" });
-        content = content.replace(
-            "{{is_light}}",
-            if mode.is_light() { "true" } else { "false" },
-        );
+            let colors = match mode_suffix {
+                "dark" => &dark_colors,
+                "light" => &light_colors,
+                "default" => match mode {
+                    Mode::Dark => &dark_colors,
+                    Mode::Light => &light_colors,
+                },
+                _ => return caps[0].to_string(),
+            };
 
-        Ok(content)
-    }
-
-    fn process_color_placeholders(
-        &self,
-        content: String,
-        re: &Regex,
-        colors: &HashMap<String, Color>,
-    ) -> Result<String> {
-        Ok(re
-            .replace_all(&content, |caps: &regex::Captures| {
-                let key = &caps[1];
-                let prop = &caps[2];
-                let filter_name = caps.get(3).map(|m| m.as_str());
-                let filter_param = caps.get(4).map(|m| m.as_str());
-
-                let prop_enum = match ColorProperty::from_property(prop) {
-                    Some(p) => p,
-                    None => return caps[0].to_string(),
-                };
-
-                if let Some(color) = colors.get(key) {
-                    if let (Some(name), Some(param)) = (filter_name, filter_param) {
-                        if let Some(filter) = ColorFilter::from_name(name, param) {
-                            if filter.is_compatible(&prop_enum) {
-                                let ctx = FilterContext {
-                                    color: *color,
-                                    format_type: prop_enum,
-                                };
-                                filter.apply_to(ctx.color, prop_enum)
-                            } else {
-                                color.format(&prop_enum)
-                            }
+            if let Some(color) = colors.get(key) {
+                if let (Some(name), Some(param)) = (filter_name, filter_param) {
+                    if let Some(filter) = ColorFilter::from_name(name, param) {
+                        if filter.is_compatible(&prop_enum) {
+                            filter.apply_to(*color, prop_enum)
                         } else {
                             color.format(&prop_enum)
                         }
@@ -118,14 +75,30 @@ impl TemplateProcessor {
                         color.format(&prop_enum)
                     }
                 } else {
-                    crate::log::general::info(&format!(
-                        "Warning: color '{}' not found in palette, using #000000",
-                        key
-                    ));
-                    "#000000".to_string()
+                    color.format(&prop_enum)
                 }
-            })
-            .to_string())
+            } else {
+                crate::log::general::info(&format!(
+                    "Warning: color '{}' not found in palette, using #000000",
+                    key
+                ));
+                "#000000".to_string()
+            }
+        });
+
+        let mut output = content.into_owned();
+        let mode_str = match mode {
+            Mode::Dark => "dark",
+            Mode::Light => "light",
+        };
+        output = output.replace("{{mode}}", mode_str);
+        output = output.replace("{{is_dark}}", if mode.is_dark() { "true" } else { "false" });
+        output = output.replace(
+            "{{is_light}}",
+            if mode.is_light() { "true" } else { "false" },
+        );
+
+        Ok(output)
     }
 }
 
@@ -138,7 +111,7 @@ mod tests {
     fn make_theme_with_color(role: ColorRole, hex: &str) -> Theme {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
         let color = Color::from_hex(hex).unwrap();
-        theme.dark_palette.insert(role, color.clone());
+        theme.dark_palette.insert(role, color);
         theme.light_palette.insert(role, color);
         theme
     }
@@ -201,13 +174,22 @@ mod tests {
         let processor = TemplateProcessor::new();
         let theme = make_theme_with_color(ColorRole::Primary, "#FF5722");
 
+        // hex stays 6-digit even when alpha is modified via filter
         let template = "Primary: {{colors.primary.default.hex|set_alpha:0.5}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
-        // hex property outputs 6-digit hex; set_alpha modifies the color but format stays hex
         assert!(
             result.contains("Primary: #FF5722"),
-            "Expected hex with alpha applied to color, got: {}",
+            "Expected 6-digit hex, got: {}",
             result
+        );
+
+        // hex8 produces 8-digit hex when alpha is applied
+        let template8 = "Primary: {{colors.primary.default.hex8|set_alpha:0.5}}";
+        let result8 = processor.render(template8, &theme, Mode::Dark).unwrap();
+        assert!(
+            result8.contains("Primary: #FF572280"),
+            "Expected hex8 with alpha applied, got: {}",
+            result8
         );
     }
 
@@ -216,7 +198,7 @@ mod tests {
         let processor = TemplateProcessor::new();
         let theme = make_theme_with_color(ColorRole::Primary, "#FF5722");
 
-        let template = "Primary: {{colors.primary.default.rgb|lighten:10}}";
+        let template = "Primary: {{colors.primary.default.rgb|lighten:0.15}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
         assert!(result.starts_with("Primary: rgb("), "got: {}", result);
     }

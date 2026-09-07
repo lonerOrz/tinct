@@ -250,10 +250,10 @@ impl Color {
             P::Red => self.r.to_string(),
             P::Green => self.g.to_string(),
             P::Blue => self.b.to_string(),
-            P::Alpha => self.alpha.to_string(),
+            P::Alpha => format!("{:.2}", self.alpha),
             P::Hue => format!("{:.0}", self.hue()),
-            P::Saturation => format!("{:.0}", self.saturation() * 100.0),
-            P::Lightness => format!("{:.0}", self.lightness() * 100.0),
+            P::Saturation => format!("{:.0}", self.saturation()),
+            P::Lightness => format!("{:.0}", self.lightness()),
         }
     }
 }
@@ -275,6 +275,13 @@ pub fn estimate_chroma(r: u8, g: u8, b: u8) -> f64 {
 pub fn estimate_hue(r: u8, g: u8, b: u8) -> f64 {
     let argb = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
     material_colors::hct::Hct::new(material_colors::color::Argb::from_u32(argb)).get_hue()
+}
+
+/// Estimate both hue and chroma in a single HCT lookup to avoid double work.
+pub fn estimate_hct(r: u8, g: u8, b: u8) -> (f64, f64) {
+    let argb = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+    let hct = material_colors::hct::Hct::new(material_colors::color::Argb::from_u32(argb));
+    (hct.get_hue(), hct.get_chroma())
 }
 
 /// Clamp value between min and max
@@ -314,7 +321,7 @@ pub fn hex_to_rgb(hex: &str) -> Result<Rgb, String> {
     Ok((r, g, b))
 }
 
-/// Convert RGB to HSL tuple
+/// Convert RGB to HSL tuple (h: 0–360, s: 0–100, l: 0–100)
 pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     let r = r / 255.0;
     let g = g / 255.0;
@@ -350,12 +357,11 @@ pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     )
 }
 
-/// Convert HSL to RGB tuple
+/// Convert HSL to RGB tuple. Expects h in 0-360, s and l in 0-100.
 pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
     let h = h / 360.0;
     let s = s / 100.0;
     let l = l / 100.0;
-
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
     let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
     let m = l - c / 2.0;
@@ -507,9 +513,15 @@ mod tests {
 
     #[test]
     fn test_hsl_to_rgb() {
+        // h=0, s=100, l=50 → pure red
         let (r, g, b) = hsl_to_rgb(0.0, 100.0, 50.0);
         assert!((r as f64 - 255.0).abs() < 1.0);
         assert!((g as f64 - 0.0).abs() < 1.0);
+        assert!((b as f64 - 0.0).abs() < 1.0);
+        // h=120, s=100, l=50 → pure green
+        let (r, g, b) = hsl_to_rgb(120.0, 100.0, 50.0);
+        assert!((r as f64 - 0.0).abs() < 1.0);
+        assert!((g as f64 - 255.0).abs() < 1.0);
         assert!((b as f64 - 0.0).abs() < 1.0);
     }
 
@@ -604,7 +616,7 @@ mod tests {
     fn test_color_lighten() {
         use crate::color::ColorFilter;
         let c = Color::new(200, 200, 200, 1.0);
-        let lit = c.apply_filter(&ColorFilter::Lighten(20.0));
+        let lit = c.apply_filter(&ColorFilter::Lighten(15.0));
         assert!(lit.lightness() > c.lightness());
     }
 
@@ -612,7 +624,7 @@ mod tests {
     fn test_color_darken() {
         use crate::color::ColorFilter;
         let c = Color::new(50, 50, 50, 1.0);
-        let d = c.apply_filter(&ColorFilter::Darken(20.0));
+        let d = c.apply_filter(&ColorFilter::Darken(15.0));
         assert!(d.lightness() < c.lightness());
     }
 }

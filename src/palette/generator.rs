@@ -49,9 +49,20 @@ pub fn generate_palette_with_params(
 
 fn parse_hex_color(hex: &str) -> Result<Argb, String> {
     let hex = hex.trim_start_matches('#');
-    u32::from_str_radix(hex, 16)
-        .map(Argb::from_u32)
-        .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))
+    let argb = if hex.len() == 6 {
+        // 6-digit RGB: treat as opaque (alpha = 255)
+        u32::from_str_radix(&format!("FF{}", hex), 16)
+            .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))?
+    } else if hex.len() == 8 {
+        u32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex color '{}': {}", hex, e))?
+    } else {
+        return Err(format!(
+            "Invalid hex color '{}': expected 6 or 8 digits, got {}",
+            hex,
+            hex.len()
+        ));
+    };
+    Ok(Argb::from_u32(argb))
 }
 
 /// Map an Argb to a Color.
@@ -202,346 +213,243 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
     };
 
     let mut colors: HashMap<ColorRole, Color> = HashMap::new();
-    let insert =
-        |colors: &mut HashMap<ColorRole, Color>, role: ColorRole, result: Result<Color, String>| {
-            colors.insert(role, result.expect("palette color generation failed"));
-        };
+    let mut insert = |role: ColorRole, result: Result<Color, String>| -> Result<(), String> {
+        colors.insert(role, result?);
+        Ok(())
+    };
 
     insert(
-        &mut colors,
         ColorRole::Primary,
         resolve(|s| s.primary(), Some("primary")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnPrimary,
         resolve(|s| s.on_primary(), Some("on_primary")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::PrimaryContainer,
         resolve(|s| s.primary_container(), Some("primary_container")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnPrimaryContainer,
         resolve(|s| s.on_primary_container(), Some("on_primary_container")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::PrimaryFixed,
         resolve(|s| s.primary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::PrimaryFixedDim,
         resolve(|s| s.primary_fixed_dim(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnPrimaryFixed,
         resolve(|s| s.on_primary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnPrimaryFixedVariant,
         resolve(|s| s.on_primary_fixed_variant(), None),
-    );
+    )?;
 
     insert(
-        &mut colors,
         ColorRole::Secondary,
         resolve(|s| s.secondary(), Some("secondary")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnSecondary,
         resolve(|s| s.on_secondary(), Some("on_secondary")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SecondaryContainer,
         resolve(|s| s.secondary_container(), Some("secondary_container")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnSecondaryContainer,
         resolve(
             |s| s.on_secondary_container(),
             Some("on_secondary_container"),
         ),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SecondaryFixed,
         resolve(|s| s.secondary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SecondaryFixedDim,
         resolve(|s| s.secondary_fixed_dim(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnSecondaryFixed,
         resolve(|s| s.on_secondary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnSecondaryFixedVariant,
         resolve(|s| s.on_secondary_fixed_variant(), None),
-    );
+    )?;
 
     insert(
-        &mut colors,
         ColorRole::Tertiary,
         resolve(|s| s.tertiary(), Some("tertiary")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnTertiary,
         resolve(|s| s.on_tertiary(), Some("on_tertiary")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::TertiaryContainer,
         resolve(|s| s.tertiary_container(), Some("tertiary_container")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnTertiaryContainer,
         resolve(|s| s.on_tertiary_container(), Some("on_tertiary_container")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::TertiaryFixed,
         resolve(|s| s.tertiary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::TertiaryFixedDim,
         resolve(|s| s.tertiary_fixed_dim(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnTertiaryFixed,
         resolve(|s| s.on_tertiary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnTertiaryFixedVariant,
         resolve(|s| s.on_tertiary_fixed_variant(), None),
-    );
+    )?;
 
+    insert(ColorRole::Error, resolve(|s| s.error(), Some("error")))?;
     insert(
-        &mut colors,
-        ColorRole::Error,
-        resolve(|s| s.error(), Some("error")),
-    );
-    insert(
-        &mut colors,
         ColorRole::OnError,
         resolve(|s| s.on_error(), Some("on_error")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::ErrorContainer,
         resolve(|s| s.error_container(), Some("error_container")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnErrorContainer,
         resolve(|s| s.on_error_container(), Some("on_error_container")),
-    );
+    )?;
 
     insert(
-        &mut colors,
         ColorRole::Background,
         resolve(|s| s.background(), Some("background")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnBackground,
         resolve(|s| s.on_background(), Some("on_background")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::Surface,
         resolve(|s| s.surface(), Some("surface")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnSurface,
         resolve(|s| s.on_surface(), Some("on_surface")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SurfaceVariant,
         resolve(|s| s.surface_variant(), Some("surface_variant")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OnSurfaceVariant,
         resolve(|s| s.on_surface_variant(), Some("on_surface_variant")),
-    );
+    )?;
 
     insert(
-        &mut colors,
         ColorRole::SurfaceContainerLowest,
         resolve(|s| s.surface_container_lowest(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SurfaceContainerLow,
         resolve(|s| s.surface_container_low(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SurfaceContainer,
         resolve(|s| s.surface_container(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SurfaceContainerHigh,
         resolve(|s| s.surface_container_high(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::SurfaceContainerHighest,
         resolve(|s| s.surface_container_highest(), None),
-    );
+    )?;
 
     insert(
-        &mut colors,
         ColorRole::InverseSurface,
         resolve(|s| s.inverse_surface(), Some("inverse_surface")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::InverseOnSurface,
         resolve(|s| s.inverse_on_surface(), Some("inverse_on_surface")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::InversePrimary,
         resolve(|s| s.inverse_primary(), Some("inverse_primary")),
-    );
+    )?;
 
+    insert(ColorRole::SurfaceDim, resolve(|s| s.surface_dim(), None))?;
     insert(
-        &mut colors,
-        ColorRole::SurfaceDim,
-        resolve(|s| s.surface_dim(), None),
-    );
-    insert(
-        &mut colors,
         ColorRole::SurfaceBright,
         resolve(|s| s.surface_bright(), None),
-    );
-    insert(
-        &mut colors,
-        ColorRole::SurfaceTint,
-        resolve(|s| s.surface_tint(), None),
-    );
+    )?;
+    insert(ColorRole::SurfaceTint, resolve(|s| s.surface_tint(), None))?;
 
     insert(
-        &mut colors,
         ColorRole::Outline,
         resolve(|s| s.outline(), Some("outline")),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::OutlineVariant,
         resolve(|s| s.outline_variant(), Some("outline_variant")),
-    );
+    )?;
 
-    insert(
-        &mut colors,
-        ColorRole::Shadow,
-        resolve(|s| s.shadow(), Some("shadow")),
-    );
-    insert(
-        &mut colors,
-        ColorRole::Scrim,
-        resolve(|s| s.scrim(), Some("scrim")),
-    );
+    insert(ColorRole::Shadow, resolve(|s| s.shadow(), Some("shadow")))?;
+    insert(ColorRole::Scrim, resolve(|s| s.scrim(), Some("scrim")))?;
 
     // Terminal colors
+    insert(ColorRole::Black, resolve(|s| s.surface(), None))?;
+    insert(ColorRole::Red, resolve(|s| s.error(), None))?;
+    insert(ColorRole::Green, resolve(|s| s.tertiary(), None))?;
+    insert(ColorRole::Yellow, resolve(|s| s.primary_fixed(), None))?;
+    insert(ColorRole::Blue, resolve(|s| s.secondary(), None))?;
+    insert(ColorRole::Magenta, resolve(|s| s.tertiary(), None))?;
+    insert(ColorRole::Cyan, resolve(|s| s.secondary_container(), None))?;
+    insert(ColorRole::White, resolve(|s| s.on_surface(), None))?;
     insert(
-        &mut colors,
-        ColorRole::Black,
-        resolve(|s| s.surface(), None),
-    );
-    insert(&mut colors, ColorRole::Red, resolve(|s| s.error(), None));
-    insert(
-        &mut colors,
-        ColorRole::Green,
-        resolve(|s| s.tertiary(), None),
-    );
-    insert(
-        &mut colors,
-        ColorRole::Yellow,
-        resolve(|s| s.primary_fixed(), None),
-    );
-    insert(
-        &mut colors,
-        ColorRole::Blue,
-        resolve(|s| s.secondary(), None),
-    );
-    insert(
-        &mut colors,
-        ColorRole::Magenta,
-        resolve(|s| s.tertiary(), None),
-    );
-    insert(
-        &mut colors,
-        ColorRole::Cyan,
-        resolve(|s| s.secondary_container(), None),
-    );
-    insert(
-        &mut colors,
-        ColorRole::White,
-        resolve(|s| s.on_surface(), None),
-    );
-    insert(
-        &mut colors,
         ColorRole::BrightBlack,
         resolve(|s| s.surface_variant(), None),
-    );
+    )?;
+    insert(ColorRole::BrightRed, resolve(|s| s.error_container(), None))?;
     insert(
-        &mut colors,
-        ColorRole::BrightRed,
-        resolve(|s| s.error_container(), None),
-    );
-    insert(
-        &mut colors,
         ColorRole::BrightGreen,
         resolve(|s| s.tertiary_container(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::BrightYellow,
         resolve(|s| s.primary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::BrightBlue,
         resolve(|s| s.secondary_fixed(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::BrightMagenta,
         resolve(|s| s.primary_fixed_dim(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::BrightCyan,
         resolve(|s| s.secondary_fixed_dim(), None),
-    );
+    )?;
     insert(
-        &mut colors,
         ColorRole::BrightWhite,
         resolve(|s| s.inverse_surface(), None),
-    );
+    )?;
 
     Ok(Palette::new(colors))
 }

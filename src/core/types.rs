@@ -116,7 +116,7 @@ mod tests {
         let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
 
         let color = Color::new(255, 87, 34, 1.0);
-        theme.dark_palette.insert(ColorRole::Primary, color.clone());
+        theme.dark_palette.insert(ColorRole::Primary, color);
         theme.light_palette.insert(ColorRole::Primary, color);
         theme
             .dark_palette
