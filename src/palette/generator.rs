@@ -2,32 +2,6 @@
 //!
 //! This module uses the official Material You algorithm via the material-colors crate
 //! to generate perceptually uniform color palettes from a seed color.
-//!
-//! # Supported Theme Formats
-//!
-//! ## Format 1: Seed only
-//! ```json
-//! { "seed": "#7aa2f7" }
-//! ```
-//!
-//! ## Format 2: Overrides only (seed extracted from Primary)
-//! ```json
-//! {
-//!   "Primary": "#7aa2f7",
-//!   "Secondary": "#bb9af7",
-//!   "Tertiary": "#9ece6a"
-//! }
-//! ```
-//!
-//! ## Format 3: Seed + Overrides
-//! ```json
-//! {
-//!   "seed": "#7aa2f7",
-//!   "Primary": "#7aa2f7",
-//!   "Secondary": "#bb9af7",
-//!   "Tertiary": "#9ece6a"
-//! }
-//! ```
 
 use material_colors::color::Argb;
 use material_colors::dynamic_color::{DynamicScheme, Variant};
@@ -36,7 +10,9 @@ use material_colors::palette::TonalPalette;
 use serde_json::Value;
 
 use super::params::{AlgorithmParameters, ColorHarmony};
-use super::types::{ColorFormat, Palette};
+use super::types::{ColorRole, Palette};
+use crate::color::Color;
+use std::collections::HashMap;
 
 /// Extract seed hex from theme: prefer "seed", fallback to "Primary".
 pub fn extract_seed_hex(theme: &Value) -> Option<&str> {
@@ -47,28 +23,17 @@ pub fn extract_seed_hex(theme: &Value) -> Option<&str> {
 }
 
 /// Generate color palette from theme data using HCT color space
-///
-/// Seed color priority:
-/// 1. `seed` field (if present)
-/// 2. `Primary` field (as fallback seed)
 pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
     let seed_hex =
         extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
-    // Parse seed color from hex
     let seed_argb = parse_hex_color(seed_hex)?;
-
     let scheme =
         generate_scheme_with_params(seed_argb, is_dark_mode, &AlgorithmParameters::default());
-
     scheme_to_palette(&scheme, theme)
 }
 
 /// Generate color palette with algorithm parameters
-///
-/// Seed color priority:
-/// 1. `seed` field (if present)
-/// 2. `Primary` field (as fallback seed)
 pub fn generate_palette_with_params(
     theme: &Value,
     is_dark_mode: bool,
@@ -77,22 +42,32 @@ pub fn generate_palette_with_params(
     let seed_hex =
         extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
-    // Parse seed color
     let seed_argb = parse_hex_color(seed_hex)?;
-
-    // Generate scheme with algorithm parameters
     let scheme = generate_scheme_with_params(seed_argb, is_dark_mode, &params);
-
-    // Convert to palette
     scheme_to_palette(&scheme, theme)
 }
 
-/// Parse hex color string to Argb
 fn parse_hex_color(hex: &str) -> Result<Argb, String> {
     let hex = hex.trim_start_matches('#');
-    u32::from_str_radix(hex, 16)
-        .map(Argb::from_u32)
-        .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))
+    let argb = if hex.len() == 6 {
+        // 6-digit RGB: treat as opaque (alpha = 255)
+        u32::from_str_radix(&format!("FF{}", hex), 16)
+            .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))?
+    } else if hex.len() == 8 {
+        u32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex color '{}': {}", hex, e))?
+    } else {
+        return Err(format!(
+            "Invalid hex color '{}': expected 6 or 8 digits, got {}",
+            hex,
+            hex.len()
+        ));
+    };
+    Ok(Argb::from_u32(argb))
+}
+
+/// Map an Argb to a Color.
+fn argb_to_color(argb: Argb) -> Color {
+    Color::new(argb.red, argb.green, argb.blue, argb.alpha as f64 / 255.0)
 }
 
 /// Convert snake_case key to PascalCase for theme lookup.
@@ -103,9 +78,7 @@ fn pascal_case(key: &str) -> Option<String> {
 }
 
 /// Calculate secondary hue based on MD3 algorithm
-/// This creates more harmonious color relationships
 fn calculate_secondary_hue(hue: f64) -> f64 {
-    // MD3 uses different hue offsets based on the seed hue range
     let offset = if (0.0..41.0).contains(&hue) {
         15.0
     } else if (41.0..61.0).contains(&hue) {
@@ -127,14 +100,11 @@ fn calculate_secondary_hue(hue: f64) -> f64 {
     } else {
         20.0
     };
-
     (hue + offset) % 360.0
 }
 
 /// Calculate tertiary hue based on MD3 algorithm
-/// This creates complementary or analogous color relationships
 fn calculate_tertiary_hue(hue: f64) -> f64 {
-    // MD3 uses different hue offsets based on the seed hue range
     let offset = if (0.0..41.0).contains(&hue) {
         30.0
     } else if (41.0..61.0).contains(&hue) {
@@ -156,7 +126,6 @@ fn calculate_tertiary_hue(hue: f64) -> f64 {
     } else {
         40.0
     };
-
     (hue + offset) % 360.0
 }
 
@@ -170,7 +139,6 @@ fn generate_scheme_with_params(
     let base_hue = hct.get_hue();
     let base_chroma = hct.get_chroma();
 
-    // Calculate secondary/tertiary hues based on harmony mode
     let (secondary_base_hue, tertiary_base_hue) = match params.color_harmony {
         ColorHarmony::Md3 => (
             calculate_secondary_hue(base_hue),
@@ -184,7 +152,6 @@ fn generate_scheme_with_params(
         }
     };
 
-    // Then apply hue shift on top
     let apply_shift =
         |hue: f64| -> f64 { ((hue + params.hue_shift as f64) % 360.0 + 360.0) % 360.0 };
 
@@ -194,18 +161,12 @@ fn generate_scheme_with_params(
     let neutral_hue = primary_hue;
     let neutral_variant_hue = primary_hue;
 
-    // Apply saturation adjustment (modify chroma)
     let chroma_multiplier = 1.0 + (params.saturation_adjustment as f64 / 100.0);
     let adjusted_chroma = (base_chroma * chroma_multiplier).max(0.0);
 
-    // Create tonal palettes with official MD3 Fidelity chroma formulas
-    // Secondary: max(chroma - 32, chroma * 0.5)
     let secondary_chroma = (adjusted_chroma - 32.0).max(adjusted_chroma * 0.5).max(0.0);
-    // Tertiary: uses complement hue with full chroma
     let tertiary_chroma = adjusted_chroma;
-    // Neutral: chroma / 8.0
     let neutral_chroma = adjusted_chroma / 8.0;
-    // NeutralVariant: chroma / 8.0 + 4.0
     let neutral_variant_chroma = adjusted_chroma / 8.0 + 4.0;
 
     let primary = TonalPalette::from_hue_and_chroma(primary_hue, adjusted_chroma);
@@ -232,7 +193,6 @@ fn generate_scheme_with_params(
 
 /// Convert material-colors scheme to our Palette format
 fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, String> {
-    // Helper to get override color from theme
     let get_override = |key: &str| -> Option<&str> {
         theme
             .get(key)
@@ -240,139 +200,258 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
             .or_else(|| pascal_case(key).and_then(|k| theme.get(k).and_then(|v| v.as_str())))
     };
 
-    // Helper to create ColorFormat from scheme colors
-    let create_entry = |get_color_fn: fn(&DynamicScheme) -> Argb,
-                        role_name: Option<&str>|
-     -> Result<ColorFormat, String> {
-        let override_hex = role_name.and_then(&get_override);
-
-        let argb = if let Some(hex) = override_hex {
-            parse_hex_color(hex)?
+    // Helper: resolve a color from scheme or override
+    let resolve = |get_color_fn: fn(&DynamicScheme) -> Argb,
+                   role_opt: Option<&str>|
+     -> Result<Color, String> {
+        if let Some(hex) = role_opt.and_then(&get_override) {
+            let argb = parse_hex_color(hex)?;
+            Ok(argb_to_color(argb))
         } else {
-            get_color_fn(scheme)
-        };
-
-        let hex = argb.to_hex();
-        ColorFormat::from_hex(&hex)
+            Ok(argb_to_color(get_color_fn(scheme)))
+        }
     };
 
-    // Build palette using MD3 color roles
-    Ok(Palette {
-        primary: create_entry(|s| s.primary(), Some("primary"))?,
-        on_primary: create_entry(|s| s.on_primary(), Some("on_primary"))?,
-        primary_container: create_entry(|s| s.primary_container(), Some("primary_container"))?,
-        on_primary_container: create_entry(
-            |s| s.on_primary_container(),
-            Some("on_primary_container"),
-        )?,
-        primary_fixed: create_entry(|s| s.primary_fixed(), None)?,
-        primary_fixed_dim: create_entry(|s| s.primary_fixed_dim(), None)?,
-        on_primary_fixed: create_entry(|s| s.on_primary_fixed(), None)?,
-        on_primary_fixed_variant: create_entry(|s| s.on_primary_fixed_variant(), None)?,
+    let mut colors: HashMap<ColorRole, Color> = HashMap::new();
+    let mut insert = |role: ColorRole, result: Result<Color, String>| -> Result<(), String> {
+        colors.insert(role, result?);
+        Ok(())
+    };
 
-        secondary: create_entry(|s| s.secondary(), Some("secondary"))?,
-        on_secondary: create_entry(|s| s.on_secondary(), Some("on_secondary"))?,
-        secondary_container: create_entry(
-            |s| s.secondary_container(),
-            Some("secondary_container"),
-        )?,
-        on_secondary_container: create_entry(
+    insert(
+        ColorRole::Primary,
+        resolve(|s| s.primary(), Some("primary")),
+    )?;
+    insert(
+        ColorRole::OnPrimary,
+        resolve(|s| s.on_primary(), Some("on_primary")),
+    )?;
+    insert(
+        ColorRole::PrimaryContainer,
+        resolve(|s| s.primary_container(), Some("primary_container")),
+    )?;
+    insert(
+        ColorRole::OnPrimaryContainer,
+        resolve(|s| s.on_primary_container(), Some("on_primary_container")),
+    )?;
+    insert(
+        ColorRole::PrimaryFixed,
+        resolve(|s| s.primary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::PrimaryFixedDim,
+        resolve(|s| s.primary_fixed_dim(), None),
+    )?;
+    insert(
+        ColorRole::OnPrimaryFixed,
+        resolve(|s| s.on_primary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::OnPrimaryFixedVariant,
+        resolve(|s| s.on_primary_fixed_variant(), None),
+    )?;
+
+    insert(
+        ColorRole::Secondary,
+        resolve(|s| s.secondary(), Some("secondary")),
+    )?;
+    insert(
+        ColorRole::OnSecondary,
+        resolve(|s| s.on_secondary(), Some("on_secondary")),
+    )?;
+    insert(
+        ColorRole::SecondaryContainer,
+        resolve(|s| s.secondary_container(), Some("secondary_container")),
+    )?;
+    insert(
+        ColorRole::OnSecondaryContainer,
+        resolve(
             |s| s.on_secondary_container(),
             Some("on_secondary_container"),
-        )?,
-        secondary_fixed: create_entry(|s| s.secondary_fixed(), None)?,
-        secondary_fixed_dim: create_entry(|s| s.secondary_fixed_dim(), None)?,
-        on_secondary_fixed: create_entry(|s| s.on_secondary_fixed(), None)?,
-        on_secondary_fixed_variant: create_entry(|s| s.on_secondary_fixed_variant(), None)?,
+        ),
+    )?;
+    insert(
+        ColorRole::SecondaryFixed,
+        resolve(|s| s.secondary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::SecondaryFixedDim,
+        resolve(|s| s.secondary_fixed_dim(), None),
+    )?;
+    insert(
+        ColorRole::OnSecondaryFixed,
+        resolve(|s| s.on_secondary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::OnSecondaryFixedVariant,
+        resolve(|s| s.on_secondary_fixed_variant(), None),
+    )?;
 
-        tertiary: create_entry(|s| s.tertiary(), Some("tertiary"))?,
-        on_tertiary: create_entry(|s| s.on_tertiary(), Some("on_tertiary"))?,
-        tertiary_container: create_entry(|s| s.tertiary_container(), Some("tertiary_container"))?,
-        on_tertiary_container: create_entry(
-            |s| s.on_tertiary_container(),
-            Some("on_tertiary_container"),
-        )?,
-        tertiary_fixed: create_entry(|s| s.tertiary_fixed(), None)?,
-        tertiary_fixed_dim: create_entry(|s| s.tertiary_fixed_dim(), None)?,
-        on_tertiary_fixed: create_entry(|s| s.on_tertiary_fixed(), None)?,
-        on_tertiary_fixed_variant: create_entry(|s| s.on_tertiary_fixed_variant(), None)?,
+    insert(
+        ColorRole::Tertiary,
+        resolve(|s| s.tertiary(), Some("tertiary")),
+    )?;
+    insert(
+        ColorRole::OnTertiary,
+        resolve(|s| s.on_tertiary(), Some("on_tertiary")),
+    )?;
+    insert(
+        ColorRole::TertiaryContainer,
+        resolve(|s| s.tertiary_container(), Some("tertiary_container")),
+    )?;
+    insert(
+        ColorRole::OnTertiaryContainer,
+        resolve(|s| s.on_tertiary_container(), Some("on_tertiary_container")),
+    )?;
+    insert(
+        ColorRole::TertiaryFixed,
+        resolve(|s| s.tertiary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::TertiaryFixedDim,
+        resolve(|s| s.tertiary_fixed_dim(), None),
+    )?;
+    insert(
+        ColorRole::OnTertiaryFixed,
+        resolve(|s| s.on_tertiary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::OnTertiaryFixedVariant,
+        resolve(|s| s.on_tertiary_fixed_variant(), None),
+    )?;
 
-        error: create_entry(|s| s.error(), Some("error"))?,
-        on_error: create_entry(|s| s.on_error(), Some("on_error"))?,
-        error_container: create_entry(|s| s.error_container(), Some("error_container"))?,
-        on_error_container: create_entry(|s| s.on_error_container(), Some("on_error_container"))?,
+    insert(ColorRole::Error, resolve(|s| s.error(), Some("error")))?;
+    insert(
+        ColorRole::OnError,
+        resolve(|s| s.on_error(), Some("on_error")),
+    )?;
+    insert(
+        ColorRole::ErrorContainer,
+        resolve(|s| s.error_container(), Some("error_container")),
+    )?;
+    insert(
+        ColorRole::OnErrorContainer,
+        resolve(|s| s.on_error_container(), Some("on_error_container")),
+    )?;
 
-        background: create_entry(|s| s.background(), Some("background"))?,
-        on_background: create_entry(|s| s.on_background(), Some("on_background"))?,
-        surface: create_entry(|s| s.surface(), Some("surface"))?,
-        on_surface: create_entry(|s| s.on_surface(), Some("on_surface"))?,
-        surface_variant: create_entry(|s| s.surface_variant(), Some("surface_variant"))?,
-        on_surface_variant: create_entry(|s| s.on_surface_variant(), Some("on_surface_variant"))?,
+    insert(
+        ColorRole::Background,
+        resolve(|s| s.background(), Some("background")),
+    )?;
+    insert(
+        ColorRole::OnBackground,
+        resolve(|s| s.on_background(), Some("on_background")),
+    )?;
+    insert(
+        ColorRole::Surface,
+        resolve(|s| s.surface(), Some("surface")),
+    )?;
+    insert(
+        ColorRole::OnSurface,
+        resolve(|s| s.on_surface(), Some("on_surface")),
+    )?;
+    insert(
+        ColorRole::SurfaceVariant,
+        resolve(|s| s.surface_variant(), Some("surface_variant")),
+    )?;
+    insert(
+        ColorRole::OnSurfaceVariant,
+        resolve(|s| s.on_surface_variant(), Some("on_surface_variant")),
+    )?;
 
-        surface_container_lowest: create_entry(|s| s.surface_container_lowest(), None)?,
-        surface_container_low: create_entry(|s| s.surface_container_low(), None)?,
-        surface_container: create_entry(|s| s.surface_container(), None)?,
-        surface_container_high: create_entry(|s| s.surface_container_high(), None)?,
-        surface_container_highest: create_entry(|s| s.surface_container_highest(), None)?,
+    insert(
+        ColorRole::SurfaceContainerLowest,
+        resolve(|s| s.surface_container_lowest(), None),
+    )?;
+    insert(
+        ColorRole::SurfaceContainerLow,
+        resolve(|s| s.surface_container_low(), None),
+    )?;
+    insert(
+        ColorRole::SurfaceContainer,
+        resolve(|s| s.surface_container(), None),
+    )?;
+    insert(
+        ColorRole::SurfaceContainerHigh,
+        resolve(|s| s.surface_container_high(), None),
+    )?;
+    insert(
+        ColorRole::SurfaceContainerHighest,
+        resolve(|s| s.surface_container_highest(), None),
+    )?;
 
-        inverse_surface: create_entry(|s| s.inverse_surface(), Some("inverse_surface"))?,
-        inverse_on_surface: create_entry(|s| s.inverse_on_surface(), Some("inverse_on_surface"))?,
-        inverse_primary: create_entry(|s| s.inverse_primary(), Some("inverse_primary"))?,
+    insert(
+        ColorRole::InverseSurface,
+        resolve(|s| s.inverse_surface(), Some("inverse_surface")),
+    )?;
+    insert(
+        ColorRole::InverseOnSurface,
+        resolve(|s| s.inverse_on_surface(), Some("inverse_on_surface")),
+    )?;
+    insert(
+        ColorRole::InversePrimary,
+        resolve(|s| s.inverse_primary(), Some("inverse_primary")),
+    )?;
 
-        surface_dim: create_entry(|s| s.surface_dim(), None)?,
-        surface_bright: create_entry(|s| s.surface_bright(), None)?,
+    insert(ColorRole::SurfaceDim, resolve(|s| s.surface_dim(), None))?;
+    insert(
+        ColorRole::SurfaceBright,
+        resolve(|s| s.surface_bright(), None),
+    )?;
+    insert(ColorRole::SurfaceTint, resolve(|s| s.surface_tint(), None))?;
 
-        outline: create_entry(|s| s.outline(), Some("outline"))?,
-        outline_variant: create_entry(|s| s.outline_variant(), Some("outline_variant"))?,
+    insert(
+        ColorRole::Outline,
+        resolve(|s| s.outline(), Some("outline")),
+    )?;
+    insert(
+        ColorRole::OutlineVariant,
+        resolve(|s| s.outline_variant(), Some("outline_variant")),
+    )?;
 
-        shadow: create_entry(|s| s.shadow(), Some("shadow"))?,
-        scrim: create_entry(|s| s.scrim(), Some("scrim"))?,
+    insert(ColorRole::Shadow, resolve(|s| s.shadow(), Some("shadow")))?;
+    insert(ColorRole::Scrim, resolve(|s| s.scrim(), Some("scrim")))?;
 
-        // Terminal colors - map from MD3 colors with intelligent hue-based mapping
-        black: create_entry(|s| s.surface(), None)?,
-        red: create_entry(|s| s.error(), None)?,
-        green: create_entry(|s| s.tertiary(), None)?,
-        // Use hue-based mapping for yellow/blue to ensure terminal colors are distinct
-        yellow: create_entry(get_terminal_yellow, None)?,
-        blue: create_entry(get_terminal_blue, None)?,
-        magenta: create_entry(get_terminal_magenta, None)?,
-        cyan: create_entry(get_terminal_cyan, None)?,
-        white: create_entry(|s| s.on_surface(), None)?,
-        bright_black: create_entry(|s| s.surface_variant(), None)?,
-        bright_red: create_entry(|s| s.error_container(), None)?,
-        bright_green: create_entry(|s| s.tertiary_container(), None)?,
-        bright_yellow: create_entry(|s| s.primary_fixed(), None)?,
-        bright_blue: create_entry(|s| s.secondary_fixed(), None)?,
-        bright_magenta: create_entry(|s| s.primary_fixed_dim(), None)?,
-        bright_cyan: create_entry(|s| s.secondary_fixed_dim(), None)?,
-        bright_white: create_entry(|s| s.inverse_surface(), None)?,
-    })
-}
+    // Terminal colors
+    insert(ColorRole::Black, resolve(|s| s.surface(), None))?;
+    insert(ColorRole::Red, resolve(|s| s.error(), None))?;
+    insert(ColorRole::Green, resolve(|s| s.tertiary(), None))?;
+    insert(ColorRole::Yellow, resolve(|s| s.primary_fixed(), None))?;
+    insert(ColorRole::Blue, resolve(|s| s.secondary(), None))?;
+    insert(ColorRole::Magenta, resolve(|s| s.tertiary(), None))?;
+    insert(ColorRole::Cyan, resolve(|s| s.secondary_container(), None))?;
+    insert(ColorRole::White, resolve(|s| s.on_surface(), None))?;
+    insert(
+        ColorRole::BrightBlack,
+        resolve(|s| s.surface_variant(), None),
+    )?;
+    insert(ColorRole::BrightRed, resolve(|s| s.error_container(), None))?;
+    insert(
+        ColorRole::BrightGreen,
+        resolve(|s| s.tertiary_container(), None),
+    )?;
+    insert(
+        ColorRole::BrightYellow,
+        resolve(|s| s.primary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::BrightBlue,
+        resolve(|s| s.secondary_fixed(), None),
+    )?;
+    insert(
+        ColorRole::BrightMagenta,
+        resolve(|s| s.primary_fixed_dim(), None),
+    )?;
+    insert(
+        ColorRole::BrightCyan,
+        resolve(|s| s.secondary_fixed_dim(), None),
+    )?;
+    insert(
+        ColorRole::BrightWhite,
+        resolve(|s| s.inverse_surface(), None),
+    )?;
 
-/// Get terminal yellow based on seed hue
-/// Ensures yellow is distinct from primary when primary is not yellow-ish
-fn get_terminal_yellow(scheme: &DynamicScheme) -> Argb {
-    // Use primary_fixed for bright yellow-like colors
-    scheme.primary_fixed()
-}
-
-/// Get terminal blue based on seed hue
-/// Ensures blue is distinct and appropriate for the color scheme
-fn get_terminal_blue(scheme: &DynamicScheme) -> Argb {
-    // Use secondary for blue-like colors
-    scheme.secondary()
-}
-
-/// Get terminal magenta based on seed hue
-fn get_terminal_magenta(scheme: &DynamicScheme) -> Argb {
-    // Use tertiary for magenta/purple-like colors
-    scheme.tertiary()
-}
-
-/// Get terminal cyan based on seed hue
-fn get_terminal_cyan(scheme: &DynamicScheme) -> Argb {
-    // Use secondary_container for cyan-like colors
-    scheme.secondary_container()
+    Ok(Palette::new(colors))
 }
 
 #[cfg(test)]
@@ -382,43 +461,28 @@ mod tests {
 
     #[test]
     fn test_generate_palette_from_seed() {
-        let theme = json!({
-            "seed": "#FF5722"
-        });
-
+        let theme = json!({ "seed": "#FF5722" });
         let palette = generate_palette(&theme, false).unwrap();
 
-        // Verify primary color was generated
-        assert!(!palette.primary.hex.is_empty());
-        assert!(palette.primary.hex.starts_with("#"));
-
-        // Verify other colors exist
-        assert!(!palette.secondary.hex.is_empty());
-        assert!(!palette.tertiary.hex.is_empty());
+        assert!(palette.get("primary").is_some());
+        let primary = palette.get("primary").unwrap();
+        assert_ne!(primary.hex(), String::from("#000000"));
+        assert!(palette.get("secondary").is_some());
+        assert!(palette.get("tertiary").is_some());
     }
 
     #[test]
     fn test_generate_palette_with_override() {
-        let theme = json!({
-            "seed": "#FF5722",
-            "error": "#F44336"
-        });
-
+        let theme = json!({ "seed": "#FF5722", "error": "#F44336" });
         let palette = generate_palette(&theme, false).unwrap();
-
-        // Error color should be the override
-        assert_eq!(palette.error.hex, "#F44336");
+        let error = palette.get("error").unwrap();
+        assert_eq!(error.hex(), "#F44336");
     }
 
     #[test]
     fn test_generate_palette_dark_mode() {
-        let theme = json!({
-            "seed": "#2196F3"
-        });
-
+        let theme = json!({ "seed": "#2196F3" });
         let palette = generate_palette(&theme, true).unwrap();
-
-        // Dark mode should have dark surface
-        assert!(palette.surface.hex.starts_with("#"));
+        assert!(palette.get("surface").is_some());
     }
 }

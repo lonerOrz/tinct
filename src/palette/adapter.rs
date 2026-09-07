@@ -70,9 +70,7 @@ mod tests {
     #[test]
     fn test_legacy_palette_generator_generate_dark_mode() {
         let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({
-            "seed": "#FF5722"
-        });
+        let theme = json!({ "seed": "#FF5722" });
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_ok());
@@ -86,18 +84,15 @@ mod tests {
         assert!(map.contains_key("surface"));
         assert!(map.contains_key("error"));
 
-        // Verify primary color has expected format
         let primary = map.get("primary").unwrap();
-        assert!(!primary.hex.is_empty());
-        assert!(primary.hex.starts_with("#"));
+        assert!(!primary.hex().is_empty());
+        assert!(primary.hex().starts_with("#"));
     }
 
     #[test]
     fn test_legacy_palette_generator_generate_light_mode() {
         let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({
-            "seed": "#2196F3"
-        });
+        let theme = json!({ "seed": "#2196F3" });
 
         let result = generator.generate(&theme, Mode::Light);
         assert!(result.is_ok());
@@ -106,9 +101,8 @@ mod tests {
         let map = palette.to_map();
         assert!(!map.is_empty());
 
-        // Light mode should have different colors than dark mode
         let primary = map.get("primary").unwrap();
-        assert!(!primary.hex.is_empty());
+        assert!(!primary.hex().is_empty());
     }
 
     #[test]
@@ -120,18 +114,15 @@ mod tests {
             color_harmony: ColorHarmony::Md3,
         };
         let generator = LegacyPaletteGenerator::new(params);
-        let theme = json!({
-            "seed": "#FF0000" // Red
-        });
+        let theme = json!({ "seed": "#FF0000" });
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_ok());
 
         let palette = result.unwrap();
         let map = palette.to_map();
-        // With 180 degree hue shift, red should become cyan-like
         let primary = map.get("primary").unwrap();
-        assert!(!primary.hex.is_empty());
+        assert!(!primary.hex().is_empty());
     }
 
     #[test]
@@ -143,9 +134,7 @@ mod tests {
             color_harmony: ColorHarmony::Md3,
         };
         let generator = LegacyPaletteGenerator::new(params);
-        let theme = json!({
-            "seed": "#FF5722"
-        });
+        let theme = json!({ "seed": "#FF5722" });
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_ok());
@@ -153,15 +142,13 @@ mod tests {
         let palette = result.unwrap();
         let map = palette.to_map();
         let primary = map.get("primary").unwrap();
-        assert!(!primary.hex.is_empty());
+        assert!(!primary.hex().is_empty());
     }
 
     #[test]
     fn test_legacy_palette_generator_generate_all_color_roles() {
         let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({
-            "seed": "#6200EE"
-        });
+        let theme = json!({ "seed": "#6200EE" });
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_ok());
@@ -169,8 +156,7 @@ mod tests {
         let palette = result.unwrap();
         let map = palette.to_map();
 
-        // Verify all major color roles are present
-        let expected_roles = [
+        let expected_roles: &[&str] = &[
             "primary",
             "on_primary",
             "primary_container",
@@ -207,7 +193,6 @@ mod tests {
             "surface_container",
             "surface_container_high",
             "surface_container_highest",
-            // Terminal colors
             "black",
             "red",
             "green",
@@ -226,23 +211,20 @@ mod tests {
             "bright_white",
         ];
 
-        for role in expected_roles.iter() {
+        for role in expected_roles {
             assert!(map.contains_key(*role), "Missing color role: {}", role);
             let color = map.get(*role).unwrap();
-            assert!(!color.hex.is_empty(), "Empty hex for role: {}", role);
+            assert!(!color.hex().is_empty(), "Empty hex for role: {}", role);
         }
     }
 
     #[test]
     fn test_legacy_palette_generator_generate_invalid_theme() {
         let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({
-            "no_seed": "value"
-        });
+        let theme = json!({ "no_seed": "value" });
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_err());
-        // Error message should mention seed or Primary requirement
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("seed") || err_msg.contains("Primary"));
     }
@@ -250,22 +232,17 @@ mod tests {
     #[test]
     fn test_legacy_palette_generator_generate_with_overrides() {
         let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({
-            "seed": "#FF5722",
-            "error": "#FF0000",
-            "surface": "#121212"
-        });
+        let theme = json!({ "seed": "#FF5722", "error": "#FF0000", "surface": "#121212" });
 
         let result = generator.generate(&theme, Mode::Dark);
         assert!(result.is_ok());
 
         let palette = result.unwrap();
         let map = palette.to_map();
-        // Overrides should be applied
         let error = map.get("error").unwrap();
-        assert_eq!(error.hex, "#FF0000");
+        assert_eq!(error.hex(), "#FF0000");
 
         let surface = map.get("surface").unwrap();
-        assert_eq!(surface.hex, "#121212");
+        assert_eq!(surface.hex(), "#121212");
     }
 }

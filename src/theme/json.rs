@@ -1,9 +1,4 @@
 //! JSON theme loader implementation
-//!
-//! Supports simplified theme format without dark/light nesting:
-//! - Format 1: `{ "seed": "#7aa2f7" }`
-//! - Format 2: `{ "Primary": "#7aa2f7", "Secondary": "#bb9af7" }`
-//! - Format 3: `{ "seed": "#7aa2f7", "Primary": "#7aa2f7", ... }`
 
 use crate::core::{Error, Mode, Result, Theme};
 use crate::palette::{LegacyPaletteGenerator, extract_seed_hex};
@@ -15,12 +10,10 @@ pub struct JsonThemeLoader {
 }
 
 impl JsonThemeLoader {
-    /// Create a new JSON theme loader
     pub fn new(palette_generator: LegacyPaletteGenerator) -> Self {
         Self { palette_generator }
     }
 
-    /// Load a theme from a JSON file
     pub fn load(&self, source: &str) -> Result<Theme> {
         let content = std::fs::read_to_string(source)
             .map_err(|e| Error::Theme(format!("Failed to read theme file: {}", e)))?;
@@ -47,7 +40,6 @@ impl JsonThemeLoader {
         ))
     }
 
-    /// Load a theme from a JSON value
     pub fn load_value(&self, json: &Value) -> Result<Theme> {
         let name = json
             .get("seed")
@@ -83,21 +75,18 @@ mod tests {
 
     #[test]
     fn test_load_nested_format() {
-        // Legacy nested format (dark/light) is no longer supported
-        // This test verifies that the loader handles it gracefully
         let loader = create_test_loader();
 
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
         writeln!(temp_file, "  \"dark\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#FF572200\"").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#FF5722\"").unwrap();
         writeln!(temp_file, "  }},").unwrap();
         writeln!(temp_file, "  \"light\": {{").unwrap();
-        writeln!(temp_file, "    \"primary\": \"#D81B6000\"").unwrap();
+        writeln!(temp_file, "    \"primary\": \"#D81B60\"").unwrap();
         writeln!(temp_file, "  }}").unwrap();
         writeln!(temp_file, "}}").unwrap();
 
-        // Legacy format without seed/Primary at top level should fail
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
@@ -119,7 +108,10 @@ mod tests {
         assert!(result.is_ok());
 
         let theme = result.unwrap();
-        assert_eq!(theme.dark_colors().len(), theme.light_colors().len());
+        let dark = theme.dark_colors();
+        let light = theme.light_colors();
+        assert!(!dark.is_empty());
+        assert_eq!(dark.len(), light.len());
     }
 
     #[test]
@@ -137,7 +129,6 @@ mod tests {
     #[test]
     fn test_load_nonexistent_file() {
         let loader = create_test_loader();
-
         let result = loader.load("/nonexistent/path/theme.json");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Failed to read"));
@@ -154,8 +145,7 @@ mod tests {
 
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
-        let theme = result.unwrap();
-        assert_eq!(theme.source_color, "#AABBCC");
+        assert_eq!(result.unwrap().source_color, "#AABBCC");
     }
 
     #[test]
@@ -169,15 +159,13 @@ mod tests {
 
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
-        let theme = result.unwrap();
-        assert_eq!(theme.source_color, "#112233");
+        assert_eq!(result.unwrap().source_color, "#112233");
     }
 
     #[test]
     fn test_source_color_seed_priority() {
         let loader = create_test_loader();
 
-        // seed has priority over Primary
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "{{").unwrap();
         writeln!(temp_file, "  \"seed\": \"#AABBCC\",").unwrap();
@@ -186,7 +174,6 @@ mod tests {
 
         let result = loader.load(temp_file.path().to_str().unwrap());
         assert!(result.is_ok());
-        let theme = result.unwrap();
-        assert_eq!(theme.source_color, "#AABBCC");
+        assert_eq!(result.unwrap().source_color, "#AABBCC");
     }
 }

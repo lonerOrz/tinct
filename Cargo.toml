@@ -1,6 +1,6 @@
 [package]
 name = "tinct"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 authors = ["lonerOrz <lonerOrz@qq.com>"]
 description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files"
@@ -10,14 +10,6 @@ license = "BSD-3-Clause"
 keywords = ["theme", "material-design", "color", "terminal", "configuration"]
 categories = ["command-line-utilities", "visualization", "graphics"]
 readme = "README.md"
-
-[lib]
-name = "tinct"
-path = "src/lib.rs"
-
-[[bin]]
-name = "tinct"
-path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
@@ -34,6 +26,16 @@ thiserror = "1.0"
 material-colors = "0.4.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 rayon = "1.10"
+strum = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+incremental = false
+

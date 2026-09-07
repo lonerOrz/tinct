@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use super::wsmeans::{lab_distance_squared, lab_to_rgb, rgb_to_lab};
-use crate::color::{Rgb, estimate_chroma, estimate_hue, hue_distance};
+use crate::color::{Rgb, estimate_hct, hue_distance};
 use rayon::prelude::*;
 
 /// Downsample pixels for faster processing.
@@ -168,8 +168,7 @@ pub fn score_colors_chroma(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)>
 
     for &(rgb, count) in colors_with_counts {
         let (r, g, b) = rgb;
-        let chroma = estimate_chroma(r, g, b);
-        let hue = estimate_hue(r, g, b);
+        let (hue, chroma) = estimate_hct(r, g, b);
 
         // Tone estimation from Lab L
         let (l, _, _) = rgb_to_lab(r, g, b);
@@ -212,9 +211,8 @@ pub fn score_colors_count(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
 
     for &(rgb, count) in colors_with_counts {
         let (r, g, b) = rgb;
-        let chroma = estimate_chroma(r, g, b);
+        let (hue, chroma) = estimate_hct(r, g, b);
         if chroma >= MIN_CHROMA {
-            let hue = estimate_hue(r, g, b);
             let family = hue_to_family(hue);
             hue_families
                 .entry(family)
@@ -279,9 +277,8 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
 
     for &(rgb, count) in colors_with_counts {
         let (r, g, b) = rgb;
-        let chroma = estimate_chroma(r, g, b);
+        let (hue, chroma) = estimate_hct(r, g, b);
         if chroma >= MIN_CHROMA {
-            let hue = estimate_hue(r, g, b);
             let family = hue_to_family(hue);
             hue_families
                 .entry(family)

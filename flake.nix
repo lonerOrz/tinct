@@ -3,83 +3,120 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs =
-    inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+    { nixpkgs, rust-overlay, ... }:
+    let
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
 
-      imports = [
-        inputs.treefmt-nix.flakeModule
-      ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      perSystem =
-        {
-          config,
-          self',
-          inputs',
-          pkgs,
-          system,
-          ...
-        }:
+      pkgsFor =
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [ rust-overlay.overlays.default ];
+        };
+
+      rustToolchain =
+        pkgs:
+        pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" ];
+        };
+
+      packageMeta = (fromTOML (builtins.readFile ./Cargo.toml)).package;
+    in
+    {
+      packages = forAllSystems (
+        system:
         let
-          lib = pkgs.lib;
+          pkgs = pkgsFor system;
+          rust = rustToolchain pkgs;
+
+          rustPlatform = pkgs.makeRustPlatform {
+            cargo = rust;
+            rustc = rust;
+          };
         in
         {
-          packages = {
-            default = self'.packages.tinct;
-            tinct = pkgs.rustPlatform.buildRustPackage {
-              pname = "tinct";
-              version = "0.1.0";
-              src = ./.;
-              cargoLock.lockFile = ./Cargo.lock;
-              meta = {
-                description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files";
-                homepage = "https://github.com/lonerOrz/tinct";
-                mainProgram = "tinct";
-                license = lib.licenses.bsd3;
-                maintainers = with lib.maintainers; [ lonerOrz ];
-                platforms = [
-                  "x86_64-linux"
-                  "aarch64-linux"
-                  "x86_64-darwin"
-                  "aarch64-darwin"
-                ];
-              };
+          default = rustPlatform.buildRustPackage {
+            pname = packageMeta.name;
+            version = packageMeta.version;
+
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+
+            meta = {
+              description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files";
+              homepage = "https://github.com/lonerOrz/tinct";
+              mainProgram = "tinct";
+              license = pkgs.lib.licenses.bsd3;
+              maintainers = [ pkgs.lib.maintainers.lonerOrz ];
             };
           };
+        }
+      );
 
-          devShells.default = pkgs.mkShell {
-            inputsFrom = [ self'.packages.default ];
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+          rust = rustToolchain pkgs;
+        in
+        {
+          default = pkgs.mkShell {
             packages = with pkgs; [
-              cargo
-              rustc
+              rust
               rust-analyzer
-              rustfmt
-              clippy
               cargo-watch
               cargo-criterion
+              nixfmt
+              yamlfmt
             ];
-          };
 
-          treefmt = {
-            projectRootFile = "flake.nix";
-            programs = {
-              rustfmt.enable = true;
-              nixfmt.enable = true;
-            };
+            RUST_SRC_PATH = "${rust}/lib/rustlib/src/rust/library";
           };
-        };
+        }
+      );
+
+      formatter = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor system;
+          rust = rustToolchain pkgs;
+        in
+        pkgs.writeShellApplication {
+          name = "format";
+
+          runtimeInputs = with pkgs; [
+            rust
+            nixfmt
+            yamlfmt
+            git
+          ];
+
+          text = ''
+            set -euo pipefail
+
+            [ -f Cargo.toml ] && cargo fmt --all
+
+            git ls-files '*.nix' -z |
+              xargs -0 -r -n1 nixfmt
+
+            git ls-files '*.yaml' '*.yml' -z |
+              xargs -0 -r -n1 yamlfmt
+          '';
+        }
+      );
     };
 }

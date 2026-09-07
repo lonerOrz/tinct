@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::color::{estimate_chroma, estimate_hue, hue_distance};
+use crate::color::{estimate_hct, estimate_hue, hue_distance};
 
 // ============================================================================
 // LCG Random for cluster initialization
@@ -31,7 +31,7 @@ impl Random {
     }
 
     fn next_range(&mut self, range: usize) -> usize {
-        if range & (range.wrapping_neg()) == range {
+        if range.isolate_lowest_one() == range {
             ((range as i64 * self.next(31) as i64) >> 31) as usize
         } else {
             loop {
@@ -401,8 +401,7 @@ pub fn score_colors(
 
     for (&argb, &population) in color_to_population {
         let (r, g, b) = rgb_from_argb(argb);
-        let hue = estimate_hue(r, g, b);
-        let chroma = estimate_chroma(r, g, b);
+        let (hue, chroma) = estimate_hct(r, g, b);
         let hue_bucket = (hue.round() as usize) % 360;
 
         colors_data.push((argb, hue, chroma));
