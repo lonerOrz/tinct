@@ -28,9 +28,12 @@
         let
           pkgs = mkPkgs system;
 
+          cargoMeta = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+          pname = cargoMeta.package.name;
+          version = cargoMeta.package.version;
+
           tinct = pkgs.rustPlatform.buildRustPackage {
-            pname = "tinct";
-            version = "0.1.0";
+            inherit pname version;
 
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
