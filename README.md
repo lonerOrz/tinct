@@ -67,7 +67,6 @@ tinct -t TokyoNight -m light -p    # preview the light palette
 | `-m, --mode <MODE>`      | `dark` (default) or `light`                                                                                  |
 | `-p, --preview`          | Print the palette instead of processing templates                                                            |
 | `--scheme-type <SCHEME>` | MD3 scheme variant (and image extraction pipeline)                                                           |
-| `--skip-sequences`       | Do not emit ANSI escape sequences to update the terminal                                                     |
 | `--log-level <LEVEL>`    | `quiet`, `normal` (default), or `verbose`                                                                    |
 
 ## Configuration

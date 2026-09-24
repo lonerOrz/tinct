@@ -46,7 +46,7 @@ fn main() {
     let pipeline_config = PipelineConfig {
         config,
         mode: args.mode,
-        preview: args.preview,
+        preview: false,
         log_level: args.log_level,
         scheme_type,
         theme_source,

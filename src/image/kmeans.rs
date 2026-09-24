@@ -31,11 +31,6 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
         return Vec::new();
     }
 
-    let actual_k = k.min(pixels.len());
-    if actual_k == 0 {
-        return Vec::new();
-    }
-
     // Pre-compute Lab values and deduplicate pixels for performance
     let mut pixel_counts: HashMap<Rgb, i64> = HashMap::new();
     for &p in pixels {
@@ -49,6 +44,14 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
         .collect();
     let weights: Vec<i64> = unique_pixels.iter().map(|&(_, c)| c).collect();
     let n = colors_lab.len();
+
+    // `k` must not exceed the number of *unique* colours. Otherwise the
+    // evenly-spaced stride below would be zero and every centroid would
+    // collapse onto the same colour, producing a degenerate clustering.
+    let actual_k = k.min(n);
+    if actual_k == 0 {
+        return Vec::new();
+    }
 
     // Deterministic initialization: pick evenly spaced colors from sorted list.
     // `unique_pixels` comes from a `HashMap`, so break L* ties on the RGB value
@@ -399,6 +402,22 @@ mod tests {
         pixels.extend((0..50).map(|_| (0, 0, 255)));
         let result = kmeans_cluster(&pixels, 5, 10);
         assert!(result.len() >= 2);
+    }
+
+    #[test]
+    fn test_kmeans_k_larger_than_unique_does_not_degenerate() {
+        // Regression test for: when `k` exceeds the number of unique colours,
+        // `actual_k` must be bounded by the unique count, not by `pixels.len()`.
+        // Previously this caused a zero stride and every centroid collapsed
+        // onto the same colour.
+        let pixels: Vec<Rgb> = vec![(255, 0, 0), (0, 255, 0), (0, 0, 255)];
+        let result = kmeans_cluster(&pixels, 10, 10);
+        // Three unique colours → at most three non-empty clusters.
+        assert_eq!(result.len(), 3);
+        // Every cluster must have a positive population.
+        for (_, _, count) in &result {
+            assert!(*count > 0, "empty cluster with population {}", count);
+        }
     }
 
     #[test]

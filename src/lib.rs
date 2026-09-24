@@ -29,7 +29,7 @@ pub use config::{
     ImageConfig, resolve_theme_path,
 };
 pub use core::color::{Color, Hsl, Rgb};
-pub use ui::log::{LogLevel, Logger, error, general, hook, info, init_logger};
+pub use ui::log::{LogLevel, error, general, hook, info, init_logger};
 pub use ui::preview::{
     show_color_preview, show_color_preview_from_json, show_color_preview_from_theme,
 };

@@ -99,7 +99,7 @@ fn parse_color_hex(hex: &str) -> Option<Color> {
     match Color::from_hex(hex) {
         Ok(color) => Some(color),
         Err(_) => {
-            ::log::warn!("[ansi] ignoring invalid color '{}'", hex);
+            crate::ui::log::general::info(&format!("[ansi] ignoring invalid color '{}'", hex));
             None
         }
     }

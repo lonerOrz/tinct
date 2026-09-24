@@ -123,7 +123,7 @@ impl Color {
 
     /// Hex string e.g. "#FF5722"
     pub fn hex(&self) -> String {
-        rgb_to_hex(self.r as f64, self.g as f64, self.b as f64)
+        format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
     }
 
     /// 8-digit hex with alpha e.g. "#FF572280"

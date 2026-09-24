@@ -356,60 +356,74 @@ fn run_post_hook(post_hook: &str, output_file: &Path, section_name: Option<&str>
         return true;
     }
 
-    let post_hook_cmd = post_hook.replace("{{output_file}}", &output_file.to_string_lossy());
+    let output = output_file.to_string_lossy();
 
-    if post_hook_cmd.starts_with("./") {
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let post_hook_path = cwd.join(&post_hook_cmd);
+    // Split the leading program token from its arguments. A script path is
+    // executed directly (arguments passed separately) instead of through a
+    // shell; anything else is handed to the platform shell.
+    let (program, args) = post_hook
+        .split_once(char::is_whitespace)
+        .map_or((post_hook, ""), |(p, a)| (p, a));
+    let program_path = Path::new(program);
+    let is_script = program_path.is_absolute() || program.starts_with("./");
 
-        if post_hook_path.exists() && is_executable(&post_hook_path) {
+    if is_script {
+        let resolved = if program_path.is_absolute() {
+            program_path.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(program)
+        };
+
+        if !(resolved.exists() && is_executable(&resolved)) {
             if let Some(name) = section_name {
-                log::hook::executing(name);
+                log::error::message(
+                    name,
+                    &format!("post_hook '{}' not found. Skipping.", resolved.display()),
+                );
             }
+            return false;
+        }
 
-            match std::process::Command::new(&post_hook_path).output() {
-                Ok(result) => {
-                    if result.status.success() {
-                        if let Some(name) = section_name {
-                            log::hook::success(name);
-                        }
-                        true
-                    } else {
-                        if let Some(name) = section_name {
-                            log::error::message(name, "Error executing hook script");
-                        }
-                        false
-                    }
-                }
-                Err(e) => {
+        if let Some(name) = section_name {
+            log::hook::executing(name);
+        }
+
+        let args = args.replace("{{output_file}}", output.as_ref());
+
+        match std::process::Command::new(&resolved)
+            .args(args.split_whitespace())
+            .output()
+        {
+            Ok(result) => {
+                if result.status.success() {
                     if let Some(name) = section_name {
-                        log::error::message(name, &format!("Error executing hook script: {}", e));
+                        log::hook::success(name);
+                    }
+                    true
+                } else {
+                    if let Some(name) = section_name {
+                        log::error::message(name, "Error executing hook script");
                     }
                     false
                 }
             }
-        } else {
-            if let Some(name) = section_name {
-                log::error::message(
-                    name,
-                    &format!(
-                        "post_hook '{}' not found. Skipping.",
-                        post_hook_path.display()
-                    ),
-                );
+            Err(e) => {
+                if let Some(name) = section_name {
+                    log::error::message(name, &format!("Error executing hook script: {}", e));
+                }
+                false
             }
-            false
         }
     } else {
         if let Some(name) = section_name {
             log::hook::executing(name);
         }
 
-        match std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&post_hook_cmd)
-            .output()
-        {
+        let cmd = post_hook.replace("{{output_file}}", &shell_quote(output.as_ref()));
+
+        match shell_command(&cmd).output() {
             Ok(result) => {
                 if result.status.success() {
                     if let Some(name) = section_name {
@@ -434,6 +448,34 @@ fn run_post_hook(post_hook: &str, output_file: &Path, section_name: Option<&str>
             }
         }
     }
+}
+
+/// Build a shell invocation for the current platform.
+#[cfg(unix)]
+fn shell_command(cmd: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("sh");
+    command.arg("-c").arg(cmd);
+    command
+}
+
+/// Build a shell invocation for the current platform.
+#[cfg(windows)]
+fn shell_command(cmd: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("cmd");
+    command.arg("/C").arg(cmd);
+    command
+}
+
+/// Quote a value so a POSIX shell receives it as a single literal argument.
+#[cfg(unix)]
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+/// Quote a value so `cmd.exe` receives it as a single literal argument.
+#[cfg(windows)]
+fn shell_quote(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
 }
 
 #[cfg(unix)]

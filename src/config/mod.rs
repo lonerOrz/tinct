@@ -446,7 +446,10 @@ contrast_target = 3.0
                 let mut section = match section_val.clone().try_into::<ConfigSection>() {
                     Ok(section) => section,
                     Err(e) => {
-                        ::log::warn!("ignoring [{}.{}]: {}", group_key, section_name, e);
+                        crate::ui::log::general::info(&format!(
+                            "ignoring [{}.{}]: {}",
+                            group_key, section_name, e
+                        ));
                         continue;
                     }
                 };
@@ -483,17 +486,25 @@ fn canonicalize_section_paths(section: &mut ConfigSection, base_dir: &Path) {
     section.output_path = resolve_path(&section.output_path, base_dir);
 
     // A relative hook script (`./reload.sh`) is bound to the config directory.
+    // Only the leading path token is resolved; any arguments are kept verbatim
+    // so that `./reload.sh --flag` does not treat `--flag` as part of the path.
     if let Some(hook) = section.post_hook.as_mut()
-        && let Some(relative) = hook.strip_prefix("./")
+        && let Some(rest) = hook.strip_prefix("./")
     {
-        let joined = base_dir.join(relative);
-        *hook = if joined.exists() {
+        let (script, args) = rest
+            .split_once(char::is_whitespace)
+            .map_or((rest, ""), |(s, a)| (s, a));
+        let joined = base_dir.join(script);
+        let resolved = if joined.exists() {
             fs::canonicalize(&joined).unwrap_or(joined)
         } else {
             joined
-        }
-        .to_string_lossy()
-        .into_owned();
+        };
+        *hook = if args.is_empty() {
+            resolved.to_string_lossy().into_owned()
+        } else {
+            format!("{} {}", resolved.to_string_lossy(), args)
+        };
     }
 }
 
@@ -607,6 +618,22 @@ post_hook = "./script.sh"
         assert_eq!(
             config.sections["section2.production"].post_hook.as_deref(),
             Some("/etc/tinct/script.sh")
+        );
+    }
+
+    #[test]
+    fn test_post_hook_arguments_are_preserved() {
+        let config = parse(
+            r#"
+[section1.test]
+input_path = "input.css"
+output_path = "output.css"
+post_hook = "./script.sh --flag value"
+"#,
+        );
+        assert_eq!(
+            config.sections["section1.test"].post_hook.as_deref(),
+            Some("/etc/tinct/script.sh --flag value")
         );
     }
 

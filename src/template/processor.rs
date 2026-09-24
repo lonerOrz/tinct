@@ -1,5 +1,6 @@
 //! Template processor implementation
 
+use crate::core::color::Color;
 use crate::core::{Mode, Result, Theme};
 use crate::template::filters::{ColorFilter, ColorProperty};
 use crate::ui::log::general;
@@ -15,6 +16,10 @@ static COLOR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     )
     .unwrap()
 });
+
+/// Regex for the mode metadata placeholders, tolerant of surrounding spaces.
+static META_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{\s*(mode|is_dark|is_light)\s*\}\}").unwrap());
 
 /// Default template processor implementation
 pub struct TemplateProcessor;
@@ -75,26 +80,28 @@ impl TemplateProcessor {
                 }
             } else {
                 general::info(&format!(
-                    "Warning: color '{}' not found in palette, using #000000",
+                    "Warning: color '{}' not found in palette, using black",
                     key
                 ));
-                "#000000".to_string()
+                // Format the fallback through the requested property so that
+                // e.g. `{{colors.x.default.red}}` yields a channel value and not
+                // a raw hex string.
+                Color::new(0, 0, 0, 1.0).format(&prop_enum)
             }
         });
 
-        let mut output = content.into_owned();
         let mode_str = match mode {
             Mode::Dark => "dark",
             Mode::Light => "light",
         };
-        output = output.replace("{{mode}}", mode_str);
-        output = output.replace("{{is_dark}}", if mode.is_dark() { "true" } else { "false" });
-        output = output.replace(
-            "{{is_light}}",
-            if mode.is_light() { "true" } else { "false" },
-        );
+        let output =
+            META_REGEX.replace_all(content.as_ref(), |caps: &regex::Captures| match &caps[1] {
+                "mode" => mode_str.to_string(),
+                "is_dark" => mode.is_dark().to_string(),
+                _ => mode.is_light().to_string(),
+            });
 
-        Ok(output)
+        Ok(output.into_owned())
     }
 }
 
@@ -192,5 +199,41 @@ mod tests {
         let template = "Primary: {{colors.primary.default.rgb|lighten:0.15}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
         assert!(result.starts_with("Primary: rgb("), "got: {}", result);
+    }
+
+    #[test]
+    fn test_missing_color_fallback_respects_property() {
+        let processor = TemplateProcessor::new();
+        let theme = Theme::new("test".to_string());
+
+        // Missing colour must format through the requested property so non-hex
+        // templates don't receive a raw "#000000" string.
+        let t_red = processor
+            .render("{{colors.nonexistent.default.red}}", &theme, Mode::Dark)
+            .unwrap();
+        assert_eq!(t_red, "0", "expected red channel of black, got: {t_red}");
+
+        let t_rgb = processor
+            .render("{{colors.nonexistent.default.rgb}}", &theme, Mode::Dark)
+            .unwrap();
+        assert_eq!(t_rgb, "rgb(0, 0, 0)", "expected rgb of black, got: {t_rgb}");
+
+        let t_hsl = processor
+            .render("{{colors.nonexistent.default.hsl}}", &theme, Mode::Dark)
+            .unwrap();
+        assert!(
+            t_hsl.starts_with("hsl(0, 0%, 0%)"),
+            "expected hsl of black, got: {t_hsl}"
+        );
+    }
+
+    #[test]
+    fn test_meta_placeholders_tolerate_whitespace() {
+        let processor = TemplateProcessor::new();
+        let theme = Theme::new("test".to_string());
+
+        let template = "M: {{ mode }}, D: {{ is_dark }}, L: {{is_light }}";
+        let result = processor.render(template, &theme, Mode::Light).unwrap();
+        assert_eq!(result, "M: light, D: false, L: true");
     }
 }

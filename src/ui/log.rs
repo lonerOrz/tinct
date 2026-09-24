@@ -4,7 +4,7 @@
 //! startup via [`init_logger`] and read by the `info` / `error` / `hook` /
 //! `general` helper modules.
 
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use colored::*;
 
@@ -20,23 +20,38 @@ impl LogLevel {
     pub fn is_quiet(&self) -> bool {
         matches!(self, LogLevel::Quiet)
     }
-}
 
-// Global logger instance using thread-safe OnceLock
-static LOGGER: OnceLock<Logger> = OnceLock::new();
-
-pub struct Logger {
-    level: LogLevel,
-}
-
-impl Logger {
-    pub fn new(level: LogLevel) -> Self {
-        Self { level }
+    pub const fn as_u8(self) -> u8 {
+        match self {
+            LogLevel::Quiet => 0,
+            LogLevel::Normal => 1,
+            LogLevel::Verbose => 2,
+        }
     }
 }
 
+impl From<u8> for LogLevel {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => LogLevel::Quiet,
+            1 => LogLevel::Normal,
+            _ => LogLevel::Verbose,
+        }
+    }
+}
+
+// Thread-safe mutable logger level stored as a u8 (0=Quiet, 1=Normal, 2=Verbose).
+// AtomicU8 allows the level to change without rebuilding Logger.
+static LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Normal.as_u8());
+
+/// Set the logger verbosity.
 pub fn init_logger(level: LogLevel) {
-    LOGGER.get_or_init(|| Logger::new(level));
+    LEVEL.store(level.as_u8(), Ordering::SeqCst);
+}
+
+/// Read the current logger verbosity.
+fn get_level() -> LogLevel {
+    LEVEL.load(Ordering::SeqCst).into()
 }
 
 // Info module
@@ -44,9 +59,7 @@ pub mod info {
     use super::*;
 
     pub fn success(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get()
-            && logger.level >= LogLevel::Normal
-        {
+        if get_level() >= LogLevel::Normal {
             println!(
                 "{} [{}] {}",
                 "✓".green().bold(),
@@ -80,9 +93,7 @@ pub mod hook {
     use super::*;
 
     pub fn executing(section: &str) {
-        if let Some(logger) = LOGGER.get()
-            && logger.level >= LogLevel::Verbose
-        {
+        if get_level() >= LogLevel::Verbose {
             println!(
                 "{} [{}] {}",
                 "→".blue(),
@@ -93,9 +104,7 @@ pub mod hook {
     }
 
     pub fn success(section: &str) {
-        if let Some(logger) = LOGGER.get()
-            && logger.level >= LogLevel::Normal
-        {
+        if get_level() >= LogLevel::Normal {
             println!(
                 "{} [{}] {}",
                 "✓".green().bold(),
@@ -111,9 +120,7 @@ pub mod general {
     use super::*;
 
     pub fn info(msg: &str) {
-        if let Some(logger) = LOGGER.get()
-            && logger.level >= LogLevel::Normal
-        {
+        if get_level() >= LogLevel::Normal {
             println!("{}", msg);
         }
     }
@@ -136,12 +143,15 @@ mod tests {
 
     #[test]
     fn test_init_logger_and_levels() {
-        // The constructor and level accessor stay exercised.
-        assert_eq!(Logger::new(LogLevel::Verbose).level, LogLevel::Verbose);
-
-        // Initialising must not panic at any level.
+        // Initialising must not panic at any level, and subsequent calls must
+        // flip the level (AtomicU8), unlike OnceLock where only the first call wins.
         init_logger(LogLevel::Quiet);
+        assert_eq!(get_level(), LogLevel::Quiet);
+
         init_logger(LogLevel::Normal);
+        assert_eq!(get_level(), LogLevel::Normal);
+
         init_logger(LogLevel::Verbose);
+        assert_eq!(get_level(), LogLevel::Verbose);
     }
 }
