@@ -400,7 +400,13 @@ pub fn score_colors(
     let mut hue_population = vec![0i64; 360];
     let mut population_sum: i64 = 0;
 
-    for (&argb, &population) in color_to_population {
+    // Iterate in a deterministic order so score ties resolve the same way on
+    // every run (the map itself has randomized iteration order).
+    let mut population_order: Vec<(u32, i64)> =
+        color_to_population.iter().map(|(&c, &n)| (c, n)).collect();
+    population_order.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+
+    for &(argb, population) in &population_order {
         let (r, g, b) = rgb_from_argb(argb);
         let (hue, chroma) = estimate_hct(r, g, b);
         let hue_bucket = (hue.round() as usize) % 360;
@@ -454,12 +460,12 @@ pub fn score_colors(
         // Fallback: return top colors by population
         let mut by_pop: Vec<(u32, i64)> =
             color_to_population.iter().map(|(&k, &v)| (k, v)).collect();
-        by_pop.sort_by_key(|&(_, v)| -v);
+        by_pop.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         return by_pop.into_iter().take(desired).map(|(k, _)| k).collect();
     }
 
-    // Sort by score descending
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    // Sort by score descending, then ARGB ascending for a stable total order.
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap().then(a.0.cmp(&b.0)));
 
     // Deduplicate by hue distance
     let min_hue_diffs = [90, 80, 70, 60, 50, 40, 30, 25, 20, 15];

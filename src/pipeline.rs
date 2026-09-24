@@ -11,8 +11,9 @@ use std::path::{Path, PathBuf};
 
 use crate::FileOutput;
 use crate::config::{AlgorithmConfig, ConfigSection};
+use crate::core::color::Color;
 use crate::core::{Mode, Theme};
-use crate::image::{SchemeType, extract_source_color};
+use crate::image::{SchemeType, extract_source_palette};
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
 use crate::template::TemplateProcessor;
 use crate::ui::log;
@@ -62,11 +63,11 @@ impl Pipeline {
         // Initialize logger
         log::init_logger(log_level);
 
-        // Create theme data from source
-        let theme_data = Self::create_theme_data(&theme_source, scheme_type)?;
+        // Create theme data from source (image sources also yield clusters)
+        let (theme_data, source_colors) = Self::create_theme_data(&theme_source, scheme_type)?;
 
         // Build theme once — shared by preview and processing
-        let theme = Self::build_theme(&theme_data, &algorithm, scheme_type)?;
+        let theme = Self::build_theme(&theme_data, &source_colors, &algorithm, scheme_type)?;
 
         // Print info
         if !log_level.is_quiet() {
@@ -97,9 +98,13 @@ impl Pipeline {
     fn create_theme_data(
         source: &ThemeSource,
         scheme_type: SchemeType,
-    ) -> crate::Result<serde_json::Value> {
+    ) -> crate::Result<(serde_json::Value, Vec<Color>)> {
         match source {
-            ThemeSource::Seed(seed) => Ok(json!({ "seed": seed })),
+            ThemeSource::Seed(seed) => {
+                let value = json!({ "seed": seed });
+                let colors = crate::palette::collect_theme_colors(&value);
+                Ok((value, colors))
+            }
             ThemeSource::Image { path } => {
                 let img_path = Path::new(path);
                 if !img_path.exists() {
@@ -109,25 +114,28 @@ impl Pipeline {
                     )));
                 }
 
-                let source_argb = extract_source_color(img_path, scheme_type).map_err(|e| {
+                let extracted = extract_source_palette(img_path, scheme_type).map_err(|e| {
                     crate::core::Error::Config(format!("Error extracting color from image: {}", e))
                 })?;
 
                 let material_colors::color::Argb {
                     red, green, blue, ..
-                } = source_argb;
+                } = extracted.source;
                 let hex = format!("#{:02X}{:02X}{:02X}", red, green, blue);
 
-                Ok(json!({ "seed": hex }))
+                Ok((json!({ "seed": hex }), extracted.colors))
             }
             ThemeSource::File(theme_path) => {
                 let resolved = crate::config::path::resolve_theme_path(theme_path)?;
                 let content = fs::read_to_string(&resolved).map_err(|e| {
                     crate::core::Error::Config(format!("Error reading theme file: {}", e))
                 })?;
-                serde_json::from_str::<serde_json::Value>(&content).map_err(|e| {
+                let value = serde_json::from_str::<serde_json::Value>(&content).map_err(|e| {
                     crate::core::Error::Config(format!("Error parsing theme JSON: {}", e))
-                })
+                })?;
+                // A theme file's own colors drive the terminal palette.
+                let colors = crate::palette::collect_theme_colors(&value);
+                Ok((value, colors))
             }
         }
     }
@@ -172,6 +180,7 @@ impl Pipeline {
     /// Single entry point for theme construction — used by both preview and processing.
     fn build_theme(
         theme_data: &serde_json::Value,
+        source_colors: &[Color],
         algorithm: &AlgorithmConfig,
         scheme_type: SchemeType,
     ) -> crate::Result<Theme> {
@@ -190,7 +199,8 @@ impl Pipeline {
                 contrast_level: algorithm.contrast_level,
             },
             scheme_type,
-        );
+        )
+        .with_source_colors(source_colors.to_vec());
         Theme::from_json_value(theme_data, &palette_gen)
             .map_err(|e| crate::core::Error::Config(format!("Theme loading error: {}", e)))
     }
@@ -450,6 +460,11 @@ mod tests {
         json!({ "seed": "#6750A4" })
     }
 
+    /// Build a theme with no image clusters and the default Tonal Spot scheme.
+    fn build_theme(data: &serde_json::Value) -> crate::Result<Theme> {
+        Pipeline::build_theme(data, &[], &default_algorithm(), SchemeType::TonalSpot)
+    }
+
     #[test]
     fn test_validate_config_section_valid() {
         let section = ConfigSection {
@@ -525,7 +540,7 @@ mod tests {
     #[test]
     fn test_build_theme_from_seed() {
         let data = seed_theme_data();
-        let result = Pipeline::build_theme(&data, &default_algorithm(), SchemeType::TonalSpot);
+        let result = build_theme(&data);
         assert!(result.is_ok());
         let theme = result.unwrap();
         let dark = theme.dark_colors();
@@ -539,8 +554,7 @@ mod tests {
     #[test]
     fn test_build_theme_dark_has_more_colors() {
         let data = seed_theme_data();
-        let theme =
-            Pipeline::build_theme(&data, &default_algorithm(), SchemeType::TonalSpot).unwrap();
+        let theme = build_theme(&data).unwrap();
         let dark = theme.dark_colors();
         let light = theme.light_colors();
         assert_eq!(dark.len(), light.len());
@@ -549,7 +563,7 @@ mod tests {
     #[test]
     fn test_create_theme_data_seed() {
         let source = ThemeSource::Seed("#FF0000".to_string());
-        let data = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
+        let (data, _) = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
         assert_eq!(data["seed"], "#FF0000");
     }
 
@@ -582,8 +596,18 @@ mod tests {
         .unwrap();
 
         let source = ThemeSource::File(theme_path.to_str().unwrap().to_string());
-        let data = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
+        let (data, colors) = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
         assert_eq!(data["seed"], "#123456");
+        // The theme file's own colors are captured so the terminal palette can
+        // be generated from them, not just from the seed.
+        assert_eq!(colors.len(), 2);
+    }
+
+    #[test]
+    fn test_create_theme_data_seed_yields_seed_color() {
+        let source = ThemeSource::Seed("#FF0000".to_string());
+        let (_, colors) = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
+        assert_eq!(colors.len(), 1);
     }
 
     #[test]
@@ -600,12 +624,7 @@ mod tests {
             post_hook: None,
         };
 
-        let theme = Pipeline::build_theme(
-            &seed_theme_data(),
-            &default_algorithm(),
-            SchemeType::TonalSpot,
-        )
-        .unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
@@ -628,12 +647,7 @@ mod tests {
             post_hook: None,
         };
 
-        let theme = Pipeline::build_theme(
-            &seed_theme_data(),
-            &default_algorithm(),
-            SchemeType::TonalSpot,
-        )
-        .unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
@@ -659,12 +673,7 @@ mod tests {
             post_hook: None,
         };
 
-        let theme = Pipeline::build_theme(
-            &seed_theme_data(),
-            &default_algorithm(),
-            SchemeType::TonalSpot,
-        )
-        .unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 

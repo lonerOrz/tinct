@@ -27,6 +27,55 @@ pub fn extract_seed_hex(theme: &Value) -> Option<&str> {
         .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
 }
 
+/// Collect every hex color defined in a theme value, recursively.
+///
+/// A `-t <theme>` file is just a map of colors, so this lets the terminal
+/// palette be generated from the theme's *own* colors (their hue, chroma and
+/// lightness) instead of only its seed — a soft, Catppuccin-like theme then
+/// yields a soft terminal palette. Strings are accepted only when they start
+/// with `#` and parse as a 6- or 8-digit hex color; duplicates are dropped and
+/// the result is capped to keep pathological inputs cheap.
+pub fn collect_theme_colors(theme: &Value) -> Vec<Color> {
+    const MAX_COLORS: usize = 64;
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    collect_colors_into(theme, &mut out, &mut seen, MAX_COLORS);
+    out
+}
+
+fn collect_colors_into(
+    value: &Value,
+    out: &mut Vec<Color>,
+    seen: &mut std::collections::HashSet<String>,
+    cap: usize,
+) {
+    if out.len() >= cap {
+        return;
+    }
+    match value {
+        Value::String(text) => {
+            let trimmed = text.trim();
+            if trimmed.starts_with('#')
+                && let Ok(argb) = parse_hex_color(trimmed)
+                && seen.insert(trimmed.to_ascii_lowercase())
+            {
+                out.push(argb_to_color(argb));
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_colors_into(item, out, seen, cap);
+            }
+        }
+        Value::Object(map) => {
+            for item in map.values() {
+                collect_colors_into(item, out, seen, cap);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Generate a palette using the default Tonal Spot scheme and no adjustments.
 pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
     generate_palette_with_params(
@@ -44,12 +93,24 @@ pub fn generate_palette_with_params(
     scheme_type: SchemeType,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
+    build_palette(theme, is_dark_mode, scheme_type, params, &[])
+}
+
+/// Generate a palette, threading the source image's color clusters into the
+/// terminal (ANSI) mapping. See [`super::ansi`].
+pub fn build_palette(
+    theme: &Value,
+    is_dark_mode: bool,
+    scheme_type: SchemeType,
+    params: AlgorithmParameters,
+    source_colors: &[Color],
+) -> Result<Palette, String> {
     let seed_hex =
         extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     let seed_argb = parse_hex_color(seed_hex)?;
     let scheme = generate_scheme(seed_argb, is_dark_mode, scheme_type, &params);
-    scheme_to_palette(&scheme, theme)
+    scheme_to_palette(&scheme, theme, source_colors)
 }
 
 /// Build the official MD3 scheme for a seed.
@@ -126,7 +187,11 @@ fn pascal_case(key: &str) -> Option<String> {
 /// Every MD3 role comes straight from the scheme; theme entries may override
 /// individual roles by snake_case or PascalCase key. Terminal roles are always
 /// derived by [`ansi::ansi_colors`].
-fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, String> {
+fn scheme_to_palette(
+    scheme: &DynamicScheme,
+    theme: &Value,
+    source_colors: &[Color],
+) -> Result<Palette, String> {
     let get_override = |key: &str| -> Option<&str> {
         theme
             .get(key)
@@ -346,8 +411,9 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
     insert(ColorRole::Shadow, resolve(|s| s.shadow(), Some("shadow")))?;
     insert(ColorRole::Scrim, resolve(|s| s.scrim(), Some("scrim")))?;
 
-    // Terminal colors get their own dedicated, fixed-hue mapping.
-    for (role, color) in ansi::ansi_colors(scheme) {
+    // Terminal colors get their own dedicated, wallust-inspired mapping, using
+    // the real image clusters where they match an ANSI hue slot.
+    for (role, color) in ansi::ansi_colors(scheme, source_colors) {
         colors.insert(role, color);
     }
 
@@ -362,6 +428,8 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
 pub struct LegacyPaletteGenerator {
     params: AlgorithmParameters,
     scheme_type: SchemeType,
+    /// Representative wallpaper clusters, used for ANSI hue snapping.
+    source_colors: Vec<Color>,
 }
 
 impl LegacyPaletteGenerator {
@@ -369,6 +437,7 @@ impl LegacyPaletteGenerator {
         Self {
             params,
             scheme_type,
+            source_colors: Vec::new(),
         }
     }
 
@@ -377,7 +446,15 @@ impl LegacyPaletteGenerator {
         Self {
             params: AlgorithmParameters::default(),
             scheme_type: SchemeType::TonalSpot,
+            source_colors: Vec::new(),
         }
+    }
+
+    /// Attach the source image's extracted clusters (empty for seed/theme
+    /// sources). Only the terminal palette uses them.
+    pub fn with_source_colors(mut self, source_colors: Vec<Color>) -> Self {
+        self.source_colors = source_colors;
+        self
     }
 
     /// The scheme variant this generator produces.
@@ -386,8 +463,14 @@ impl LegacyPaletteGenerator {
     }
 
     pub fn generate(&self, theme: &Value, mode: Mode) -> crate::core::Result<Palette> {
-        generate_palette_with_params(theme, mode.is_dark(), self.scheme_type, self.params)
-            .map_err(crate::core::Error::Palette)
+        build_palette(
+            theme,
+            mode.is_dark(),
+            self.scheme_type,
+            self.params,
+            &self.source_colors,
+        )
+        .map_err(crate::core::Error::Palette)
     }
 }
 
@@ -428,6 +511,26 @@ mod tests {
         let theme = json!({ "seed": "#2196F3" });
         let palette = generate_palette(&theme, true).unwrap();
         assert!(palette.get("surface").is_some());
+    }
+
+    #[test]
+    fn test_collect_theme_colors_skips_non_colors_and_dedupes() {
+        let theme = json!({
+            "seed": "#6750A4",
+            "primary": "#6750a4",       // duplicate of seed (case-insensitive)
+            "secondary": "#BCD2E8",
+            "nested": { "list": ["#112233", "not-a-color", "#112233"] },
+            "name": "abcdef",           // 6 hex chars but no '#': must be ignored
+            "count": 42,
+            "flag": true,
+        });
+        let colors = collect_theme_colors(&theme);
+        assert_eq!(colors.len(), 3);
+    }
+
+    #[test]
+    fn test_collect_theme_colors_on_empty_theme() {
+        assert!(collect_theme_colors(&json!({})).is_empty());
     }
 
     /// With default parameters our generation must be exactly the official

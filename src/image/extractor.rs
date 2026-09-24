@@ -23,7 +23,7 @@ use super::kmeans;
 use super::quantizer;
 use super::reader::{self, ResizeFilter};
 use super::wsmeans;
-use crate::core::color::Rgb;
+use crate::core::color::{Color, Rgb};
 
 /// Supported scheme types for color extraction.
 #[derive(
@@ -120,6 +120,19 @@ impl std::fmt::Display for SchemeType {
     }
 }
 
+/// The result of extracting colors from an image: the seed `source` color plus
+/// the representative color clusters found in the wallpaper.
+///
+/// The clusters are used by the terminal (ANSI) palette builder to snap each
+/// chromatic slot to a hue actually present in the image.
+#[derive(Debug, Clone)]
+pub struct ExtractedPalette {
+    /// The dominant/source color, used to seed MD3 palette generation.
+    pub source: Argb,
+    /// Representative image clusters (most prominent first, already filtered).
+    pub colors: Vec<Color>,
+}
+
 /// Extract the source color from an image file.
 ///
 /// # Arguments
@@ -129,6 +142,17 @@ impl std::fmt::Display for SchemeType {
 /// # Returns
 /// The extracted source color as an ARGB value, ready for palette generation.
 pub fn extract_source_color(path: &Path, scheme_type: SchemeType) -> Result<Argb, String> {
+    Ok(extract_source_palette(path, scheme_type)?.source)
+}
+
+/// Extract the source color **and** the representative color clusters.
+///
+/// See [`extract_source_color`]; this richer variant additionally exposes the
+/// image's color clusters for terminal-palette hue snapping.
+pub fn extract_source_palette(
+    path: &Path,
+    scheme_type: SchemeType,
+) -> Result<ExtractedPalette, String> {
     let filter = scheme_type.resize_filter();
     let pixels = reader::read_image(path, filter)?;
 
@@ -136,19 +160,52 @@ pub fn extract_source_color(path: &Path, scheme_type: SchemeType) -> Result<Argb
         return Err("Image contains no opaque pixels".to_string());
     }
 
-    let argb = if scheme_type.is_m3_scheme() {
+    let (argb, colors) = if scheme_type.is_m3_scheme() {
         extract_m3_source_color(&pixels)?
     } else {
         extract_kmeans_source_color(&pixels, scheme_type)?
     };
 
-    Ok(Argb::from_u32(argb))
+    Ok(ExtractedPalette {
+        source: Argb::from_u32(argb),
+        colors,
+    })
+}
+
+/// Convert a color-count map into at most `cap` [`Color`] clusters, most
+/// prominent first.
+fn clusters_from_counts(counts: &HashMap<u32, i64>, cap: usize) -> Vec<Color> {
+    let mut entries: Vec<(u32, i64)> = counts.iter().map(|(&c, &n)| (c, n)).collect();
+    // Population descending, then ARGB ascending: a total order, so the result
+    // never depends on randomized `HashMap` iteration.
+    entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    entries
+        .into_iter()
+        .take(cap)
+        .map(|(argb, _)| {
+            Color::new(
+                ((argb >> 16) & 0xFF) as u8,
+                ((argb >> 8) & 0xFF) as u8,
+                (argb & 0xFF) as u8,
+                1.0,
+            )
+        })
+        .collect()
+}
+
+/// Convert scored `(rgb, weight)` pairs into at most `cap` [`Color`] clusters.
+fn clusters_from_scored(scored: &[(Rgb, f64)], cap: usize) -> Vec<Color> {
+    scored
+        .iter()
+        .take(cap)
+        .map(|((r, g, b), _)| Color::new(*r, *g, *b, 1.0))
+        .collect()
 }
 
 /// Extract source color using Wu + WSMeans + Score pipeline (M3 schemes).
 ///
 /// Matches the Python `extract_source_color` in theming/lib/quantizer.py exactly.
-fn extract_m3_source_color(pixels: &[Rgb]) -> Result<u32, String> {
+fn extract_m3_source_color(pixels: &[Rgb]) -> Result<(u32, Vec<Color>), String> {
     // Step 1: Wu quantization (128 colors)
     let wu_result = quantizer::quantize_wu(pixels, 128);
 
@@ -156,8 +213,15 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<u32, String> {
         return Err("Wu quantizer produced no colors".to_string());
     }
 
-    // Step 2: WSMeans refinement in Lab space
-    let starting_clusters: Vec<u32> = wu_result.keys().copied().collect();
+    // Step 2: WSMeans refinement in Lab space.
+    //
+    // WSMeans is deterministic *given* the order of the starting clusters, so
+    // the order must not come from `HashMap` iteration (which is randomized per
+    // process). Order by population (then ARGB) so the same image always yields
+    // the same palette.
+    let mut starting: Vec<(u32, i64)> = wu_result.iter().map(|(&c, &n)| (c, n)).collect();
+    starting.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let starting_clusters: Vec<u32> = starting.into_iter().map(|(c, _)| c).collect();
     let wsmeans_result = wsmeans::quantize_wsmeans(pixels, 128, &starting_clusters);
 
     let color_to_count = if wsmeans_result.is_empty() {
@@ -187,15 +251,21 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<u32, String> {
     };
 
     // Step 4: Score and pick the best color
+    let clusters = clusters_from_counts(&filtered, 32);
     let scored = wsmeans::score_colors(&filtered, 4, true);
-    scored
+    let best = scored
         .first()
         .copied()
-        .ok_or_else(|| "No colors scored".to_string())
+        .ok_or_else(|| "No colors scored".to_string())?;
+
+    Ok((best, clusters))
 }
 
 /// Extract source color using K-means + custom scoring (non-M3 schemes).
-fn extract_kmeans_source_color(pixels: &[Rgb], scheme_type: SchemeType) -> Result<u32, String> {
+fn extract_kmeans_source_color(
+    pixels: &[Rgb],
+    scheme_type: SchemeType,
+) -> Result<(u32, Vec<Color>), String> {
     // Downsample for performance
     let sampled = kmeans::downsample_pixels(pixels, 4);
 
@@ -228,8 +298,12 @@ fn extract_kmeans_source_color(pixels: &[Rgb], scheme_type: SchemeType) -> Resul
         if scored.is_empty() {
             return Err("No colors scored".to_string());
         }
+        let clusters = clusters_from_scored(&scored, 32);
         let (r, g, b) = scored[0].0;
-        return Ok((0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
+        return Ok((
+            (0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
+            clusters,
+        ));
     }
 
     // K-means clustering
@@ -277,8 +351,12 @@ fn extract_kmeans_source_color(pixels: &[Rgb], scheme_type: SchemeType) -> Resul
         return Err("No colors scored after k-means".to_string());
     }
 
+    let clusters = clusters_from_scored(&scored, 32);
     let (r, g, b) = scored[0].0;
-    Ok((0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32))
+    Ok((
+        (0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
+        clusters,
+    ))
 }
 
 /// Scoring mode for K-means extraction.
@@ -334,6 +412,19 @@ mod tests {
         let b = argb.blue;
         // Should extract something reasonable
         assert!(r > 0 || g > 0 || b > 0);
+    }
+
+    #[test]
+    fn test_extract_source_palette_returns_clusters() {
+        let file = create_test_png();
+        let palette = extract_source_palette(file.path(), SchemeType::TonalSpot).unwrap();
+        assert!(
+            !palette.colors.is_empty(),
+            "expected representative clusters"
+        );
+        // The source color must match the thin wrapper.
+        let direct = extract_source_color(file.path(), SchemeType::TonalSpot).unwrap();
+        assert_eq!(palette.source, direct);
     }
 
     #[test]

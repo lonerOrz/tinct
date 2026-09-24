@@ -13,6 +13,7 @@ tinct is a command-line utility that generates themed configuration files based 
 - Material Design 3 compliant color generation using the official Material You algorithms
 - **Wallpaper-based color extraction** — extract source colors from images with multiple scheme types
 - **Scheme selection for every source** — `--scheme-type` chooses the MD3 scheme variant (tonal-spot, vibrant, content, …) used to build the palette
+- **Input-aware terminal palette** — the 16 ANSI colors snap real colors from your wallpaper, theme file, or seed onto the CIE LCh hue wheel (wallust-inspired), with vivid hue anchors and a readable bright/dark ladder
 - Support for light and dark themes
 - Template-based theme injection with **parallel processing** (10x faster)
 - Color preview functionality
@@ -312,17 +313,45 @@ In tinct's template files, you can use the following color formats to reference 
 
 #### Terminal ANSI Color Roles
 
-These standard ANSI terminal colors are derived from the generated scheme using **fixed hue anchors**, so they stay recognizable instead of drifting with the seed:
+The desktop/UI roles above are pure Material You. A terminal, however, needs
+sixteen *recognizable* colors, so the ANSI palette is generated separately using
+a CIE LCh pipeline in the spirit of [wallust](https://codeberg.org/explosion-mental/wallust)
+(MIT © explosion-mental).
 
-- `red` / `bright_red` — error palette (hue ≈ 25°)
-- `yellow` / `bright_yellow` — hue 70°
-- `green` / `bright_green` — hue 140°
-- `cyan` / `bright_cyan` — hue 200°
-- `blue` / `bright_blue` — hue 260°
-- `magenta` / `bright_magenta` — hue 330°
-- `black` / `bright_black` / `white` / `bright_white` — greyscale ladder from the scheme's neutral palette
+The chromatic slots are **derived from your input, not from a fixed palette**.
+The set of candidate colors depends on the source:
 
-The `bright_*` variants are both **lighter** (a higher HCT tone, in dark *and* light modes) and **more saturated** (a higher chroma) than their normal counterparts, so they read as vivid emphasised colors rather than darker, muddier ones. Normal slots use a restrained chroma so the bright variants clearly stand out.
+| Source                    | Candidate colors                                                    |
+| ------------------------- | ------------------------------------------------------------------- |
+| `--image <path>`          | the representative clusters extracted from the wallpaper            |
+| `-t <theme.json>`         | **every hex value in the theme file**, including custom/extra keys  |
+| `--seed <hex>`            | the seed color only                                                 |
+
+Each candidate color is matched to the ANSI slot whose hue range contains it, and
+that slot inherits the source's **hue**. The source's chroma and lightness are
+then blended with the slot's vivid anchor using wallust's
+`(anchor + 2·average) / 3` weighting — your input tints the terminal, but every
+slot keeps the vividness and legibility the anchor encodes. When a slot has no
+matching candidate (a monochrome wallpaper, or `--seed`), it falls back to the
+**full anchor**, so the palette never collapses into a washed-out approximation.
+
+- `black` / `bright_black` / `white` / `bright_white` — a fixed greyscale ladder
+  taken from the scheme's neutral palette, so backgrounds and text always match
+  the mode.
+- `red` / `green` / `yellow` / `blue` / `magenta` / `cyan` — the six chromatic
+  slots. Each owns a hue range on the CIE LCh color wheel (red 0–60°, yellow
+  61–120°, green 121–180°, cyan 181–210°, blue 211–300°, magenta 301–360°). A
+  matching input color contributes its hue; near-neutral colors (low-chroma
+  surfaces, greys) are ignored so they don't contaminate the accents, and each
+  candidate is consumed by at most one slot.
+- `bright_*` variants — the same hue as their normal counterpart, but with a
+  **lighter** CIE L\* (in dark *and* light modes) and **higher** chroma, so they
+  read as vivid emphasised colors rather than darker, muddier ones.
+
+The anchors are the recognizable colors wallust converges on (red ≈ `#F90000`,
+green ≈ `#009850`, blue ≈ `#0076FD`, …). Every chromatic slot is gamut-mapped back
+into sRGB and then nudged in lightness until it clears a WCAG 3:1 contrast ratio
+against the terminal background, so colors stay legible without washing out.
 
 ### Color Format Attributes
 

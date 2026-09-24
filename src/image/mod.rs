@@ -26,5 +26,5 @@ mod reader;
 mod wsmeans;
 
 pub use crate::core::color::Rgb;
-pub use extractor::{SchemeType, extract_source_color};
+pub use extractor::{ExtractedPalette, SchemeType, extract_source_color, extract_source_palette};
 pub use reader::{ResizeFilter, read_image};

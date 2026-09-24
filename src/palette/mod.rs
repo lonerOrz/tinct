@@ -10,7 +10,8 @@ mod params;
 mod types;
 
 pub use dynamic::{
-    LegacyPaletteGenerator, extract_seed_hex, generate_palette, generate_palette_with_params,
+    LegacyPaletteGenerator, build_palette, collect_theme_colors, extract_seed_hex,
+    generate_palette, generate_palette_with_params,
 };
 pub use params::AlgorithmParameters;
 pub use types::{ColorRole, Palette};

@@ -35,4 +35,4 @@ pub use palette::{AlgorithmParameters, ColorRole, LegacyPaletteGenerator, Palett
 pub use pipeline::{Pipeline, PipelineConfig};
 pub use template::{ColorFilter, ColorProperty, FilterContext, TemplateProcessor};
 
-pub use image::{SchemeType, extract_source_color};
+pub use image::{ExtractedPalette, SchemeType, extract_source_color, extract_source_palette};
