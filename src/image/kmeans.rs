@@ -50,9 +50,16 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
     let weights: Vec<i64> = unique_pixels.iter().map(|&(_, c)| c).collect();
     let n = colors_lab.len();
 
-    // Deterministic initialization: pick evenly spaced colors from sorted list
+    // Deterministic initialization: pick evenly spaced colors from sorted list.
+    // `unique_pixels` comes from a `HashMap`, so break L* ties on the RGB value
+    // to keep the chosen centroids stable across runs.
     let mut sorted_indices: Vec<usize> = (0..n).collect();
-    sorted_indices.sort_by(|&a, &b| colors_lab[a].0.partial_cmp(&colors_lab[b].0).unwrap());
+    sorted_indices.sort_by(|&a, &b| {
+        colors_lab[a]
+            .0
+            .total_cmp(&colors_lab[b].0)
+            .then(unique_pixels[a].0.cmp(&unique_pixels[b].0))
+    });
 
     let step = n / actual_k;
     let mut centroids: Vec<(f64, f64, f64)> = Vec::with_capacity(actual_k);
@@ -198,7 +205,7 @@ pub fn score_colors_chroma(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)>
         result.push((rgb, score));
     }
 
-    result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    result.sort_by(|a, b| b.1.total_cmp(&a.1));
     result
 }
 
@@ -227,7 +234,7 @@ pub fn score_colors_count(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
             .iter()
             .map(|&(rgb, count)| (rgb, count as f64))
             .collect();
-        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        result.sort_by(|a, b| b.1.total_cmp(&a.1));
         return result;
     }
 
@@ -239,7 +246,7 @@ pub fn score_colors_count(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
             (family, total)
         })
         .collect();
-    family_totals.sort_by_key(|b| std::cmp::Reverse(b.1));
+    family_totals.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
 
     // Build result: colors from dominant families first
     let mut result_colors: Vec<(Rgb, f64)> = Vec::new();
@@ -247,7 +254,7 @@ pub fn score_colors_count(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
         let mut family_colors = hue_families[family].clone();
         family_colors.sort_by(|a, b| {
             // Sort by count descending, chroma as tiebreaker
-            b.3.cmp(&a.3).then(b.2.partial_cmp(&a.2).unwrap())
+            b.3.cmp(&a.3).then(b.2.total_cmp(&a.2))
         });
         for (rgb, hue, chroma, count) in family_colors {
             let _ = hue;
@@ -262,7 +269,7 @@ pub fn score_colors_count(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
         }
     }
 
-    result_colors.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    result_colors.sort_by(|a, b| b.1.total_cmp(&a.1));
     result_colors
 }
 
@@ -292,7 +299,7 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
             .iter()
             .map(|&(rgb, count)| (rgb, count as f64))
             .collect();
-        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        result.sort_by(|a, b| b.1.total_cmp(&a.1));
         return result;
     }
 
@@ -303,7 +310,7 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
             (family, total)
         })
         .collect();
-    family_totals.sort_by_key(|b| std::cmp::Reverse(b.1));
+    family_totals.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
 
     let dominant_family = family_totals[0].0;
     let _dominant_count = family_totals[0].1;
@@ -333,7 +340,7 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
     distant_families.sort_by(|a, b| {
         let score_a = a.2 * a.3;
         let score_b = b.2 * b.3;
-        score_b.partial_cmp(&score_a).unwrap()
+        score_b.total_cmp(&score_a)
     });
 
     let mut result_colors: Vec<(Rgb, f64)> = Vec::new();
@@ -341,7 +348,7 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
     // Distant families first
     for (rank, (family, _, _, _)) in distant_families.iter().enumerate() {
         let mut family_colors = hue_families[family].clone();
-        family_colors.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap().then(b.3.cmp(&a.3)));
+        family_colors.sort_by(|a, b| b.2.total_cmp(&a.2).then(b.3.cmp(&a.3)));
         for (rgb, _hue, chroma, count) in family_colors {
             let score = (distant_families.len() - rank) as f64 * 1_000_000.0
                 + chroma * 1000.0
@@ -353,14 +360,14 @@ pub fn score_colors_dysfunctional(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb
     // Close families at lower priority
     for family in &close_families {
         let mut family_colors = hue_families[family].clone();
-        family_colors.sort_by(|a, b| b.3.cmp(&a.3).then(b.2.partial_cmp(&a.2).unwrap()));
+        family_colors.sort_by(|a, b| b.3.cmp(&a.3).then(b.2.total_cmp(&a.2)));
         for (rgb, _hue, chroma, count) in family_colors {
             let score = count as f64 * 1000.0 + chroma;
             result_colors.push((rgb, score));
         }
     }
 
-    result_colors.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    result_colors.sort_by(|a, b| b.1.total_cmp(&a.1));
     result_colors
 }
 
@@ -370,7 +377,7 @@ pub fn score_colors_muted(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)> 
         .iter()
         .map(|&(rgb, count)| (rgb, count as f64))
         .collect();
-    result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    result.sort_by(|a, b| b.1.total_cmp(&a.1));
     result
 }
 

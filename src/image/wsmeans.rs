@@ -8,6 +8,7 @@
 //! Reference: material-color-utilities quantizer pipeline
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::core::color::{estimate_hct, estimate_hue, hue_distance};
 
@@ -32,7 +33,7 @@ impl Random {
     }
 
     fn next_range(&mut self, range: usize) -> usize {
-        if range.isolate_lowest_one() == range {
+        if range.is_power_of_two() {
             ((range as i64 * self.next(31) as i64) >> 31) as usize
         } else {
             loop {
@@ -217,12 +218,16 @@ pub fn quantize_wsmeans(
 
     for &(r, g, b) in pixels {
         let argb = argb_from_rgb(r, g, b);
-        pixel_to_count.entry(argb).or_insert_with(|| {
-            unique_pixels.push(argb);
-            points.push(rgb_to_lab(r, g, b));
-            0
-        });
-        *pixel_to_count.get_mut(&argb).unwrap() += 1;
+        match pixel_to_count.entry(argb) {
+            Entry::Occupied(mut e) => {
+                *e.get_mut() += 1;
+            }
+            Entry::Vacant(e) => {
+                unique_pixels.push(argb);
+                points.push(rgb_to_lab(r, g, b));
+                e.insert(1);
+            }
+        }
     }
 
     let cluster_count = max_colors.min(points.len());
@@ -273,7 +278,7 @@ pub fn quantize_wsmeans(
                 distance_matrix[i][j] = (dist, j);
             }
             // Sort row by distance
-            distance_matrix[i].sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            distance_matrix[i].sort_by(|a, b| a.0.total_cmp(&b.0));
         }
 
         // Assignment step
@@ -465,7 +470,7 @@ pub fn score_colors(
     }
 
     // Sort by score descending, then ARGB ascending for a stable total order.
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap().then(a.0.cmp(&b.0)));
+    scored.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
 
     // Deduplicate by hue distance
     let min_hue_diffs = [90, 80, 70, 60, 50, 40, 30, 25, 20, 15];

@@ -242,17 +242,13 @@ impl Pipeline {
 
         let results: Vec<_> = entries
             .par_iter()
-            .map(|(section_name, section)| {
-                let (success, error) =
-                    process_section(section, theme, mode, &template_engine, &output);
-                ((*section_name).clone(), success, error)
-            })
+            .map(|(_, section)| process_section(section, theme, mode, &template_engine, &output))
             .collect();
 
         let total_count = results.len();
         let mut success_count = 0;
 
-        for (section_name, success, error) in &results {
+        for ((section_name, _section), (success, error)) in entries.iter().zip(results.iter()) {
             if *success {
                 success_count += 1;
             }
@@ -268,8 +264,12 @@ impl Pipeline {
             }
         }
 
-        // Run post-hooks sequentially after all processing
-        for (section_name, section) in &entries {
+        // Run post-hooks sequentially after all processing, but only for
+        // sections whose processing succeeded.
+        for ((section_name, section), (success, _)) in entries.iter().zip(results.iter()) {
+            if !success {
+                continue;
+            }
             if let Some(ref post_hook) = section.post_hook
                 && !post_hook.is_empty()
             {

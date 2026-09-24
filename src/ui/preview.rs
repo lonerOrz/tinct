@@ -8,6 +8,7 @@ use crate::image::SchemeType;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator, Palette};
 use colored::*;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// Display a color preview from an already-built palette.
 pub fn show_color_preview_from_theme(palette: &Palette, mode: Mode) -> Result<(), String> {
@@ -121,167 +122,336 @@ fn display_md3_cards_grid(colors: &HashMap<String, Color>) -> Result<(), String>
     // Define color cards based on the MD3 documentation structure
     let cards: Vec<Vec<(&str, &Color)>> = vec![
         vec![
-            ("Primary", colors.get("primary").unwrap()),
-            ("On Primary", colors.get("on_primary").unwrap()),
+            (
+                "Primary",
+                colors
+                    .get("primary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "On Primary",
+                colors
+                    .get("on_primary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Primary Container",
-                colors.get("primary_container").unwrap(),
+                colors
+                    .get("primary_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Primary Container",
-                colors.get("on_primary_container").unwrap(),
+                colors
+                    .get("on_primary_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Secondary", colors.get("secondary").unwrap()),
-            ("On Secondary", colors.get("on_secondary").unwrap()),
+            (
+                "Secondary",
+                colors
+                    .get("secondary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "On Secondary",
+                colors
+                    .get("on_secondary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Secondary Container",
-                colors.get("secondary_container").unwrap(),
+                colors
+                    .get("secondary_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Secondary Container",
-                colors.get("on_secondary_container").unwrap(),
+                colors
+                    .get("on_secondary_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Tertiary", colors.get("tertiary").unwrap()),
-            ("On Tertiary", colors.get("on_tertiary").unwrap()),
+            (
+                "Tertiary",
+                colors
+                    .get("tertiary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "On Tertiary",
+                colors
+                    .get("on_tertiary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Tertiary Container",
-                colors.get("tertiary_container").unwrap(),
+                colors
+                    .get("tertiary_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Tertiary Container",
-                colors.get("on_tertiary_container").unwrap(),
+                colors
+                    .get("on_tertiary_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Error", colors.get("error").unwrap()),
-            ("On Error", colors.get("on_error").unwrap()),
-            ("Error Container", colors.get("error_container").unwrap()),
+            (
+                "Error",
+                colors
+                    .get("error")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "On Error",
+                colors
+                    .get("on_error")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "Error Container",
+                colors
+                    .get("error_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "On Error Container",
-                colors.get("on_error_container").unwrap(),
+                colors
+                    .get("on_error_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Primary Fixed", colors.get("primary_fixed").unwrap()),
+            (
+                "Primary Fixed",
+                colors
+                    .get("primary_fixed")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Primary Fixed Dim",
-                colors.get("primary_fixed_dim").unwrap(),
+                colors
+                    .get("primary_fixed_dim")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
-            ("On Primary Fixed", colors.get("on_primary_fixed").unwrap()),
+            (
+                "On Primary Fixed",
+                colors
+                    .get("on_primary_fixed")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "On Primary Fixed Var",
-                colors.get("on_primary_fixed_variant").unwrap(),
+                colors
+                    .get("on_primary_fixed_variant")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Secondary Fixed", colors.get("secondary_fixed").unwrap()),
+            (
+                "Secondary Fixed",
+                colors
+                    .get("secondary_fixed")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Secondary Fixed Dim",
-                colors.get("secondary_fixed_dim").unwrap(),
+                colors
+                    .get("secondary_fixed_dim")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Secondary Fixed",
-                colors.get("on_secondary_fixed").unwrap(),
+                colors
+                    .get("on_secondary_fixed")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Secondary Fixed Var",
-                colors.get("on_secondary_fixed_variant").unwrap(),
+                colors
+                    .get("on_secondary_fixed_variant")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Tertiary Fixed", colors.get("tertiary_fixed").unwrap()),
+            (
+                "Tertiary Fixed",
+                colors
+                    .get("tertiary_fixed")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Tertiary Fixed Dim",
-                colors.get("tertiary_fixed_dim").unwrap(),
+                colors
+                    .get("tertiary_fixed_dim")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Tertiary Fixed",
-                colors.get("on_tertiary_fixed").unwrap(),
+                colors
+                    .get("on_tertiary_fixed")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "On Tertiary Fixed Var",
-                colors.get("on_tertiary_fixed_variant").unwrap(),
+                colors
+                    .get("on_tertiary_fixed_variant")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Surface Dim", colors.get("surface_dim").unwrap()),
-            ("Surface", colors.get("surface").unwrap()),
-            ("Surface Bright", colors.get("surface_bright").unwrap()),
+            (
+                "Surface Dim",
+                colors
+                    .get("surface_dim")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "Surface",
+                colors
+                    .get("surface")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "Surface Bright",
+                colors
+                    .get("surface_bright")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
         ],
         vec![
-            ("Surface Variant", colors.get("surface_variant").unwrap()),
+            (
+                "Surface Variant",
+                colors
+                    .get("surface_variant")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "On Surface Variant",
-                colors.get("on_surface_variant").unwrap(),
+                colors
+                    .get("on_surface_variant")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
             (
                 "Container Lowest",
-                colors.get("surface_container_lowest").unwrap(),
+                colors
+                    .get("surface_container_lowest")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "Container Low",
-                colors.get("surface_container_low").unwrap(),
+                colors
+                    .get("surface_container_low")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
-            ("Container", colors.get("surface_container").unwrap()),
+            (
+                "Container",
+                colors
+                    .get("surface_container")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Container High",
-                colors.get("surface_container_high").unwrap(),
+                colors
+                    .get("surface_container_high")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
             (
                 "Container Highest",
-                colors.get("surface_container_highest").unwrap(),
+                colors
+                    .get("surface_container_highest")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
         ],
         vec![
-            ("Background", colors.get("background").unwrap()),
-            ("On Background", colors.get("on_background").unwrap()),
+            (
+                "Background",
+                colors
+                    .get("background")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "On Background",
+                colors
+                    .get("on_background")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
         ],
         vec![
-            ("Outline", colors.get("outline").unwrap()),
-            ("Outline Variant", colors.get("outline_variant").unwrap()),
+            (
+                "Outline",
+                colors
+                    .get("outline")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "Outline Variant",
+                colors
+                    .get("outline_variant")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
         ],
         vec![
-            ("Inverse Surface", colors.get("inverse_surface").unwrap()),
+            (
+                "Inverse Surface",
+                colors
+                    .get("inverse_surface")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
             (
                 "Inverse On Surface",
-                colors.get("inverse_on_surface").unwrap(),
+                colors
+                    .get("inverse_on_surface")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
             ),
-            ("Inverse Primary", colors.get("inverse_primary").unwrap()),
+            (
+                "Inverse Primary",
+                colors
+                    .get("inverse_primary")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
         ],
         vec![
-            ("Shadow", colors.get("shadow").unwrap()),
-            ("Scrim", colors.get("scrim").unwrap()),
+            (
+                "Shadow",
+                colors
+                    .get("shadow")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
+            (
+                "Scrim",
+                colors
+                    .get("scrim")
+                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
+            ),
         ],
     ];
 
     const CARDS_PER_ROW: usize = 3;
+
+    let mut line = String::new();
 
     for chunk in cards.chunks(CARDS_PER_ROW) {
         let max_colors = chunk.iter().map(|card| card.len()).max().unwrap_or(0);
 
         for color_idx in 0..max_colors {
             for line_num in 0..3 {
+                line.clear();
                 for (idx, card) in chunk.iter().enumerate() {
                     if color_idx < card.len() {
                         let (label, color) = &card[color_idx];
                         let block_width = 24;
 
                         let display_content = if line_num == 1 {
-                            let text_len = label.len();
-                            if text_len > block_width {
-                                let chars: Vec<char> = label.chars().collect();
-                                let mut truncated = String::new();
-                                for i in 0..(block_width - 3) {
-                                    if i < chars.len() {
-                                        truncated.push(chars[i]);
-                                    }
-                                }
+                            if label.len() > block_width {
+                                let mut truncated: String =
+                                    label.chars().take(block_width - 3).collect();
                                 truncated.push_str("...");
                                 truncated
                             } else {
@@ -309,16 +479,16 @@ fn display_md3_cards_grid(colors: &HashMap<String, Color>) -> Result<(), String>
                             color_block.white()
                         };
 
-                        print!(" {} ", text_color);
+                        write!(line, " {} ", text_color).expect("writing to a String cannot fail");
                     } else {
-                        print!("{:>26} ", "");
+                        write!(line, "{:>26} ", "").expect("writing to a String cannot fail");
                     }
 
                     if idx < chunk.len() - 1 {
-                        print!("  ");
+                        line.push_str("  ");
                     }
                 }
-                println!();
+                println!("{}", line);
             }
         }
         println!();

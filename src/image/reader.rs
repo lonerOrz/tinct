@@ -62,17 +62,10 @@ pub fn read_image(path: &Path, filter: ResizeFilter) -> Result<Vec<Rgb>, String>
     let (width, height) = rgba.dimensions();
     let mut pixels = Vec::with_capacity((width * height) as usize);
 
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = rgba.get_pixel(x, y);
-            let r = pixel[0];
-            let g = pixel[1];
-            let b = pixel[2];
-            // Skip fully transparent pixels
-            let a = pixel[3];
-            if a > 0 {
-                pixels.push((r, g, b));
-            }
+    for pixel in rgba.pixels() {
+        // Skip fully transparent pixels
+        if pixel[3] > 0 {
+            pixels.push((pixel[0], pixel[1], pixel[2]));
         }
     }
 

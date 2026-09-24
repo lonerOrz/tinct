@@ -120,11 +120,11 @@ impl QuantizerWu {
 
     fn compute_moments(&mut self) {
         for r in 1..SIDE_LENGTH {
-            let mut area = vec![0i64; SIDE_LENGTH];
-            let mut area_r = vec![0i64; SIDE_LENGTH];
-            let mut area_g = vec![0i64; SIDE_LENGTH];
-            let mut area_b = vec![0i64; SIDE_LENGTH];
-            let mut area2 = vec![0.0f64; SIDE_LENGTH];
+            let mut area = [0i64; SIDE_LENGTH];
+            let mut area_r = [0i64; SIDE_LENGTH];
+            let mut area_g = [0i64; SIDE_LENGTH];
+            let mut area_b = [0i64; SIDE_LENGTH];
+            let mut area2 = [0.0f64; SIDE_LENGTH];
 
             for g in 1..SIDE_LENGTH {
                 let mut line = 0i64;

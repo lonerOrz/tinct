@@ -2,6 +2,7 @@
 name = "tinct"
 version = "0.1.2"
 edition = "2024"
+rust-version = "1.85"
 authors = ["lonerOrz <lonerOrz@qq.com>"]
 description = "A theme injector tool that applies Material Design 3 color palettes to various configuration files"
 homepage = "https://github.com/lonerOrz/tinct"
@@ -18,10 +19,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 regex = "1.0"
 log = "0.4"
-env_logger = "0.10"
 shellexpand = "3.1"
 colored = "2.1"
-glob = "0.3"
 thiserror = "1.0"
 material-colors = "0.4.2"
 palette = "0.7"

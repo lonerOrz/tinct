@@ -40,6 +40,7 @@ impl std::fmt::Display for Mode {
 /// the seed itself is *not* a role and is never surfaced to templates.
 /// Palette-derived maps are computed on demand — no redundant storage.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Theme {
     pub name: String,
     pub dark_palette: Palette,
@@ -47,17 +48,23 @@ pub struct Theme {
 }
 
 impl Theme {
-    pub fn new(name: String) -> Self {
+    /// Create an empty theme with the given name.
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            name,
+            name: name.into(),
             dark_palette: Palette::empty(),
             light_palette: Palette::empty(),
         }
     }
 
-    pub fn with_palettes(name: String, dark_palette: Palette, light_palette: Palette) -> Self {
+    /// Create a theme with explicit dark and light palettes.
+    pub fn with_palettes(
+        name: impl Into<String>,
+        dark_palette: Palette,
+        light_palette: Palette,
+    ) -> Self {
         Self {
-            name,
+            name: name.into(),
             dark_palette,
             light_palette,
         }
@@ -87,6 +94,11 @@ impl Theme {
     /// `generator` supplies the seed adjustments and MD3 scheme variant. The
     /// document may be a flat `{ "seed": "#RRGGBB" }` object or a nested
     /// `{ "dark": { ... }, "light": { ... } }` theme with role overrides.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Palette`] when the document has no usable seed (neither
+    /// a `seed` nor a `Primary` color) or a color override cannot be parsed.
     pub fn from_json_value(json: &Value, generator: &LegacyPaletteGenerator) -> Result<Self> {
         let name = json
             .get("seed")
@@ -97,14 +109,23 @@ impl Theme {
     }
 
     /// Build a theme from a JSON file on disk.
-    pub fn from_json_file(source: &str, generator: &LegacyPaletteGenerator) -> Result<Self> {
-        let content = std::fs::read_to_string(source)
-            .map_err(|e| Error::Theme(format!("Failed to read theme file: {}", e)))?;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ThemeRead`] when the file cannot be read, or
+    /// [`Error::ThemeJson`] when its contents are not valid JSON. Palette
+    /// generation failures propagate as [`Error::Palette`].
+    pub fn from_json_file(
+        source: impl AsRef<std::path::Path>,
+        generator: &LegacyPaletteGenerator,
+    ) -> Result<Self> {
+        let path = source.as_ref();
 
-        let json: Value = serde_json::from_str(&content)
-            .map_err(|e| Error::Theme(format!("Invalid JSON format: {}", e)))?;
+        let content = std::fs::read_to_string(path).map_err(Error::ThemeRead)?;
 
-        let name = std::path::Path::new(source)
+        let json: Value = serde_json::from_str(&content).map_err(Error::ThemeJson)?;
+
+        let name = path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("unknown")
@@ -218,7 +239,7 @@ mod tests {
         let err = Theme::from_json_file(temp_file.path().to_str().unwrap(), &test_generator())
             .unwrap_err()
             .to_string();
-        assert!(err.contains("Invalid JSON"));
+        assert!(err.contains("invalid theme JSON"));
     }
 
     #[test]
@@ -226,7 +247,7 @@ mod tests {
         let err = Theme::from_json_file("/nonexistent/path/theme.json", &test_generator())
             .unwrap_err()
             .to_string();
-        assert!(err.contains("Failed to read"));
+        assert!(err.contains("failed to read"));
     }
 
     #[test]

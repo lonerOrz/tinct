@@ -7,6 +7,8 @@
 //! - **presentation** — [`ui`] (logging + preview)
 //! - **application** — [`pipeline`] orchestrates everything
 
+#![forbid(unsafe_code)]
+
 pub mod config;
 pub mod core;
 pub mod image;
@@ -22,10 +24,15 @@ pub mod ui;
 pub use core::color;
 pub use ui::{log, preview};
 
-pub use config::*;
+pub use config::{
+    AlgorithmConfig, AnsiAnchors, AnsiConfig, AnsiPalette, Config, ConfigLoad, ConfigSection,
+    ImageConfig, resolve_theme_path,
+};
 pub use core::color::{Color, Hsl, Rgb};
-pub use ui::log::*;
-pub use ui::preview::*;
+pub use ui::log::{LogLevel, Logger, error, general, hook, info, init_logger};
+pub use ui::preview::{
+    show_color_preview, show_color_preview_from_json, show_color_preview_from_theme,
+};
 
 pub use core::{Error, Mode, Result, Theme};
 

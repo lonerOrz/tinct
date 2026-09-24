@@ -16,6 +16,7 @@
 
 use material_colors::color::Argb;
 use material_colors::dynamic_color::Variant;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -190,22 +191,29 @@ impl ImageOptions {
 }
 
 /// Apply the optional pixel pre-filter.
-fn apply_filter(pixels: &[Rgb], filter: ImageFilter) -> Vec<Rgb> {
+///
+/// Returns a borrowed slice for [`ImageFilter::None`] so the common case never
+/// copies the pixel buffer.
+fn apply_filter(pixels: &[Rgb], filter: ImageFilter) -> Cow<'_, [Rgb]> {
     match filter {
-        ImageFilter::None => pixels.to_vec(),
-        ImageFilter::Saturation => pixels
-            .iter()
-            .copied()
-            .filter(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0)
-            .collect(),
-        ImageFilter::Brightness => pixels
-            .iter()
-            .copied()
-            .filter(|&(r, g, b)| {
-                let luma = (0.299 * r as f64 + 0.587 * g as f64 + 0.114 * b as f64) / 255.0;
-                (0.1..=0.9).contains(&luma)
-            })
-            .collect(),
+        ImageFilter::None => Cow::Borrowed(pixels),
+        ImageFilter::Saturation => Cow::Owned(
+            pixels
+                .iter()
+                .copied()
+                .filter(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0)
+                .collect::<Vec<Rgb>>(),
+        ),
+        ImageFilter::Brightness => Cow::Owned(
+            pixels
+                .iter()
+                .copied()
+                .filter(|&(r, g, b)| {
+                    let luma = (0.299 * r as f64 + 0.587 * g as f64 + 0.114 * b as f64) / 255.0;
+                    (0.1..=0.9).contains(&luma)
+                })
+                .collect::<Vec<Rgb>>(),
+        ),
     }
 }
 
@@ -431,11 +439,14 @@ fn extract_kmeans_source_color(
         _ => return Err("Non-M3 scheme type not supported for k-means extraction".to_string()),
     };
 
-    // For vibrant mode, pre-filter to colorful pixels
-    let mut filtered_pixels = sampled.to_vec();
-    if matches!(scheme_type, SchemeType::Vibrant) {
-        filtered_pixels.retain(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0);
-    }
+    // For vibrant mode, pre-filter to colorful pixels. Other modes borrow the
+    // sampled buffer directly instead of cloning it.
+    let filtered = matches!(scheme_type, SchemeType::Vibrant).then(|| {
+        let mut filtered = sampled.clone();
+        filtered.retain(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0);
+        filtered
+    });
+    let filtered_pixels: &[Rgb] = filtered.as_deref().unwrap_or(&sampled);
 
     if filtered_pixels.is_empty() {
         let colors = kmeans::kmeans_cluster(&sampled, cluster_count, 10);
@@ -461,7 +472,7 @@ fn extract_kmeans_source_color(
     }
 
     // K-means clustering
-    let clusters = kmeans::kmeans_cluster(&filtered_pixels, cluster_count, 10);
+    let clusters = kmeans::kmeans_cluster(filtered_pixels, cluster_count, 10);
 
     if clusters.is_empty() {
         return Err("K-means produced no clusters".to_string());

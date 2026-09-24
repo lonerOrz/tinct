@@ -77,7 +77,12 @@ fn collect_colors_into(
 }
 
 /// Generate a palette using the default Tonal Spot scheme and no adjustments.
-pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
+///
+/// # Errors
+///
+/// Returns an error when `theme` has no usable seed (`seed` or `Primary`) or a
+/// color override cannot be parsed.
+pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> crate::core::Result<Palette> {
     generate_palette_with_params(
         theme,
         is_dark_mode,
@@ -87,12 +92,17 @@ pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, St
 }
 
 /// Generate a palette with an explicit scheme type and seed adjustments.
+///
+/// # Errors
+///
+/// Returns an error when `theme` has no usable seed (`seed` or `Primary`) or a
+/// color override cannot be parsed.
 pub fn generate_palette_with_params(
     theme: &Value,
     is_dark_mode: bool,
     scheme_type: SchemeType,
     params: AlgorithmParameters,
-) -> Result<Palette, String> {
+) -> crate::core::Result<Palette> {
     build_palette(
         theme,
         is_dark_mode,
@@ -105,6 +115,12 @@ pub fn generate_palette_with_params(
 
 /// Generate a palette, threading the source image's color clusters into the
 /// terminal (ANSI) mapping. See [`super::ansi`].
+///
+/// # Errors
+///
+/// Returns [`crate::core::Error::Palette`] when `theme` has no usable seed
+/// (`seed` or `Primary`), and [`crate::core::Error::Color`] when the seed or a
+/// color override cannot be parsed.
 pub fn build_palette(
     theme: &Value,
     is_dark_mode: bool,
@@ -112,9 +128,12 @@ pub fn build_palette(
     params: AlgorithmParameters,
     source_colors: &[Color],
     ansi_params: &ansi::AnsiParams,
-) -> Result<Palette, String> {
-    let seed_hex =
-        extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
+) -> crate::core::Result<Palette> {
+    let seed_hex = extract_seed_hex(theme).ok_or_else(|| {
+        crate::core::Error::Palette(
+            "theme must contain either 'seed' or 'Primary' color".to_string(),
+        )
+    })?;
 
     let seed_argb = parse_hex_color(seed_hex)?;
     let scheme = generate_scheme(seed_argb, is_dark_mode, scheme_type, &params);
@@ -154,8 +173,8 @@ fn adjust_seed(seed: Argb, params: &AlgorithmParameters) -> Argb {
     }
 
     let hct = Hct::new(seed);
-    let hue = ((hct.get_hue() + params.hue_shift as f64) % 360.0 + 360.0) % 360.0;
-    let chroma = (hct.get_chroma() * (1.0 + params.saturation_adjustment as f64 / 100.0))
+    let hue = ((hct.get_hue() + f64::from(params.hue_shift)) % 360.0 + 360.0) % 360.0;
+    let chroma = (hct.get_chroma() * (1.0 + f64::from(params.saturation_adjustment) / 100.0))
         .clamp(0.0, 120.0)
         .max(params.chroma_floor);
     let tone = params.seed_tone.unwrap_or_else(|| hct.get_tone());
@@ -164,20 +183,30 @@ fn adjust_seed(seed: Argb, params: &AlgorithmParameters) -> Argb {
     adjusted
 }
 
-fn parse_hex_color(hex: &str) -> Result<Argb, String> {
+fn parse_hex_color(hex: &str) -> crate::core::Result<Argb> {
     let hex = hex.trim_start_matches('#');
     let argb = if hex.len() == 6 {
-        // 6-digit RGB: treat as opaque (alpha = 255)
-        u32::from_str_radix(&format!("FF{}", hex), 16)
-            .map_err(|e| format!("Invalid hex color '{}': {}", hex, e))?
+        // 6-digit RGB: treat as opaque (alpha = 255) in the ARGB word.
+        u32::from_str_radix(hex, 16)
+            .map(|v| 0xFF00_0000 | v)
+            .map_err(|e| crate::core::Error::Color(format!("invalid hex color '{hex}': {e}")))?
     } else if hex.len() == 8 {
-        u32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex color '{}': {}", hex, e))?
+        // 8-digit input is RRGGBBAA (the CSS form), matching `Color::from_hex`.
+        // Reorder into the ARGB word that `Argb::from_u32` expects.
+        let v = u32::from_str_radix(hex, 16)
+            .map_err(|e| crate::core::Error::Color(format!("invalid hex color '{hex}': {e}")))?;
+        let (r, g, b, a) = (
+            (v >> 24) & 0xFF,
+            (v >> 16) & 0xFF,
+            (v >> 8) & 0xFF,
+            v & 0xFF,
+        );
+        (a << 24) | (r << 16) | (g << 8) | b
     } else {
-        return Err(format!(
-            "Invalid hex color '{}': expected 6 or 8 digits, got {}",
-            hex,
+        return Err(crate::core::Error::Color(format!(
+            "invalid hex color '{hex}': expected 6 or 8 digits, got {}",
             hex.len()
-        ));
+        )));
     };
     Ok(Argb::from_u32(argb))
 }
@@ -204,7 +233,7 @@ fn scheme_to_palette(
     theme: &Value,
     source_colors: &[Color],
     ansi_params: &ansi::AnsiParams,
-) -> Result<Palette, String> {
+) -> crate::core::Result<Palette> {
     let get_override = |key: &str| -> Option<&str> {
         theme
             .get(key)
@@ -215,7 +244,7 @@ fn scheme_to_palette(
     // Helper: resolve a color from scheme or override
     let resolve = |get_color_fn: fn(&DynamicScheme) -> Argb,
                    role_opt: Option<&str>|
-     -> Result<Color, String> {
+     -> crate::core::Result<Color> {
         if let Some(hex) = role_opt.and_then(&get_override) {
             let argb = parse_hex_color(hex)?;
             Ok(argb_to_color(argb))
@@ -224,11 +253,12 @@ fn scheme_to_palette(
         }
     };
 
-    let mut colors: HashMap<ColorRole, Color> = HashMap::new();
-    let mut insert = |role: ColorRole, result: Result<Color, String>| -> Result<(), String> {
-        colors.insert(role, result?);
-        Ok(())
-    };
+    let mut colors: HashMap<ColorRole, Color> = HashMap::with_capacity(66);
+    let mut insert =
+        |role: ColorRole, result: crate::core::Result<Color>| -> crate::core::Result<()> {
+            colors.insert(role, result?);
+            Ok(())
+        };
 
     insert(
         ColorRole::Primary,
@@ -510,7 +540,6 @@ impl LegacyPaletteGenerator {
             &self.source_colors,
             &self.ansi,
         )
-        .map_err(crate::core::Error::Palette)
     }
 }
 
@@ -585,6 +614,16 @@ mod tests {
         assert_eq!(mine.tertiary(), official.tertiary());
         assert_eq!(mine.surface(), official.surface());
         assert_eq!(mine.error(), official.error());
+    }
+
+    /// 8-digit hex is RRGGBBAA, matching `Color::from_hex`.
+    #[test]
+    fn test_parse_hex_color_eight_digit_is_rrggbbaa() {
+        let argb = parse_hex_color("#FF572280").unwrap();
+        assert_eq!(
+            (argb.red, argb.green, argb.blue, argb.alpha),
+            (0xFF, 0x57, 0x22, 0x80)
+        );
     }
 
     /// MD3 guarantees secondary is desaturated and tertiary sits ~60° from the

@@ -15,6 +15,7 @@ use crate::image::{ImageFilter, Quantizer, SchemeType};
 
 /// Image extraction configuration.
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ImageConfig {
     /// Scheme type for color extraction/derivation (tonal-spot, vibrant, ...).
     #[serde(default)]
@@ -41,6 +42,7 @@ pub struct ImageConfig {
 
 /// Color-generation tuning knobs.
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AlgorithmConfig {
     /// Saturation adjustment (-100 to 100)
     #[serde(default)]
@@ -91,6 +93,7 @@ pub enum AnsiPalette {
 /// built-in wallust anchor, so a slot with no matching source color renders
 /// from this color instead. Invalid hex values are ignored with a warning.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct AnsiAnchors {
     #[serde(default)]
     pub red: Option<String>,
@@ -108,6 +111,7 @@ pub struct AnsiAnchors {
 
 /// Terminal (ANSI 16-color) tuning knobs.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AnsiConfig {
     /// Whether bright variants are lighter (`dark`) or darker (`light`).
     #[serde(default)]
@@ -185,6 +189,7 @@ fn default_contrast_target() -> f32 {
 
 /// A single template-injection target.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ConfigSection {
     pub input_path: PathBuf,
     pub output_path: PathBuf,
@@ -435,10 +440,15 @@ contrast_target = 3.0
             };
 
             for (section_name, section_val) in group {
-                // Deserialize directly — a section missing `input_path` or
-                // `output_path` simply fails and is skipped.
-                let Ok(mut section) = section_val.clone().try_into::<ConfigSection>() else {
-                    continue;
+                // Deserialize directly. A section missing `input_path`/
+                // `output_path` (or carrying an unknown key) is reported and
+                // skipped rather than silently ignored.
+                let mut section = match section_val.clone().try_into::<ConfigSection>() {
+                    Ok(section) => section,
+                    Err(e) => {
+                        ::log::warn!("ignoring [{}.{}]: {}", group_key, section_name, e);
+                        continue;
+                    }
                 };
                 canonicalize_section_paths(&mut section, &config_dir);
                 sections.insert(format!("{}.{}", group_key, section_name), section);
@@ -509,13 +519,19 @@ fn config_home() -> Option<PathBuf> {
 ///    falling back to `~/.config/...`)
 pub fn resolve_theme_path(theme_name: &str) -> Result<PathBuf> {
     let candidate = Path::new(theme_name);
-    if candidate.is_absolute() && candidate.exists() {
+    if candidate.is_absolute() && candidate.is_file() {
         return Ok(candidate.to_path_buf());
     }
 
     // Relative path (must be a file, not a directory)
-    if candidate.exists() && candidate.is_file() {
+    if candidate.is_file() {
         return Ok(fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf()));
+    }
+
+    // Project themes directory (relative to the current working directory)
+    let project_theme = Path::new("themes").join(format!("{}.json", theme_name));
+    if project_theme.is_file() {
+        return Ok(project_theme);
     }
 
     // User themes directory
@@ -617,6 +633,31 @@ saturation_adjustment = 999
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("[algorithm]"));
+    }
+
+    #[test]
+    fn test_unknown_algorithm_key_is_rejected() {
+        let result = Config::parse(
+            r#"
+[algorithm]
+saturation_adjusment = 5
+"#,
+            Path::new("/etc/tinct/config.toml"),
+        );
+        assert!(result.is_err(), "a misspelled key must not be ignored");
+    }
+
+    #[test]
+    fn test_section_with_unknown_key_is_skipped() {
+        let config = parse(
+            r#"
+[templates.broken]
+input_path = "/tmp/in"
+output_path = "/tmp/out"
+inptu_path = "/tmp/typo"
+"#,
+        );
+        assert!(config.sections.is_empty());
     }
 
     #[test]

@@ -30,15 +30,17 @@ fn main() {
         }
     };
 
-    let scheme_type = resolve_scheme_type(&args.scheme_type, &config.image.scheme_type);
+    let scheme_type = resolve_scheme_type(args.scheme_type, config.image.scheme_type);
 
     // ArgGroup guarantees exactly one source is present.
-    let theme_source = if let Some(seed) = args.seed.clone() {
-        ThemeSource::Seed(seed)
-    } else if let Some(image) = args.image.clone() {
-        ThemeSource::Image(image)
-    } else {
-        ThemeSource::File(args.theme.clone().expect("ArgGroup guarantees a source"))
+    let theme_source = match (args.seed, args.image, args.theme) {
+        (Some(seed), _, _) => ThemeSource::Seed(seed),
+        (_, Some(image), _) => ThemeSource::Image(image),
+        (_, _, Some(theme)) => ThemeSource::File(theme),
+        (None, None, None) => {
+            eprintln!("Error: Exactly one of --theme, --seed, or --image is required.");
+            process::exit(1);
+        }
     };
 
     let pipeline_config = PipelineConfig {
@@ -58,10 +60,10 @@ fn main() {
 
 /// Resolve scheme type: CLI arg > config file > default.
 fn resolve_scheme_type(
-    cli_scheme: &Option<SchemeType>,
-    config_scheme: &Option<SchemeType>,
+    cli_scheme: Option<SchemeType>,
+    config_scheme: Option<SchemeType>,
 ) -> SchemeType {
     cli_scheme
-        .or(*config_scheme)
+        .or(config_scheme)
         .unwrap_or(SchemeType::TonalSpot)
 }

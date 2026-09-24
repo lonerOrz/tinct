@@ -52,16 +52,16 @@ const LIGHT_L_SHIFT: f32 = 2.0;
 /// hot path never touches strings.
 #[derive(Debug, Clone)]
 pub struct AnsiParams {
-    pub palette: AnsiPalette,
-    pub source_weight: f32,
-    pub chroma_threshold: f32,
-    pub brightness_delta: f32,
-    pub bright_chroma_multiplier: f32,
-    pub contrast_target: f32,
-    pub background: Option<Color>,
-    pub foreground: Option<Color>,
+    palette: AnsiPalette,
+    source_weight: f32,
+    chroma_threshold: f32,
+    brightness_delta: f32,
+    bright_chroma_multiplier: f32,
+    contrast_target: f32,
+    background: Option<Color>,
+    foreground: Option<Color>,
     /// Per-slot anchor overrides, in [`SLOTS`] order.
-    pub anchors: [Option<Lch>; 6],
+    anchors: [Option<Lch>; 6],
 }
 
 impl Default for AnsiParams {
@@ -77,7 +77,7 @@ impl AnsiParams {
             palette: config.palette,
             source_weight: config.source_weight.clamp(0.0, 1.0),
             chroma_threshold: config.chroma_threshold.max(0.0),
-            brightness_delta: config.brightness_delta,
+            brightness_delta: config.brightness_delta.max(0.0),
             bright_chroma_multiplier: config.bright_chroma_multiplier.max(0.0),
             contrast_target: config.contrast_target.clamp(0.0, 21.0),
             background: config.background.as_deref().and_then(parse_color_hex),
@@ -273,29 +273,35 @@ fn apply_anchor(slot: &Slot, anchor: &Option<Lch>) -> Slot {
 /// encodes. With no match the anchor itself is used, which is what keeps a
 /// monochrome input from collapsing into a washed-out palette.
 fn slot_texture(slot: &Slot, remaining: &mut Vec<Lch>, source_weight: f32) -> (f32, f32, f32) {
-    let mut hues = Vec::new();
-    let mut chromas = Vec::new();
-    let mut lights = Vec::new();
+    // Single pass: matched colors have the same count for hue/chroma/light, so
+    // one counter serves all three, and the partial sums accumulate in the same
+    // order (and f32 type) as the previous per-series `mean` calls.
+    let mut sum_hue = 0.0f32;
+    let mut sum_chroma = 0.0f32;
+    let mut sum_light = 0.0f32;
+    let mut count = 0usize;
 
     remaining.retain(|c| {
         let hue = c.hue.into_inner();
         if hue >= slot.hue_start && hue < slot.hue_end {
-            hues.push(hue);
-            chromas.push(c.chroma);
-            lights.push(c.l);
+            sum_hue += hue;
+            sum_chroma += c.chroma;
+            sum_light += c.l;
+            count += 1;
             false
         } else {
             true
         }
     });
 
-    if hues.is_empty() {
+    if count == 0 {
         (slot.anchor_hue, slot.chroma, slot.light)
     } else {
-        let hue = mean(&hues).rem_euclid(360.0);
+        let n = count as f32;
+        let hue = (sum_hue / n).rem_euclid(360.0);
         let anchor_weight = 1.0 - source_weight;
-        let chroma = slot.chroma * anchor_weight + mean(&chromas) * source_weight;
-        let light = slot.light * anchor_weight + mean(&lights) * source_weight;
+        let chroma = slot.chroma * anchor_weight + (sum_chroma / n) * source_weight;
+        let light = slot.light * anchor_weight + (sum_light / n) * source_weight;
         (hue, chroma.clamp(0.0, MAX_CHROMA), light)
     }
 }
@@ -391,10 +397,6 @@ fn ensure_contrast(mut lch: Lch, background: Srgb<f32>, is_dark: bool, target: f
 }
 
 // ---- conversion helpers ----
-
-fn mean(values: &[f32]) -> f32 {
-    values.iter().sum::<f32>() / values.len().max(1) as f32
-}
 
 fn lch_of(argb: Argb) -> Lch {
     let srgb = Srgb::new(argb.red, argb.green, argb.blue).into_format::<f32>();
