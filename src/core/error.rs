@@ -1,10 +1,7 @@
-//! Error types for tinct
-//!
-//! Provides a unified error handling approach using thiserror.
+//! Error types for tinct.
 
 use thiserror::Error;
 
-/// Main error type for tinct operations
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
@@ -49,5 +46,4 @@ pub enum Error {
     ThemeJson(#[source] serde_json::Error),
 }
 
-/// Result type alias for tinct operations
 pub type Result<T> = std::result::Result<T, Error>;

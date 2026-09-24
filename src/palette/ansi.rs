@@ -127,11 +127,6 @@ struct Slot {
 }
 
 /// ANSI order: red, green, yellow, blue, magenta, cyan.
-///
-/// Ranges partition the CIE LCh hue wheel so every slot stays semantically
-/// correct (red = error, green = success, yellow = warning, …). The anchors are
-/// vivid representatives of each family — the colours wallust converges on —
-/// and are used verbatim when the input has nothing in the slot's range.
 const SLOTS: [Slot; 6] = [
     Slot {
         normal: ColorRole::Red,

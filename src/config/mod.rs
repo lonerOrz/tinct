@@ -440,9 +440,9 @@ contrast_target = 3.0
             };
 
             for (section_name, section_val) in group {
-                // Deserialize directly. A section missing `input_path`/
-                // `output_path` (or carrying an unknown key) is reported and
-                // skipped rather than silently ignored.
+                // Deserialize directly. A section missing `input_path`/`output_path`
+                // (or carrying an unknown key) is reported and skipped rather than
+                // silently ignored.
                 let mut section = match section_val.clone().try_into::<ConfigSection>() {
                     Ok(section) => section,
                     Err(e) => {
@@ -485,9 +485,6 @@ fn canonicalize_section_paths(section: &mut ConfigSection, base_dir: &Path) {
     section.input_path = resolve_path(&section.input_path, base_dir);
     section.output_path = resolve_path(&section.output_path, base_dir);
 
-    // A relative hook script (`./reload.sh`) is bound to the config directory.
-    // Only the leading path token is resolved; any arguments are kept verbatim
-    // so that `./reload.sh --flag` does not treat `--flag` as part of the path.
     if let Some(hook) = section.post_hook.as_mut()
         && let Some(rest) = hook.strip_prefix("./")
     {

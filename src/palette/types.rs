@@ -4,7 +4,6 @@ use crate::core::color::Color;
 use std::collections::HashMap;
 
 /// Exhaustive Material Design 3 color roles.
-/// String representation is snake_case to match template keys (e.g., "primary", "on_secondary_container").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum ColorRole {

@@ -15,30 +15,21 @@ const EXTRACT_SIZE: u32 = 112;
 
 /// Read an image file and return its pixels as RGB tuples.
 ///
-/// The image is downscaled to `EXTRACT_SIZE` x `EXTRACT_SIZE` using
-/// the specified filter type for efficient color extraction.
-///
-/// # Arguments
-/// * `path` - Path to the image file (PNG, JPEG, WebP supported)
-/// * `filter` - Resize filter type
+/// The image is downscaled to `EXTRACT_SIZE` × `EXTRACT_SIZE` using the
+/// specified filter type for efficient color extraction.
 ///
 /// # Errors
 /// Returns an error if the file cannot be read or decoded.
 pub fn read_image(path: &Path, filter: ResizeFilter) -> Result<Vec<Rgb>, String> {
-    // Use ImageReader which can auto-detect format from content.
-    // This handles symlinks without extensions (e.g. `background` → `foo.jpg`).
     let mut reader =
         image::ImageReader::open(path).map_err(|e| format!("Failed to open image: {}", e))?;
 
-    // Try to detect format from file extension first, then fall back to content sniffing.
     if reader.format().is_none() {
-        // Follow symlinks to get the real path for extension-based detection
         let canonical = path
             .canonicalize()
             .map_err(|e| format!("Failed to resolve path: {}", e))?;
         let reader2 = image::ImageReader::open(&canonical)
             .map_err(|e| format!("Failed to open image: {}", e))?;
-        // If still no format from extension, try content sniffing
         reader = if reader2.format().is_none() {
             reader2
                 .with_guessed_format()
@@ -63,7 +54,6 @@ pub fn read_image(path: &Path, filter: ResizeFilter) -> Result<Vec<Rgb>, String>
     let mut pixels = Vec::with_capacity((width * height) as usize);
 
     for pixel in rgba.pixels() {
-        // Skip fully transparent pixels
         if pixel[3] > 0 {
             pixels.push((pixel[0], pixel[1], pixel[2]));
         }

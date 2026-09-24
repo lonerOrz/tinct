@@ -1,11 +1,8 @@
 //! WSMeans k-means refinement and color scoring utilities.
 //!
-//! This module provides the WSMeans refinement (`quantize_wsmeans`) that the M3
-//! extraction pipeline runs over the Wu quantizer's clusters to sharpen them,
-//! together with the `score_colors` hue/chroma scoring used to pick the final
-//! source color.
-//!
-//! Reference: material-color-utilities quantizer pipeline
+//! Provides the WSMeans refinement (`quantize_wsmeans`) that the M3 extraction
+//! pipeline runs over the Wu quantizer's clusters, together with the
+//! `score_colors` hue/chroma scoring used to pick the final source color.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;

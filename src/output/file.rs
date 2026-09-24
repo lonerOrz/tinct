@@ -1,9 +1,9 @@
-//! File output format implementation
+//! File output — writes rendered template content to disk.
 
 use crate::core::{Error, Result};
 use std::path::Path;
 
-/// Output to a file
+/// Output to a local file.
 pub struct FileOutput;
 
 impl FileOutput {

@@ -237,7 +237,6 @@ impl Color {
     /// `desaturate` shift chroma. This keeps results visually even, unlike HSL
     /// where equal lightness steps are perceptually uneven.
     pub fn apply_filter(&self, filter: &ColorFilter) -> Self {
-        // Alpha-only filter: leave RGB untouched.
         if let ColorFilter::SetAlpha(a) = filter {
             return Self::new(self.r, self.g, self.b, a.clamp(0.0, 1.0));
         }

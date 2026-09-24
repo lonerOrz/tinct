@@ -1,5 +1,3 @@
-//! Common type definitions for tinct.
-
 use std::collections::HashMap;
 
 use serde_json::Value;

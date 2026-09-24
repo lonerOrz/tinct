@@ -1,4 +1,9 @@
-//! Template processor implementation
+//! Template processor — regex-driven placeholder replacement.
+//!
+//! Two `LazyLock<Regex>` drive the render pass: `COLOR_REGEX` handles all
+//! color placeholders (`{{colors.role.mode.prop|filter:param}}`), while
+//! `META_REGEX` handles mode metadata (`{{mode}}`, `{{is_dark}}`,
+//! `{{is_light}}`). Both tolerate arbitrary whitespace around the keys.
 
 use crate::core::color::Color;
 use crate::core::{Mode, Result, Theme};
@@ -83,9 +88,6 @@ impl TemplateProcessor {
                     "Warning: color '{}' not found in palette, using black",
                     key
                 ));
-                // Format the fallback through the requested property so that
-                // e.g. `{{colors.x.default.red}}` yields a channel value and not
-                // a raw hex string.
                 Color::new(0, 0, 0, 1.0).format(&prop_enum)
             }
         });

@@ -1,8 +1,8 @@
 //! Terminal status logging.
 //!
-//! A tiny leveled logger built on `colored`. The verbosity is set once at
-//! startup via [`init_logger`] and read by the `info` / `error` / `hook` /
-//! `general` helper modules.
+//! A tiny leveled logger backed by `colored`. The verbosity is stored in an
+//! `AtomicU8` so `init_logger` can change it at any time — unlike `OnceLock`,
+//! a second call actually takes effect.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -40,8 +40,7 @@ impl From<u8> for LogLevel {
     }
 }
 
-// Thread-safe mutable logger level stored as a u8 (0=Quiet, 1=Normal, 2=Verbose).
-// AtomicU8 allows the level to change without rebuilding Logger.
+/// Thread-safe mutable logger level (0=Quiet, 1=Normal, 2=Verbose).
 static LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Normal.as_u8());
 
 /// Set the logger verbosity.
@@ -54,7 +53,6 @@ fn get_level() -> LogLevel {
     LEVEL.load(Ordering::SeqCst).into()
 }
 
-// Info module
 pub mod info {
     use super::*;
 
@@ -79,7 +77,6 @@ pub mod error {
     use super::*;
 
     pub fn message(section: &str, msg: &str) {
-        // Errors are always shown, regardless of the configured level.
         eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
     }
 
@@ -88,7 +85,6 @@ pub mod error {
     }
 }
 
-// Hook module
 pub mod hook {
     use super::*;
 
@@ -115,7 +111,6 @@ pub mod hook {
     }
 }
 
-// General purpose functions
 pub mod general {
     use super::*;
 
@@ -143,8 +138,6 @@ mod tests {
 
     #[test]
     fn test_init_logger_and_levels() {
-        // Initialising must not panic at any level, and subsequent calls must
-        // flip the level (AtomicU8), unlike OnceLock where only the first call wins.
         init_logger(LogLevel::Quiet);
         assert_eq!(get_level(), LogLevel::Quiet);
 

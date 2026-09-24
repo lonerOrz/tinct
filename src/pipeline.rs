@@ -1,7 +1,7 @@
-//! Pipeline module — single entry point for the entire tinct workflow.
+//! Pipeline — single entry point for the entire tinct workflow.
 //!
 //! `Pipeline::run(config)` handles theme creation, palette generation,
-//! template rendering, output, and post-hooks. One interface, one place to test.
+//! template rendering, output, and post-hooks.
 
 use colored::*;
 use rayon::prelude::*;
@@ -58,7 +58,6 @@ impl Pipeline {
             theme_source,
         } = pipeline;
 
-        // Initialize logger
         log::init_logger(log_level);
 
         // Create theme data from source (image sources also yield clusters)
@@ -359,8 +358,8 @@ fn run_post_hook(post_hook: &str, output_file: &Path, section_name: Option<&str>
     let output = output_file.to_string_lossy();
 
     // Split the leading program token from its arguments. A script path is
-    // executed directly (arguments passed separately) instead of through a
-    // shell; anything else is handed to the platform shell.
+    // executed directly (arguments passed separately); anything else goes
+    // through the platform shell.
     let (program, args) = post_hook
         .split_once(char::is_whitespace)
         .map_or((post_hook, ""), |(p, a)| (p, a));

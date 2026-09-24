@@ -1,18 +1,8 @@
 //! Image-based color extraction.
 //!
-//! Unified entry point for extracting source colors from wallpaper images.
-//! Routes to the appropriate algorithm based on `SchemeType`.
-//!
-//! # M3 Schemes (Wu + WSMeans + Score)
-//! - `tonal-spot`, `content`, `fruit-salad`, `rainbow`, `monochrome`
-//!   → Use Wu quantizer → WSMeans refinement → Score algorithm
-//!   → Returns the top-scored color as the source color
-//!
-//! # Non-M3 Schemes (K-means + custom scoring)
-//! - `vibrant` → K-means with chroma scoring
-//! - `faithful` → K-means with count scoring
-//! - `dysfunctional` → K-means with dysfunctional scoring
-//! - `muted` → K-means with muted scoring
+//! Routes to the appropriate algorithm based on [`SchemeType`]:
+//! M3 schemes use Wu quantization → WSMeans refinement → scoring;
+//! non-M3 schemes use K-means clustering with mode-specific scorers.
 
 use material_colors::color::Argb;
 use material_colors::dynamic_color::Variant;
@@ -323,13 +313,11 @@ pub fn extract_source_palette_with(
         colors,
     })
 }
-
-/// Convert a color-count map into at most `cap` [`Color`] clusters, most
 /// prominent first.
 fn clusters_from_counts(counts: &HashMap<u32, i64>, cap: usize) -> Vec<Color> {
     let mut entries: Vec<(u32, i64)> = counts.iter().map(|(&c, &n)| (c, n)).collect();
-    // Population descending, then ARGB ascending: a total order, so the result
-    // never depends on randomized `HashMap` iteration.
+    // Population descending, then ARGB ascending — a total order so the
+    // result never depends on randomized `HashMap` iteration.
     entries.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     entries
         .into_iter()
@@ -361,19 +349,12 @@ fn extract_m3_source_color(
     pixels: &[Rgb],
     options: &ImageOptions,
 ) -> Result<(u32, Vec<Color>), String> {
-    // Step 1: Wu quantization (128 colors)
     let wu_result = quantizer::quantize_wu(pixels, 128);
 
     if wu_result.is_empty() {
         return Err("Wu quantizer produced no colors".to_string());
     }
 
-    // Step 2: WSMeans refinement in Lab space (unless Wu-only was requested).
-    //
-    // WSMeans is deterministic *given* the order of the starting clusters, so
-    // the order must not come from `HashMap` iteration (which is randomized per
-    // process). Order by population (then ARGB) so the same image always yields
-    // the same palette.
     let color_to_count = if options.quantizer == Quantizer::Wu {
         wu_result
     } else {
@@ -383,14 +364,12 @@ fn extract_m3_source_color(
         let wsmeans_result = wsmeans::quantize_wsmeans(pixels, 128, &starting_clusters);
 
         if wsmeans_result.is_empty() {
-            // Fall back to Wu result if WSMeans fails
             wu_result
         } else {
             wsmeans_result
         }
     };
 
-    // Step 3: Filter low-chroma colors (like Python)
     const MIN_CHROMA: f64 = 5.0;
     let mut filtered: HashMap<u32, i64> = HashMap::new();
     for (&argb, &count) in &color_to_count {
@@ -410,7 +389,6 @@ fn extract_m3_source_color(
     };
     let filtered = filter_population_counts(&filtered, options.min_population);
 
-    // Step 4: Score and pick the best color
     let clusters = clusters_from_counts(&filtered, options.cluster_cap());
     let scored = wsmeans::score_colors(&filtered, 4, true);
     let best = scored
@@ -427,10 +405,8 @@ fn extract_kmeans_source_color(
     scheme_type: SchemeType,
     options: &ImageOptions,
 ) -> Result<(u32, Vec<Color>), String> {
-    // Downsample for performance
     let sampled = kmeans::downsample_pixels(pixels, 4);
 
-    // Determine cluster count and scoring method
     let (cluster_count, scoring) = match scheme_type {
         SchemeType::Vibrant => (20, ScoringMode::Chroma),
         SchemeType::Faithful => (48, ScoringMode::Count),
@@ -439,8 +415,6 @@ fn extract_kmeans_source_color(
         _ => return Err("Non-M3 scheme type not supported for k-means extraction".to_string()),
     };
 
-    // For vibrant mode, pre-filter to colorful pixels. Other modes borrow the
-    // sampled buffer directly instead of cloning it.
     let filtered = matches!(scheme_type, SchemeType::Vibrant).then(|| {
         let mut filtered = sampled.clone();
         filtered.retain(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0);

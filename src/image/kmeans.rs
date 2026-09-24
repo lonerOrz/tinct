@@ -31,7 +31,6 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
         return Vec::new();
     }
 
-    // Pre-compute Lab values and deduplicate pixels for performance
     let mut pixel_counts: HashMap<Rgb, i64> = HashMap::new();
     for &p in pixels {
         *pixel_counts.entry(p).or_insert(0) += 1;
@@ -74,7 +73,6 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
     let mut counts = vec![0i64; actual_k];
 
     for _ in 0..iterations {
-        // Assign colors to nearest centroid (parallel)
         assignments
             .par_iter_mut()
             .enumerate()
@@ -123,7 +121,6 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
     for i in 0..actual_k {
         if counts[i] > 0 {
             let centroid_rgb = lab_to_rgb(centroids[i].0, centroids[i].1, centroids[i].2);
-            // Find representative (closest actual pixel to centroid)
             let mut best_rep = unique_pixels[0].0;
             let mut best_dist = f64::MAX;
             for (idx, &color) in colors_lab.iter().enumerate() {
@@ -139,7 +136,6 @@ pub fn kmeans_cluster(pixels: &[Rgb], k: usize, iterations: usize) -> Vec<(Rgb, 
         }
     }
 
-    // Sort by cluster size (most common first)
     results.sort_by_key(|b| std::cmp::Reverse(b.2));
     results
 }
@@ -180,11 +176,9 @@ pub fn score_colors_chroma(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)>
         let (r, g, b) = rgb;
         let (hue, chroma) = estimate_hct(r, g, b);
 
-        // Tone estimation from Lab L
         let (l, _, _) = rgb_to_lab(r, g, b);
         let tone = l;
 
-        // Tone penalty
         let tone_penalty = if tone < 20.0 {
             (20.0 - tone) * 2.0
         } else if tone > 80.0 {
@@ -197,7 +191,6 @@ pub fn score_colors_chroma(colors_with_counts: &[(Rgb, i64)]) -> Vec<(Rgb, f64)>
             0.0
         };
 
-        // Hue penalty — slight penalty for yellow-green hues
         let hue_penalty = if (80.0..110.0).contains(&hue) {
             5.0
         } else {
@@ -406,10 +399,6 @@ mod tests {
 
     #[test]
     fn test_kmeans_k_larger_than_unique_does_not_degenerate() {
-        // Regression test for: when `k` exceeds the number of unique colours,
-        // `actual_k` must be bounded by the unique count, not by `pixels.len()`.
-        // Previously this caused a zero stride and every centroid collapsed
-        // onto the same colour.
         let pixels: Vec<Rgb> = vec![(255, 0, 0), (0, 255, 0), (0, 0, 255)];
         let result = kmeans_cluster(&pixels, 10, 10);
         // Three unique colours → at most three non-empty clusters.
@@ -429,21 +418,14 @@ mod tests {
 
     #[test]
     fn test_score_chroma_prefers_vibrant() {
-        let colors = vec![
-            ((255, 0, 0), 10),     // Vibrant red
-            ((128, 128, 128), 50), // Gray (high count, low chroma)
-        ];
+        let colors = vec![((255, 0, 0), 10), ((128, 128, 128), 50)];
         let scored = score_colors_chroma(&colors);
-        // Vibrant red should score higher despite lower count
         assert_eq!(scored[0].0, (255, 0, 0));
     }
 
     #[test]
     fn test_score_count_prefers_dominant() {
-        let colors = vec![
-            ((255, 0, 0), 10),
-            ((0, 0, 255), 100), // More pixels
-        ];
+        let colors = vec![((255, 0, 0), 10), ((0, 0, 255), 100)];
         let scored = score_colors_count(&colors);
         assert_eq!(scored[0].0, (0, 0, 255));
     }
@@ -452,7 +434,6 @@ mod tests {
     fn test_score_muted_accepts_gray() {
         let colors = vec![((128, 128, 128), 50), ((255, 0, 0), 10)];
         let scored = score_colors_muted(&colors);
-        // Gray should be first (highest count)
         assert_eq!(scored[0].0, (128, 128, 128));
     }
 }

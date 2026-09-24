@@ -1,11 +1,10 @@
-//! Palette generation using the official Material You algorithm.
-//!
-//! Generation is delegated entirely to the `material-colors` crate. We never
-//! reimplement MD3's hue/chroma tables: we select the official `Variant` that
-//! matches the requested [`SchemeType`], optionally nudge the seed (hue shift /
-//! chroma scaling / contrast level), and let [`DynamicScheme::by_variant`]
-//! derive the complete, spec-compliant scheme.
-
+/// Palette generation using the official Material You algorithm.
+///
+/// Generation is delegated entirely to the `material-colors` crate. We never
+/// reimplement MD3's hue/chroma tables: we select the official `Variant` that
+/// matches the requested [`SchemeType`], optionally nudge the seed (hue shift /
+/// chroma scaling / contrast level), and let [`DynamicScheme::by_variant`]
+/// derive the complete, spec-compliant scheme.
 use material_colors::color::Argb;
 use material_colors::dynamic_color::DynamicScheme;
 use material_colors::hct::Hct;
