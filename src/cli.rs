@@ -37,6 +37,10 @@ pub struct CliArgs {
     #[arg(short, long, value_enum, default_value = "dark")]
     pub mode: tinct::Mode,
 
+    /// Show color preview instead of processing templates
+    #[arg(short, long)]
+    pub preview: bool,
+
     /// Logging level: quiet, normal, verbose
     #[arg(long, value_enum, default_value = "normal")]
     pub log_level: tinct::LogLevel,
