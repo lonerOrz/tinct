@@ -8,7 +8,7 @@
 use image::imageops::FilterType;
 use std::path::Path;
 
-pub use crate::color::Rgb;
+pub use crate::core::color::Rgb;
 
 /// Default resize dimension for color extraction (matches matugen).
 const EXTRACT_SIZE: u32 = 112;

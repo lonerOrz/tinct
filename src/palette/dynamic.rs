@@ -14,7 +14,8 @@ use serde_json::Value;
 use super::ansi;
 use super::params::AlgorithmParameters;
 use super::types::{ColorRole, Palette};
-use crate::color::Color;
+use crate::core::Mode;
+use crate::core::color::Color;
 use crate::image::SchemeType;
 use std::collections::HashMap;
 
@@ -353,6 +354,49 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
     Ok(Palette::new(colors))
 }
 
+/// Stateful palette generator: seed adjustments plus the MD3 scheme variant.
+///
+/// A thin facade over [`generate_palette_with_params`] so callers can hold a
+/// configured generator instead of threading parameters through every call.
+/// The historical name is kept to avoid churning the public API.
+pub struct LegacyPaletteGenerator {
+    params: AlgorithmParameters,
+    scheme_type: SchemeType,
+}
+
+impl LegacyPaletteGenerator {
+    pub fn new(params: AlgorithmParameters, scheme_type: SchemeType) -> Self {
+        Self {
+            params,
+            scheme_type,
+        }
+    }
+
+    /// Generator with no seed adjustments and the default Tonal Spot scheme.
+    pub fn with_defaults() -> Self {
+        Self {
+            params: AlgorithmParameters::default(),
+            scheme_type: SchemeType::TonalSpot,
+        }
+    }
+
+    /// The scheme variant this generator produces.
+    pub fn scheme_type(&self) -> SchemeType {
+        self.scheme_type
+    }
+
+    pub fn generate(&self, theme: &Value, mode: Mode) -> crate::core::Result<Palette> {
+        generate_palette_with_params(theme, mode.is_dark(), self.scheme_type, self.params)
+            .map_err(crate::core::Error::Palette)
+    }
+}
+
+impl Default for LegacyPaletteGenerator {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,7 +456,7 @@ mod tests {
     /// hand-rolled algorithm.
     #[test]
     fn test_tonal_spot_relationships() {
-        use crate::color::{estimate_chroma, estimate_hct, hue_distance};
+        use crate::core::color::{estimate_chroma, estimate_hct, hue_distance};
 
         let theme = json!({ "seed": "#FF5722" });
         let palette = generate_palette(&theme, false).unwrap();
@@ -452,5 +496,225 @@ mod tests {
             spot.get("primary").unwrap().hex(),
             mono.get("primary").unwrap().hex()
         );
+    }
+
+    // ---- LegacyPaletteGenerator facade (formerly palette/adapter.rs) ----
+
+    #[test]
+    fn test_legacy_palette_generator_new() {
+        let params = AlgorithmParameters {
+            saturation_adjustment: 10,
+            hue_shift: 15,
+            ..Default::default()
+        };
+        let generator = LegacyPaletteGenerator::new(params, SchemeType::Content);
+        assert_eq!(generator.params.saturation_adjustment, 10);
+        assert_eq!(generator.scheme_type(), SchemeType::Content);
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_with_defaults() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        assert_eq!(generator.params.saturation_adjustment, 0);
+        assert_eq!(generator.params.hue_shift, 0);
+        assert_eq!(generator.scheme_type(), SchemeType::TonalSpot);
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_default() {
+        let generator = LegacyPaletteGenerator::default();
+        assert_eq!(generator.params.saturation_adjustment, 0);
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_dark_mode() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({ "seed": "#FF5722" });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let palette = result.unwrap();
+        let map = palette.to_map();
+        assert!(!map.is_empty());
+        assert!(map.contains_key("primary"));
+        assert!(map.contains_key("secondary"));
+        assert!(map.contains_key("tertiary"));
+        assert!(map.contains_key("surface"));
+        assert!(map.contains_key("error"));
+
+        let primary = map.get("primary").unwrap();
+        assert!(!primary.hex().is_empty());
+        assert!(primary.hex().starts_with("#"));
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_light_mode() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({ "seed": "#2196F3" });
+
+        let result = generator.generate(&theme, Mode::Light);
+        assert!(result.is_ok());
+
+        let palette = result.unwrap();
+        let map = palette.to_map();
+        assert!(!map.is_empty());
+
+        let primary = map.get("primary").unwrap();
+        assert!(!primary.hex().is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_with_hue_shift() {
+        let params = AlgorithmParameters {
+            hue_shift: 180,
+            ..Default::default()
+        };
+        let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
+        let theme = json!({ "seed": "#FF0000" });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let palette = result.unwrap();
+        let map = palette.to_map();
+        let primary = map.get("primary").unwrap();
+        assert!(!primary.hex().is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_with_saturation() {
+        let params = AlgorithmParameters {
+            saturation_adjustment: 50,
+            ..Default::default()
+        };
+        let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
+        let theme = json!({ "seed": "#FF5722" });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let palette = result.unwrap();
+        let map = palette.to_map();
+        let primary = map.get("primary").unwrap();
+        assert!(!primary.hex().is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_scheme_type_affects_output() {
+        let theme = json!({ "seed": "#FF5722" });
+        let spot =
+            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot)
+                .generate(&theme, Mode::Dark)
+                .unwrap();
+        let mono =
+            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::Monochrome)
+                .generate(&theme, Mode::Dark)
+                .unwrap();
+        assert_ne!(
+            spot.get("primary").unwrap().hex(),
+            mono.get("primary").unwrap().hex()
+        );
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_all_color_roles() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({ "seed": "#6200EE" });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let palette = result.unwrap();
+        let map = palette.to_map();
+
+        let expected_roles: &[&str] = &[
+            "primary",
+            "on_primary",
+            "primary_container",
+            "on_primary_container",
+            "secondary",
+            "on_secondary",
+            "secondary_container",
+            "on_secondary_container",
+            "tertiary",
+            "on_tertiary",
+            "tertiary_container",
+            "on_tertiary_container",
+            "error",
+            "on_error",
+            "error_container",
+            "on_error_container",
+            "background",
+            "on_background",
+            "surface",
+            "on_surface",
+            "surface_variant",
+            "on_surface_variant",
+            "outline",
+            "outline_variant",
+            "shadow",
+            "scrim",
+            "inverse_surface",
+            "inverse_on_surface",
+            "inverse_primary",
+            "surface_dim",
+            "surface_bright",
+            "surface_container_lowest",
+            "surface_container_low",
+            "surface_container",
+            "surface_container_high",
+            "surface_container_highest",
+            "black",
+            "red",
+            "green",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "white",
+            "bright_black",
+            "bright_red",
+            "bright_green",
+            "bright_yellow",
+            "bright_blue",
+            "bright_magenta",
+            "bright_cyan",
+            "bright_white",
+        ];
+
+        for role in expected_roles {
+            assert!(map.contains_key(*role), "Missing color role: {}", role);
+            let color = map.get(*role).unwrap();
+            assert!(!color.hex().is_empty(), "Empty hex for role: {}", role);
+        }
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_invalid_theme() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({ "no_seed": "value" });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("seed") || err_msg.contains("Primary"));
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_with_overrides() {
+        let generator = LegacyPaletteGenerator::with_defaults();
+        let theme = json!({ "seed": "#FF5722", "error": "#FF0000", "surface": "#121212" });
+
+        let result = generator.generate(&theme, Mode::Dark);
+        assert!(result.is_ok());
+
+        let palette = result.unwrap();
+        let map = palette.to_map();
+        let error = map.get("error").unwrap();
+        assert_eq!(error.hex(), "#FF0000");
+
+        let surface = map.get("surface").unwrap();
+        assert_eq!(surface.hex(), "#121212");
     }
 }

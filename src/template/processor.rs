@@ -1,6 +1,6 @@
 //! Template processor implementation
 
-use crate::color::Color;
+use crate::core::color::Color;
 use crate::core::{Mode, Result, Theme};
 use crate::template::filters::{ColorFilter, ColorProperty};
 use regex::Regex;
@@ -78,7 +78,7 @@ impl TemplateProcessor {
                     color.format(&prop_enum)
                 }
             } else {
-                crate::log::general::info(&format!(
+                crate::ui::log::general::info(&format!(
                     "Warning: color '{}' not found in palette, using #000000",
                     key
                 ));
@@ -105,7 +105,7 @@ impl TemplateProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::color::Color;
+    use crate::core::color::Color;
     use crate::palette::ColorRole;
 
     fn make_theme_with_color(role: ColorRole, hex: &str) -> Theme {

@@ -1,3 +1,9 @@
+//! Configuration parsing plus path resolution for config-relative paths.
+
+pub mod path;
+
+pub use path::{resolve_config_file_path, resolve_config_paths, resolve_theme_path};
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;

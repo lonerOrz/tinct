@@ -21,8 +21,9 @@ pub struct CliArgs {
     #[arg(short = 'i', long)]
     pub image: Option<String>,
 
-    /// Color scheme type for image extraction (tonal-spot, vibrant, faithful, etc.)
-    /// If not provided, uses config file or defaults to tonal-spot
+    /// MD3 scheme variant used to build the palette (tonal-spot, vibrant, content, ...).
+    /// For image sources it also selects the extraction pipeline. If not provided, uses
+    /// the config file value or defaults to tonal-spot.
     #[arg(long, value_name = "SCHEME")]
     pub scheme_type: Option<SchemeType>,
 

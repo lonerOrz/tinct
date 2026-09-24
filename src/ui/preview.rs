@@ -2,11 +2,10 @@
 //!
 //! Displays Material Design 3 color palettes in the terminal with actual color blocks.
 
-use crate::color::Color;
-use crate::core::Mode;
+use crate::core::color::Color;
+use crate::core::{Mode, Theme};
 use crate::image::SchemeType;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator, Palette};
-use crate::theme::JsonThemeLoader;
 use colored::*;
 use std::collections::HashMap;
 
@@ -24,34 +23,26 @@ pub fn show_color_preview_from_theme(palette: &Palette, mode: Mode) -> Result<()
 }
 
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    let palette_gen =
-        LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot);
-    let theme_loader = JsonThemeLoader::new(palette_gen);
-    let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
-
-    let mode = parse_mode(mode);
-    let palette = if mode == Mode::Dark {
-        &theme.dark_palette
-    } else {
-        &theme.light_palette
-    };
-
-    show_color_preview_from_theme(palette, mode)
+    let theme =
+        Theme::from_json_file(theme_path, &preview_generator()).map_err(|e| e.to_string())?;
+    show_color_preview_for_theme(&theme, parse_mode(mode))
 }
 
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
-    let palette_gen =
-        LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot);
-    let theme_loader = JsonThemeLoader::new(palette_gen);
-    let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
+    let theme = Theme::from_json_value(json, &preview_generator()).map_err(|e| e.to_string())?;
+    show_color_preview_for_theme(&theme, parse_mode(mode))
+}
 
-    let mode = parse_mode(mode);
-    let palette = if mode == Mode::Dark {
-        &theme.dark_palette
-    } else {
-        &theme.light_palette
+/// Generator used by the standalone preview entry points.
+fn preview_generator() -> LegacyPaletteGenerator {
+    LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot)
+}
+
+fn show_color_preview_for_theme(theme: &Theme, mode: Mode) -> Result<(), String> {
+    let palette = match mode {
+        Mode::Dark => &theme.dark_palette,
+        Mode::Light => &theme.light_palette,
     };
-
     show_color_preview_from_theme(palette, mode)
 }
 
@@ -311,8 +302,9 @@ fn display_md3_cards_grid(colors: &HashMap<String, Color>) -> Result<(), String>
                         );
 
                         let color_block = centered.on_truecolor(color.r, color.g, color.b);
-                        let luminance =
-                            crate::color::calculate_relative_luminance(color.r, color.g, color.b);
+                        let luminance = crate::core::color::calculate_relative_luminance(
+                            color.r, color.g, color.b,
+                        );
                         let text_color = if luminance > 0.1791 {
                             color_block.black()
                         } else {
@@ -367,7 +359,7 @@ fn print_terminal_palette(colors: &HashMap<String, Color>) {
 
         if let Some(color1) = colors.get(*key1) {
             let luminance1 =
-                crate::color::calculate_relative_luminance(color1.r, color1.g, color1.b);
+                crate::core::color::calculate_relative_luminance(color1.r, color1.g, color1.b);
             let block1 = format!(" {:<24} ", key1);
             let color_block1 = if luminance1 > 0.1791 {
                 block1.black().on_truecolor(color1.r, color1.g, color1.b)
@@ -381,7 +373,7 @@ fn print_terminal_palette(colors: &HashMap<String, Color>) {
 
         if let Some(color2) = colors.get(*key2) {
             let luminance2 =
-                crate::color::calculate_relative_luminance(color2.r, color2.g, color2.b);
+                crate::core::color::calculate_relative_luminance(color2.r, color2.g, color2.b);
             let block2 = format!(" {:<24} ", key2);
             let color_block2 = if luminance2 > 0.1791 {
                 block2.black().on_truecolor(color2.r, color2.g, color2.b)

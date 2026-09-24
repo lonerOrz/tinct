@@ -20,11 +20,32 @@ tinct is a command-line utility that generates themed configuration files based 
   - `contrast_level` for accessibility
   - `hue_shift` / `saturation_adjustment` to nudge the seed color
 - Support for post-processing hooks
-- Modular architecture for easy extensibility
+- Layered architecture (domain / infrastructure / presentation) with high cohesion and low coupling
 - **Smart color generation** from single seed color
 - Consistent alpha values (0.0-1.0 range)
 - Perceptually uniform HCT-based color filters
 - **Simplified theme format** - no more dark/light nesting
+
+## Project layout
+
+The crate is organised in layers so every concern has exactly one home:
+
+```text
+src/
+├── main.rs, cli.rs     # entry point + argument parsing
+├── pipeline.rs         # application orchestration
+├── core/               # domain: Color/HCT, filters, Error, Mode, Theme
+├── palette/            # domain: MD3 generation (dynamic.rs), ANSI, params
+├── image/              # domain: quantization + source-color extraction
+├── template/           # domain: placeholder rendering + color filters
+├── config/             # infrastructure: TOML parsing + path resolution
+├── output/             # infrastructure: file writing
+└── ui/                 # presentation: logging + color preview
+```
+
+`lib.rs` re-exports the public API, including backward-compatible aliases
+(`tinct::color`, `tinct::log`, `tinct::preview`, `tinct::path_resolver`) for
+modules that moved during the reorganisation.
 
 ## Installation
 
@@ -230,6 +251,13 @@ scheme_type = "vibrant"    # Extraction algorithm and MD3 scheme variant
 
 The resolved `--scheme-type` applies to **every** theme source — seeds and theme files, not just images (where it additionally picks the extraction pipeline). The scheme variant is what produces the MD3-correct secondary (desaturated, ~16 chroma), tertiary (seed hue + 60°), and neutrals (4–8 chroma).
 
+For the non-M3 names (`vibrant`, `faithful`, `muted`, `dysfunctional`) the name does double duty. For example:
+
+- `--image wallpaper.png --scheme-type faithful` — extraction runs the area-dominant (K-means + Count) pipeline, then the palette is built with the `Fidelity` variant.
+- `--seed "#6750A4" --scheme-type faithful` — extraction is skipped and the palette is built directly with `Fidelity`.
+
+Same scheme, same output variant; only the seed source differs. The mapping is: `faithful → Fidelity`, `muted → Neutral`, `dysfunctional → Expressive`, `vibrant → Vibrant`.
+
 **Notes:**
 
 - `hue_shift = 30` rotates the seed 30° toward orange
@@ -294,7 +322,7 @@ These standard ANSI terminal colors are derived from the generated scheme using 
 - `magenta` / `bright_magenta` — hue 330°
 - `black` / `bright_black` / `white` / `bright_white` — greyscale ladder from the scheme's neutral palette
 
-The `bright_*` variants shift tone *away* from the background (lighter on dark themes, darker on light themes) so they read as emphasised versions rather than washed-out containers.
+The `bright_*` variants are both **lighter** (a higher HCT tone, in dark *and* light modes) and **more saturated** (a higher chroma) than their normal counterparts, so they read as vivid emphasised colors rather than darker, muddier ones. Normal slots use a restrained chroma so the bright variants clearly stand out.
 
 ### Color Format Attributes
 

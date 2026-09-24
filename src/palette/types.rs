@@ -1,6 +1,6 @@
 //! Core color types for palette generation
 
-use crate::color::Color;
+use crate::core::color::Color;
 use std::collections::HashMap;
 
 /// Exhaustive Material Design 3 color roles.

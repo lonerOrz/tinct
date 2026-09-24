@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn test_color_lighten() {
-        use crate::color::ColorFilter;
+        use crate::core::color::ColorFilter;
         let c = Color::new(200, 200, 200, 1.0);
         let lit = c.apply_filter(&ColorFilter::Lighten(15.0));
         assert!(lit.lightness() > c.lightness());
@@ -654,7 +654,7 @@ mod tests {
 
     #[test]
     fn test_color_darken() {
-        use crate::color::ColorFilter;
+        use crate::core::color::ColorFilter;
         let c = Color::new(50, 50, 50, 1.0);
         let d = c.apply_filter(&ColorFilter::Darken(15.0));
         assert!(d.lightness() < c.lightness());

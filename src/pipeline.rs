@@ -13,11 +13,9 @@ use crate::FileOutput;
 use crate::config::{AlgorithmConfig, ConfigSection};
 use crate::core::{Mode, Theme};
 use crate::image::{SchemeType, extract_source_color};
-use crate::log;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
-use crate::path_resolver;
 use crate::template::TemplateProcessor;
-use crate::theme::JsonThemeLoader;
+use crate::ui::log;
 
 /// Pre-parsed configuration for the pipeline.
 ///
@@ -29,7 +27,7 @@ pub struct PipelineConfig {
     pub config_dir: String,
     pub mode: Mode,
     pub preview: bool,
-    pub log_level: crate::log::LogLevel,
+    pub log_level: log::LogLevel,
     pub algorithm: AlgorithmConfig,
     /// MD3 scheme variant used for palette generation (all theme sources).
     pub scheme_type: SchemeType,
@@ -123,7 +121,7 @@ impl Pipeline {
                 Ok(json!({ "seed": hex }))
             }
             ThemeSource::File(theme_path) => {
-                let resolved = path_resolver::resolve_theme_path(theme_path)?;
+                let resolved = crate::config::path::resolve_theme_path(theme_path)?;
                 let content = fs::read_to_string(&resolved).map_err(|e| {
                     crate::core::Error::Config(format!("Error reading theme file: {}", e))
                 })?;
@@ -193,9 +191,7 @@ impl Pipeline {
             },
             scheme_type,
         );
-        let theme_loader = JsonThemeLoader::new(palette_gen);
-        theme_loader
-            .load_value(theme_data)
+        Theme::from_json_value(theme_data, &palette_gen)
             .map_err(|e| crate::core::Error::Config(format!("Theme loading error: {}", e)))
     }
 
@@ -205,7 +201,7 @@ impl Pipeline {
             Mode::Dark => &theme.dark_palette,
             Mode::Light => &theme.light_palette,
         };
-        crate::preview::show_color_preview_from_theme(palette, mode)
+        crate::ui::preview::show_color_preview_from_theme(palette, mode)
             .map_err(|e| crate::core::Error::Config(format!("Preview error: {}", e)))?;
         Ok(())
     }
@@ -215,7 +211,7 @@ impl Pipeline {
         theme: &Theme,
         mode: Mode,
         flat_config: &crate::config::Config,
-        log_level: crate::log::LogLevel,
+        log_level: log::LogLevel,
     ) -> crate::Result<()> {
         let template_engine = TemplateProcessor::new();
         let output = FileOutput::new();

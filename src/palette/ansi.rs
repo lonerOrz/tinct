@@ -6,16 +6,17 @@
 //! from the generated scheme's mode so every color stays readable against the
 //! terminal background.
 //!
-//! The `bright_*` variants deliberately push tone *away* from the background
-//! (lighter on dark themes, darker on light themes) so they read as emphasised
-//! versions of the base color instead of washed-out containers.
+//! `bright_*` variants are made prominent two ways at once: a lighter tone
+//! (brighter on both dark and light backgrounds, matching the traditional
+//! "bold/bright" meaning) **and** a higher chroma, so they read as vivid
+//! emphasised versions rather than darker, muddier ones.
 
 use material_colors::color::Argb;
 use material_colors::dynamic_color::DynamicScheme;
 use material_colors::palette::TonalPalette;
 
 use super::types::ColorRole;
-use crate::color::Color;
+use crate::core::color::Color;
 
 /// HCT hue anchors (degrees) for the five non-error chromatic ANSI slots.
 /// The sixth (red) reuses the scheme's dedicated error palette.
@@ -27,9 +28,13 @@ const CHROMATIC_ANCHORS: [(f64, ColorRole, ColorRole); 5] = [
     (330.0, ColorRole::Magenta, ColorRole::BrightMagenta),
 ];
 
-/// Chroma used for the chromatic ANSI slots. Moderate so the colors are vivid
-/// without looking neon on a terminal.
-const ANCHOR_CHROMA: f64 = 48.0;
+/// Chroma for the normal chromatic slots — restrained, so the bright variants
+/// can clearly out-saturate them.
+const NORMAL_CHROMA: f64 = 40.0;
+
+/// Chroma for the bright chromatic slots — pushed high (gamut-mapped down when
+/// a hue cannot sustain it) to make `bright_*` the vivid version.
+const BRIGHT_CHROMA: f64 = 68.0;
 
 /// Build the sixteen ANSI terminal colors from a generated scheme.
 ///
@@ -45,19 +50,35 @@ pub fn ansi_colors(scheme: &DynamicScheme) -> Vec<(ColorRole, Color)> {
     colors.push((ColorRole::White, from_palette(neutral, 90.0)));
     colors.push((ColorRole::BrightWhite, from_palette(neutral, 100.0)));
 
-    // Reds reuse the scheme's error palette, which is anchored at hue ~25°.
+    // Reds reuse the scheme's error palette (hue ~25°) for the normal variant so
+    // red stays semantically tied to the theme's error color; the bright variant
+    // keeps that hue and cranks the chroma.
     let error = &scheme.error_palette;
     colors.push((ColorRole::Red, from_palette(error, tone(scheme, false))));
     colors.push((
         ColorRole::BrightRed,
-        from_palette(error, tone(scheme, true)),
+        from_palette(
+            &TonalPalette::from_hue_and_chroma(error.hue(), BRIGHT_CHROMA),
+            tone(scheme, true),
+        ),
     ));
 
     // Fixed-hue chromatic anchors.
     for (hue, normal, bright) in CHROMATIC_ANCHORS {
-        let palette = TonalPalette::from_hue_and_chroma(hue, ANCHOR_CHROMA);
-        colors.push((normal, from_palette(&palette, tone(scheme, false))));
-        colors.push((bright, from_palette(&palette, tone(scheme, true))));
+        colors.push((
+            normal,
+            from_palette(
+                &TonalPalette::from_hue_and_chroma(hue, NORMAL_CHROMA),
+                tone(scheme, false),
+            ),
+        ));
+        colors.push((
+            bright,
+            from_palette(
+                &TonalPalette::from_hue_and_chroma(hue, BRIGHT_CHROMA),
+                tone(scheme, true),
+            ),
+        ));
     }
 
     colors
@@ -65,15 +86,15 @@ pub fn ansi_colors(scheme: &DynamicScheme) -> Vec<(ColorRole, Color)> {
 
 /// Tone to use for a chromatic slot.
 ///
-/// On a dark theme the normal tone is mid-light and the bright tone is lighter;
-/// on a light theme the normal tone is mid-dark and the bright tone is darker.
-/// In both cases the bright variant increases contrast against the background.
+/// `bright` always sits at a lighter tone than the normal slot, in both modes,
+/// so it keeps the traditional "bright/bold" meaning. Normal slots in light
+/// mode sit lower (more contrast) so the set as a whole stays readable.
 fn tone(scheme: &DynamicScheme, bright: bool) -> f64 {
     match (scheme.is_dark, bright) {
         (true, false) => 70.0,
         (true, true) => 80.0,
-        (false, false) => 50.0,
-        (false, true) => 40.0,
+        (false, false) => 45.0,
+        (false, true) => 60.0,
     }
 }
 
@@ -123,15 +144,37 @@ mod tests {
     }
 
     #[test]
-    fn test_bright_variants_increase_contrast_against_background() {
-        let dark: HashMap<_, _> = ansi_colors(&scheme(true)).into_iter().collect();
-        let tone = |role| Hct::new(argb_of(&dark[&role])).get_tone();
-        assert!(tone(ColorRole::BrightGreen) > tone(ColorRole::Green));
-        assert!(tone(ColorRole::BrightRed) > tone(ColorRole::Red));
+    fn test_bright_variants_are_lighter_and_more_vivid() {
+        for is_dark in [true, false] {
+            let colors: HashMap<_, _> = ansi_colors(&scheme(is_dark)).into_iter().collect();
+            let hct = |role| Hct::new(argb_of(&colors[&role]));
 
-        let light: HashMap<_, _> = ansi_colors(&scheme(false)).into_iter().collect();
-        let tone = |role| Hct::new(argb_of(&light[&role])).get_tone();
-        assert!(tone(ColorRole::BrightGreen) < tone(ColorRole::Green));
+            // Bright always sits at a lighter tone (traditional bold/bright meaning).
+            assert!(
+                hct(ColorRole::BrightGreen).get_tone() > hct(ColorRole::Green).get_tone(),
+                "bright green should be lighter (dark={is_dark})"
+            );
+            assert!(
+                hct(ColorRole::BrightRed).get_tone() > hct(ColorRole::Red).get_tone(),
+                "bright red should be lighter (dark={is_dark})"
+            );
+
+            // ...and clearly more saturated, so it never looks darker/muddier.
+            assert!(
+                hct(ColorRole::BrightGreen).get_chroma() > hct(ColorRole::Green).get_chroma(),
+                "bright green should be more vivid (dark={is_dark})"
+            );
+            assert!(
+                hct(ColorRole::BrightMagenta).get_chroma() > hct(ColorRole::Magenta).get_chroma(),
+                "bright magenta should be more vivid (dark={is_dark})"
+            );
+
+            // Bright and normal are never the same color.
+            assert_ne!(
+                colors[&ColorRole::BrightBlue].hex(),
+                colors[&ColorRole::Blue].hex()
+            );
+        }
     }
 
     #[test]

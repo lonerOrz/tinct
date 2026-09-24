@@ -1,13 +1,13 @@
-//! Path resolution utilities
+//! Path resolution utilities.
 //!
-//! This module provides functions for resolving and normalizing paths
-//! used throughout the tinct application.
+//! Resolves theme files and makes every path in a [`ConfigSection`] absolute
+//! relative to the config file that declared it.
 
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::config::ConfigSection;
+use super::ConfigSection;
 use crate::core::Error;
 
 /// Resolve the theme path by checking multiple locations

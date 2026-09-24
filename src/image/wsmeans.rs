@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use crate::color::{estimate_hct, estimate_hue, hue_distance};
+use crate::core::color::{estimate_hct, estimate_hue, hue_distance};
 
 // ============================================================================
 // LCG Random for cluster initialization

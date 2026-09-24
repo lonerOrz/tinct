@@ -3,8 +3,8 @@
 //! Filters transform color values during template rendering.
 //! Supports syntax: `{{colors.primary.default.hex|lighten:10}}`
 
-use crate::color::Color;
-pub use crate::color::{ColorFilter, ColorProperty};
+use crate::core::color::Color;
+pub use crate::core::color::{ColorFilter, ColorProperty};
 
 /// Context for filter application
 pub struct FilterContext {
