@@ -1,44 +1,455 @@
-//! Color preview functionality
+//! Color preview module.
 //!
-//! Displays Material Design 3 color palettes in the terminal with actual color blocks.
+//! Provides an artistic terminal palette preview showcasing Material Design 3
+//! token roles, ANSI 16 terminal swatches with domino pillars, and a simulated
+//! code syntax card.
 
-use crate::core::color::{Color, calculate_relative_luminance};
+use crate::core::color::Color;
 use crate::core::{Mode, Theme};
 use crate::image::SchemeType;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator, Palette};
-use colored::*;
 use std::collections::HashMap;
-use std::fmt::Write as _;
 
-/// Display a color preview from an already-built palette.
-pub fn show_color_preview_from_theme(palette: &Palette, mode: Mode) -> Result<(), String> {
-    let colors = palette.to_map();
-    println!(
-        "{}",
-        "🎨 Material Design 3 Color Preview".bold().underline()
-    );
-    println!("🌙 Theme Mode: {}", mode.to_string().bold());
-    println!();
+const COL_WIDTH: usize = 38;
+const GAP_WIDTH: usize = 4;
+const TOTAL_WIDTH: usize = COL_WIDTH * 2 + GAP_WIDTH;
+const SWATCH_WIDTH: usize = 4;
+const HEX_WIDTH: usize = 7;
 
-    display_md3_cards_grid(&colors)
+/// ANSI terminal escape sequence helpers.
+struct Style;
+
+impl Style {
+    const RESET: &'static str = "\x1b[0m";
+    const BOLD: &'static str = "\x1b[1m";
+    const DIM: &'static str = "\x1b[2m";
+
+    #[inline]
+    fn fg(c: Color) -> String {
+        format!("\x1b[38;2;{};{};{}m", c.r, c.g, c.b)
+    }
+
+    #[inline]
+    fn bg(c: Color) -> String {
+        format!("\x1b[48;2;{};{};{}m", c.r, c.g, c.b)
+    }
 }
 
+/// Token role descriptor.
+struct Role {
+    label: &'static str,
+    key: &'static str,
+}
+
+/// Cell entry in a column.
+enum ViewItem {
+    Header(&'static str),
+    Swatch(Role),
+    Blank,
+}
+
+const MD3_LEFT: &[ViewItem] = &[
+    ViewItem::Header("PRIMARY"),
+    ViewItem::Swatch(Role {
+        label: "Primary",
+        key: "primary",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Primary",
+        key: "on_primary",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Primary Container",
+        key: "primary_container",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Prim. Container",
+        key: "on_primary_container",
+    }),
+    ViewItem::Blank,
+    ViewItem::Header("SECONDARY"),
+    ViewItem::Swatch(Role {
+        label: "Secondary",
+        key: "secondary",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Secondary",
+        key: "on_secondary",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Secondary Container",
+        key: "secondary_container",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Sec. Container",
+        key: "on_secondary_container",
+    }),
+    ViewItem::Blank,
+    ViewItem::Header("TERTIARY"),
+    ViewItem::Swatch(Role {
+        label: "Tertiary",
+        key: "tertiary",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Tertiary",
+        key: "on_tertiary",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Tertiary Container",
+        key: "tertiary_container",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Ter. Container",
+        key: "on_tertiary_container",
+    }),
+    ViewItem::Blank,
+    ViewItem::Header("ERROR"),
+    ViewItem::Swatch(Role {
+        label: "Error",
+        key: "error",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Error",
+        key: "on_error",
+    }),
+];
+
+const MD3_RIGHT: &[ViewItem] = &[
+    ViewItem::Header("SURFACE & BACKGROUND"),
+    ViewItem::Swatch(Role {
+        label: "Background",
+        key: "background",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Background",
+        key: "on_background",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Surface",
+        key: "surface",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Surface",
+        key: "on_surface",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Surface Variant",
+        key: "surface_variant",
+    }),
+    ViewItem::Swatch(Role {
+        label: "On Surface Variant",
+        key: "on_surface_variant",
+    }),
+    ViewItem::Blank,
+    ViewItem::Header("INVERSE"),
+    ViewItem::Swatch(Role {
+        label: "Inverse Surface",
+        key: "inverse_surface",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Inverse On Surface",
+        key: "inverse_on_surface",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Inverse Primary",
+        key: "inverse_primary",
+    }),
+    ViewItem::Blank,
+    ViewItem::Header("OUTLINE & SHADOW"),
+    ViewItem::Swatch(Role {
+        label: "Outline",
+        key: "outline",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Outline Variant",
+        key: "outline_variant",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Shadow",
+        key: "shadow",
+    }),
+    ViewItem::Swatch(Role {
+        label: "Scrim",
+        key: "scrim",
+    }),
+    ViewItem::Blank,
+    ViewItem::Blank,
+    ViewItem::Blank,
+];
+
+const ANSI_COLS: &[(&str, &str, &str)] = &[
+    ("BLK", "black", "bright_black"),
+    ("RED", "red", "bright_red"),
+    ("GRN", "green", "bright_green"),
+    ("YEL", "yellow", "bright_yellow"),
+    ("BLU", "blue", "bright_blue"),
+    ("MAG", "magenta", "bright_magenta"),
+    ("CYN", "cyan", "bright_cyan"),
+    ("WHT", "white", "bright_white"),
+];
+
+/// Computes visible width of a string in terminal cells by skipping ANSI escapes.
+fn visible_width(s: &str) -> usize {
+    let mut width = 0;
+    let mut chars = s.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            for next_ch in chars.by_ref() {
+                if next_ch == 'm' {
+                    break;
+                }
+            }
+        } else {
+            width += 1;
+        }
+    }
+    width
+}
+
+/// Renderer responsible for organizing and drawing the palette preview dashboard.
+struct PaletteView<'a> {
+    colors: &'a HashMap<String, Color>,
+    mode: Mode,
+}
+
+impl<'a> PaletteView<'a> {
+    /// Creates a new palette view instance.
+    fn new(colors: &'a HashMap<String, Color>, mode: Mode) -> Self {
+        Self { colors, mode }
+    }
+
+    /// Retrieves a color by key, falling back to black if not found.
+    fn color(&self, key: &str) -> Color {
+        self.colors
+            .get(key)
+            .copied()
+            .unwrap_or(Color::new(0, 0, 0, 1.0))
+    }
+
+    /// Renders the complete preview output to stdout.
+    fn render(&self) {
+        println!();
+        self.render_header();
+        self.render_md3_grid();
+        self.render_ansi_domino_pillars();
+        self.render_syntax_preview_card();
+        println!();
+    }
+
+    /// Prints the top banner with tinct logo and theme mode.
+    fn render_header(&self) {
+        let mode_str = match self.mode {
+            Mode::Dark => "DARK",
+            Mode::Light => "LIGHT",
+        };
+        let tag = format!("tinct  {}", mode_str);
+        let line_len = TOTAL_WIDTH.saturating_sub(tag.len() + 2);
+        println!(
+            "  {}{}{}  {}{}  {}{}{}",
+            Style::BOLD,
+            "tinct",
+            Style::RESET,
+            Style::DIM,
+            mode_str,
+            Style::DIM,
+            "─".repeat(line_len),
+            Style::RESET
+        );
+        println!();
+    }
+
+    /// Formats a single column entry item into a styled string.
+    fn render_cell(&self, item: Option<&ViewItem>) -> String {
+        match item {
+            Some(ViewItem::Header(title)) => {
+                let dash_len = COL_WIDTH.saturating_sub(title.len() + 1);
+                format!(
+                    "{}{}{}{}{}",
+                    Style::DIM,
+                    title,
+                    " ",
+                    "─".repeat(dash_len),
+                    Style::RESET
+                )
+            }
+            Some(ViewItem::Swatch(role)) => {
+                let c = self.color(role.key);
+                let hex = c.hex().to_uppercase();
+                let pad_len =
+                    COL_WIDTH.saturating_sub(SWATCH_WIDTH + 1 + role.label.len() + HEX_WIDTH);
+
+                let swatch_box = format!(
+                    "{}{}{}",
+                    Style::bg(c),
+                    " ".repeat(SWATCH_WIDTH),
+                    Style::RESET
+                );
+                let hex_dim = format!("{}{}{}", Style::DIM, hex, Style::RESET);
+
+                format!(
+                    "{} {}{}{}",
+                    swatch_box,
+                    role.label,
+                    " ".repeat(pad_len),
+                    hex_dim
+                )
+            }
+            Some(ViewItem::Blank) | None => " ".repeat(COL_WIDTH),
+        }
+    }
+
+    /// Prints the dual-column grid of all Material Design 3 token roles.
+    fn render_md3_grid(&self) {
+        let rows = MD3_LEFT.len().max(MD3_RIGHT.len());
+        let gap = " ".repeat(GAP_WIDTH);
+        for i in 0..rows {
+            let left = self.render_cell(MD3_LEFT.get(i));
+            let right = self.render_cell(MD3_RIGHT.get(i));
+            println!("  {}{}{}", left, gap, right);
+        }
+        println!();
+    }
+
+    /// Prints the 8 dual-deck domino color pillars representing ANSI 16 colors.
+    fn render_ansi_domino_pillars(&self) {
+        let title = "TERMINAL PALETTE ";
+        let dash_len = TOTAL_WIDTH.saturating_sub(title.len());
+        println!(
+            "  {}{}{}{}{}",
+            Style::BOLD,
+            Style::DIM,
+            title,
+            "─".repeat(dash_len),
+            Style::RESET
+        );
+        println!();
+
+        print!("  ");
+        for (name, _, _) in ANSI_COLS {
+            print!("{}{:^8}{}  ", Style::DIM, name, Style::RESET);
+        }
+        println!();
+
+        print!("  ");
+        for (_, norm, _) in ANSI_COLS {
+            let c = self.color(norm);
+            print!("{}{}{}  ", Style::bg(c), " ".repeat(8), Style::RESET);
+        }
+        println!();
+
+        print!("  ");
+        for (_, _, br) in ANSI_COLS {
+            let c = self.color(br);
+            print!("{}{}{}  ", Style::bg(c), " ".repeat(8), Style::RESET);
+        }
+        println!();
+
+        print!("  ");
+        for (_, norm, _) in ANSI_COLS {
+            let hex = self.color(norm).hex().to_uppercase();
+            print!("{}{:^8}{}  ", Style::DIM, hex, Style::RESET);
+        }
+        println!("\n");
+    }
+
+    /// Prints the simulated code editor and shell prompt card.
+    fn render_syntax_preview_card(&self) {
+        let red = Style::fg(self.color("red"));
+        let green = Style::fg(self.color("green"));
+        let yellow = Style::fg(self.color("yellow"));
+        let blue = Style::fg(self.color("blue"));
+        let magenta = Style::fg(self.color("magenta"));
+        let cyan = Style::fg(self.color("cyan"));
+        let reset = Style::RESET;
+        let dim = Style::DIM;
+
+        let inner_width = TOTAL_WIDTH.saturating_sub(2);
+        let top_dash_len = inner_width.saturating_sub(10);
+        println!("  {}╭─ preview {}╮{}", dim, "─".repeat(top_dash_len), reset);
+
+        let print_card_line = |inner_styled: &str| {
+            let v_len = visible_width(inner_styled);
+            let pad = inner_width.saturating_sub(v_len);
+            println!(
+                "  {}│{}{}{}│{}",
+                dim,
+                inner_styled,
+                " ".repeat(pad),
+                dim,
+                reset
+            );
+        };
+
+        let dots_line = format!(
+            "  {}●{} {}●{} {}●{}  {}~/workspace{} {}main*{}",
+            red, reset, yellow, reset, green, reset, cyan, reset, magenta, reset
+        );
+        print_card_line(&dots_line);
+        print_card_line("");
+
+        let prompt_line = format!(
+            "  {}${}{} tinct {}{}{} {}{}{}",
+            green,
+            Style::BOLD,
+            reset,
+            blue,
+            "--build",
+            reset,
+            yellow,
+            "--release",
+            reset
+        );
+        print_card_line(&prompt_line);
+
+        let code1 = format!(
+            "  {}{}{} tinct_demo() -> {}{}{} {{",
+            magenta, "fn", reset, blue, "Palette", reset
+        );
+        print_card_line(&code1);
+
+        let code2 = format!(
+            "      {}let{} theme = {}{}\"active\"{}; {}// applied successfully{}",
+            magenta,
+            reset,
+            green,
+            Style::BOLD,
+            reset,
+            dim,
+            reset
+        );
+        print_card_line(&code2);
+
+        print_card_line("  }");
+        println!("  {}╰{}╯{}", dim, "─".repeat(inner_width), reset);
+    }
+}
+
+/// Displays a color preview from an already generated palette.
+pub fn show_color_preview_from_theme(palette: &Palette, mode: Mode) -> Result<(), String> {
+    let colors = palette.to_map();
+    PaletteView::new(&colors, mode).render();
+    Ok(())
+}
+
+/// Loads a theme file and displays its color preview.
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
     let theme =
         Theme::from_json_file(theme_path, &preview_generator()).map_err(|e| e.to_string())?;
     show_color_preview_for_theme(&theme, parse_mode(mode))
 }
 
+/// Parses a JSON theme definition and displays its color preview.
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
     let theme = Theme::from_json_value(json, &preview_generator()).map_err(|e| e.to_string())?;
     show_color_preview_for_theme(&theme, parse_mode(mode))
 }
 
-/// Generator used by the standalone preview entry points.
+/// Default generator for preview mode.
 fn preview_generator() -> LegacyPaletteGenerator {
     LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot)
 }
 
+/// Dispatches palette rendering for a theme according to the chosen mode.
 fn show_color_preview_for_theme(theme: &Theme, mode: Mode) -> Result<(), String> {
     let palette = match mode {
         Mode::Dark => &theme.dark_palette,
@@ -47,509 +458,12 @@ fn show_color_preview_for_theme(theme: &Theme, mode: Mode) -> Result<(), String>
     show_color_preview_from_theme(palette, mode)
 }
 
+/// Parses a mode string into a Mode enum.
 fn parse_mode(mode: &str) -> Mode {
-    if mode == "dark" {
+    if mode.eq_ignore_ascii_case("dark") {
         Mode::Dark
     } else {
         Mode::Light
-    }
-}
-
-const REQUIRED_COLOR_KEYS: &[&str] = &[
-    "primary",
-    "on_primary",
-    "primary_container",
-    "on_primary_container",
-    "secondary",
-    "on_secondary",
-    "secondary_container",
-    "on_secondary_container",
-    "tertiary",
-    "on_tertiary",
-    "tertiary_container",
-    "on_tertiary_container",
-    "error",
-    "on_error",
-    "error_container",
-    "on_error_container",
-    "primary_fixed",
-    "primary_fixed_dim",
-    "on_primary_fixed",
-    "on_primary_fixed_variant",
-    "secondary_fixed",
-    "secondary_fixed_dim",
-    "on_secondary_fixed",
-    "on_secondary_fixed_variant",
-    "tertiary_fixed",
-    "tertiary_fixed_dim",
-    "on_tertiary_fixed",
-    "on_tertiary_fixed_variant",
-    "surface_dim",
-    "surface",
-    "surface_bright",
-    "surface_variant",
-    "on_surface_variant",
-    "surface_container_lowest",
-    "surface_container_low",
-    "surface_container",
-    "surface_container_high",
-    "surface_container_highest",
-    "background",
-    "on_background",
-    "outline",
-    "outline_variant",
-    "inverse_surface",
-    "inverse_on_surface",
-    "inverse_primary",
-    "shadow",
-    "scrim",
-];
-
-/// Display colors in a card grid layout with true color blocks
-fn display_md3_cards_grid(colors: &HashMap<String, Color>) -> Result<(), String> {
-    let missing: Vec<&str> = REQUIRED_COLOR_KEYS
-        .iter()
-        .filter(|k| !colors.contains_key(**k))
-        .copied()
-        .collect();
-    if !missing.is_empty() {
-        return Err(format!(
-            "Color preview requires {} color roles, missing: {:?}",
-            REQUIRED_COLOR_KEYS.len(),
-            missing
-        ));
-    }
-    // Define color cards based on the MD3 documentation structure
-    let cards: Vec<Vec<(&str, &Color)>> = vec![
-        vec![
-            (
-                "Primary",
-                colors
-                    .get("primary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Primary",
-                colors
-                    .get("on_primary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Primary Container",
-                colors
-                    .get("primary_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Primary Container",
-                colors
-                    .get("on_primary_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Secondary",
-                colors
-                    .get("secondary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Secondary",
-                colors
-                    .get("on_secondary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Secondary Container",
-                colors
-                    .get("secondary_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Secondary Container",
-                colors
-                    .get("on_secondary_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Tertiary",
-                colors
-                    .get("tertiary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Tertiary",
-                colors
-                    .get("on_tertiary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Tertiary Container",
-                colors
-                    .get("tertiary_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Tertiary Container",
-                colors
-                    .get("on_tertiary_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Error",
-                colors
-                    .get("error")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Error",
-                colors
-                    .get("on_error")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Error Container",
-                colors
-                    .get("error_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Error Container",
-                colors
-                    .get("on_error_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Primary Fixed",
-                colors
-                    .get("primary_fixed")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Primary Fixed Dim",
-                colors
-                    .get("primary_fixed_dim")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Primary Fixed",
-                colors
-                    .get("on_primary_fixed")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Primary Fixed Var",
-                colors
-                    .get("on_primary_fixed_variant")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Secondary Fixed",
-                colors
-                    .get("secondary_fixed")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Secondary Fixed Dim",
-                colors
-                    .get("secondary_fixed_dim")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Secondary Fixed",
-                colors
-                    .get("on_secondary_fixed")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Secondary Fixed Var",
-                colors
-                    .get("on_secondary_fixed_variant")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Tertiary Fixed",
-                colors
-                    .get("tertiary_fixed")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Tertiary Fixed Dim",
-                colors
-                    .get("tertiary_fixed_dim")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Tertiary Fixed",
-                colors
-                    .get("on_tertiary_fixed")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Tertiary Fixed Var",
-                colors
-                    .get("on_tertiary_fixed_variant")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Surface Dim",
-                colors
-                    .get("surface_dim")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Surface",
-                colors
-                    .get("surface")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Surface Bright",
-                colors
-                    .get("surface_bright")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Surface Variant",
-                colors
-                    .get("surface_variant")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Surface Variant",
-                colors
-                    .get("on_surface_variant")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Container Lowest",
-                colors
-                    .get("surface_container_lowest")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Container Low",
-                colors
-                    .get("surface_container_low")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Container",
-                colors
-                    .get("surface_container")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Container High",
-                colors
-                    .get("surface_container_high")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Container Highest",
-                colors
-                    .get("surface_container_highest")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Background",
-                colors
-                    .get("background")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "On Background",
-                colors
-                    .get("on_background")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Outline",
-                colors
-                    .get("outline")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Outline Variant",
-                colors
-                    .get("outline_variant")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Inverse Surface",
-                colors
-                    .get("inverse_surface")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Inverse On Surface",
-                colors
-                    .get("inverse_on_surface")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Inverse Primary",
-                colors
-                    .get("inverse_primary")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-        vec![
-            (
-                "Shadow",
-                colors
-                    .get("shadow")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-            (
-                "Scrim",
-                colors
-                    .get("scrim")
-                    .expect("BUG: preview card keys must be listed in REQUIRED_COLOR_KEYS"),
-            ),
-        ],
-    ];
-
-    const CARDS_PER_ROW: usize = 3;
-
-    let mut line = String::new();
-
-    for chunk in cards.chunks(CARDS_PER_ROW) {
-        let max_colors = chunk.iter().map(|card| card.len()).max().unwrap_or(0);
-
-        for color_idx in 0..max_colors {
-            for line_num in 0..3 {
-                line.clear();
-                for (idx, card) in chunk.iter().enumerate() {
-                    if color_idx < card.len() {
-                        let (label, color) = &card[color_idx];
-                        let block_width = 24;
-
-                        let display_content = if line_num == 1 {
-                            if label.len() > block_width {
-                                let mut truncated: String =
-                                    label.chars().take(block_width - 3).collect();
-                                truncated.push_str("...");
-                                truncated
-                            } else {
-                                label.to_string()
-                            }
-                        } else {
-                            " ".repeat(block_width)
-                        };
-
-                        let total_padding = block_width - display_content.len();
-                        let left_padding = total_padding / 2;
-                        let right_padding = total_padding - left_padding;
-                        let centered = format!(
-                            "{}{}{}",
-                            " ".repeat(left_padding),
-                            display_content,
-                            " ".repeat(right_padding)
-                        );
-
-                        let color_block = centered.on_truecolor(color.r, color.g, color.b);
-                        let luminance = calculate_relative_luminance(color.r, color.g, color.b);
-                        let text_color = if luminance > 0.1791 {
-                            color_block.black()
-                        } else {
-                            color_block.white()
-                        };
-
-                        write!(line, " {} ", text_color).expect("writing to a String cannot fail");
-                    } else {
-                        write!(line, "{:>26} ", "").expect("writing to a String cannot fail");
-                    }
-
-                    if idx < chunk.len() - 1 {
-                        line.push_str("  ");
-                    }
-                }
-                println!("{}", line);
-            }
-        }
-        println!();
-    }
-
-    println!("{}", "📊 Terminal Color Palette".bold().underline());
-    println!();
-    print_terminal_palette(colors);
-    Ok(())
-}
-
-fn print_terminal_palette(colors: &HashMap<String, Color>) {
-    let terminal_colors = vec![
-        ("Black", "black"),
-        ("Red", "red"),
-        ("Green", "green"),
-        ("Yellow", "yellow"),
-        ("Blue", "blue"),
-        ("Magenta", "magenta"),
-        ("Cyan", "cyan"),
-        ("White", "white"),
-        ("Bright Black", "bright_black"),
-        ("Bright Red", "bright_red"),
-        ("Bright Green", "bright_green"),
-        ("Bright Yellow", "bright_yellow"),
-        ("Bright Blue", "bright_blue"),
-        ("Bright Magenta", "bright_magenta"),
-        ("Bright Cyan", "bright_cyan"),
-        ("Bright White", "bright_white"),
-    ];
-
-    let mid = terminal_colors.len() / 2;
-    for i in 0..mid {
-        let (_, key1) = &terminal_colors[i];
-        let (_, key2) = &terminal_colors[i + mid];
-
-        if let Some(color1) = colors.get(*key1) {
-            let luminance1 = calculate_relative_luminance(color1.r, color1.g, color1.b);
-            let block1 = format!(" {:<24} ", key1);
-            let color_block1 = if luminance1 > 0.1791 {
-                block1.black().on_truecolor(color1.r, color1.g, color1.b)
-            } else {
-                block1.white().on_truecolor(color1.r, color1.g, color1.b)
-            };
-            print!("{}", color_block1);
-        }
-
-        print!("  ");
-
-        if let Some(color2) = colors.get(*key2) {
-            let luminance2 = calculate_relative_luminance(color2.r, color2.g, color2.b);
-            let block2 = format!(" {:<24} ", key2);
-            let color_block2 = if luminance2 > 0.1791 {
-                block2.black().on_truecolor(color2.r, color2.g, color2.b)
-            } else {
-                block2.white().on_truecolor(color2.r, color2.g, color2.b)
-            };
-            print!("{}", color_block2);
-        }
-
-        println!();
     }
 }
 
@@ -561,6 +475,6 @@ mod tests {
     fn test_parse_mode() {
         assert_eq!(parse_mode("dark"), Mode::Dark);
         assert_eq!(parse_mode("light"), Mode::Light);
-        assert_eq!(parse_mode("anything"), Mode::Light);
+        assert_eq!(parse_mode("other"), Mode::Light);
     }
 }

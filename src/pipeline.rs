@@ -73,8 +73,8 @@ impl Pipeline {
             &config.ansi,
         )?;
 
-        // Print info
-        if !log_level.is_quiet() {
+        // Print info (unless in preview mode, where the palette display is the focus)
+        if !preview && !log_level.is_quiet() {
             Self::print_info(&config.config_path, &theme_source, mode, scheme_type);
         }
 
