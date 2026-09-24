@@ -24,7 +24,9 @@ pub struct AlgorithmConfig {
     #[serde(default = "default_contrast_level")]
     pub contrast_level: f64,
 
-    /// Color harmony mode (md3, analogous, complementary, triadic, split-complementary)
+    /// Deprecated color harmony mode. Accepted for backwards compatibility with
+    /// old config files but ignored — use `--scheme-type` (or `[image]
+    /// scheme_type`) to select the MD3 scheme instead.
     #[serde(default = "default_color_harmony")]
     pub color_harmony: String,
 }

@@ -10,20 +10,20 @@ tinct is a command-line utility that generates themed configuration files based 
 
 ## Features
 
-- Material Design 3 compliant color generation using official algorithms
+- Material Design 3 compliant color generation using the official Material You algorithms
 - **Wallpaper-based color extraction** — extract source colors from images with multiple scheme types
+- **Scheme selection for every source** — `--scheme-type` chooses the MD3 scheme variant (tonal-spot, vibrant, content, …) used to build the palette
 - Support for light and dark themes
 - Template-based theme injection with **parallel processing** (10x faster)
 - Color preview functionality
 - Configurable via TOML files with algorithm parameters
   - `contrast_level` for accessibility
-  - `color_harmony` modes (md3, analogous, complementary, triadic, split-complementary)
+  - `hue_shift` / `saturation_adjustment` to nudge the seed color
 - Support for post-processing hooks
 - Modular architecture for easy extensibility
 - **Smart color generation** from single seed color
 - Consistent alpha values (0.0-1.0 range)
-- Format-preserving color filters
-- HSL-based color adjustments
+- Perceptually uniform HCT-based color filters
 - **Simplified theme format** - no more dark/light nesting
 
 ## Installation
@@ -91,7 +91,7 @@ Options:
 - `-i, --image`: Path to wallpaper image for color extraction (PNG/JPG/WebP)
 - `-m, --mode`: Theme mode override (dark/light, defaults to dark)
 - `-p, --preview`: Show color preview instead of processing templates
-- `--scheme-type`: Color scheme for image extraction (tonal-spot, vibrant, faithful, muted, dysfunctional, content, fruit-salad, rainbow, monochrome)
+- `--scheme-type`: MD3 scheme variant used to generate the palette (also the extraction algorithm for images): tonal-spot, vibrant, faithful, muted, dysfunctional, content, fruit-salad, rainbow, monochrome
 - `--skip-sequences`: Skip sending ANSI escape sequences to update terminal colors
 - `--log-level`: Logging level (quiet/normal/verbose, defaults to normal)
 
@@ -185,61 +185,56 @@ You can adjust the color generation algorithm behavior:
 
 ```toml
 [algorithm]
-hue_shift = 0               # Rotate hue by degrees (-180 to 180)
-saturation_adjustment = 0   # Adjust saturation percentage (-100 to 100)
+hue_shift = 0               # Rotate the seed hue by degrees (-180 to 180)
+saturation_adjustment = 0   # Scale the seed chroma by percentage (-100 to 100)
 contrast_level = 0.0        # MD3 contrast level (-1.0 to 1.0)
-color_harmony = "md3"       # Harmony mode (md3, analogous, complementary, triadic, split-complementary)
+# color_harmony = "md3"     # DEPRECATED — accepted but ignored; use --scheme-type
 ```
 
 **Algorithm parameters:**
 
-| Parameter               | Range      | Default | Effect                               |
-| ----------------------- | ---------- | ------- | ------------------------------------ |
-| `hue_shift`             | -180 ~ 180 | `0`     | Rotates all colors' hue              |
-| `saturation_adjustment` | -100 ~ 100 | `0`     | Adjusts color saturation (chroma)    |
-| `contrast_level`        | -1.0 ~ 1.0 | `0.0`   | MD3 contrast level for accessibility |
-| `color_harmony`         | see below  | `md3`   | Secondary/tertiary hue relationships |
+| Parameter               | Range      | Default | Effect                                      |
+| ----------------------- | ---------- | ------- | ------------------------------------------- |
+| `hue_shift`             | -180 ~ 180 | `0`     | Rotates the seed hue before generation      |
+| `saturation_adjustment` | -100 ~ 100 | `0`     | Scales seed chroma (`-100` → grey, `+100` → double) |
+| `contrast_level`        | -1.0 ~ 1.0 | `0.0`   | MD3 contrast level for accessibility        |
 
-**Color Harmony modes:**
+These parameters only **nudge the seed color**. All secondary/tertiary/neutral/error relationships are defined by the selected MD3 scheme and are no longer hand-tuned — that is what keeps the output faithful to Material You.
 
-| Mode                  | Description                | Secondary Hue         | Tertiary Hue          |
-| --------------------- | -------------------------- | --------------------- | --------------------- |
-| `md3`                 | Material Design 3 standard | MD3 hue table (2-20°) | MD3 hue table (5-40°) |
-| `analogous`           | Close, harmonious colors   | +15°                  | +30°                  |
-| `complementary`       | Opposite colors            | +180°                 | +180°                 |
-| `triadic`             | Evenly spaced              | +120°                 | +240°                 |
-| `split-complementary` | Split opposite             | +150°                 | +210°                 |
+**Deprecated:** `color_harmony` (analogous, complementary, triadic, split-complementary) is accepted for backwards compatibility with old config files but **ignored** (a warning is logged). The old hue-table relationships were not part of MD3. Use `--scheme-type` / `[image].scheme_type` to pick the scheme instead.
 
 ### 3. Image Configuration
 
-Extract colors from wallpaper images using the `[image]` section:
+Extract colors from wallpaper images using the `[image]` section. The selected scheme is also used to generate the palette:
 
 ```toml
 [image]
-scheme_type = "vibrant"    # Color extraction scheme
+scheme_type = "vibrant"    # Extraction algorithm and MD3 scheme variant
 ```
 
 **Scheme types:**
 
-| Scheme          | Pipeline                | Description              |
-| --------------- | ----------------------- | ------------------------ |
-| `tonal-spot`    | Wu + WSMeans + Score    | MD3 standard, balanced   |
-| `vibrant`       | K-means + Chroma        | High saturation colors   |
-| `faithful`      | K-means + Count         | Area-dominant colors     |
-| `muted`         | K-means + Muted         | Low saturation, subtle   |
-| `dysfunctional` | K-means + Dysfunctional | 2nd most dominant family |
-| `content`       | Wu + WSMeans + Score    | MD3 Content variant      |
-| `fruit-salad`   | Wu + WSMeans + Score    | MD3 Fruit Salad variant  |
-| `rainbow`       | Wu + WSMeans + Score    | MD3 Rainbow variant      |
-| `monochrome`    | Wu + WSMeans + Score    | MD3 Monochrome variant   |
+| Scheme          | Extraction pipeline     | MD3 variant   | Description              |
+| --------------- | ----------------------- | ------------- | ------------------------ |
+| `tonal-spot`    | Wu + WSMeans + Score    | Tonal Spot    | MD3 standard, balanced   |
+| `vibrant`       | K-means + Chroma        | Vibrant       | High saturation colors   |
+| `faithful`      | K-means + Count         | Fidelity      | Area-dominant colors     |
+| `muted`         | K-means + Muted         | Neutral       | Low saturation, subtle   |
+| `dysfunctional` | K-means + Dysfunctional | Expressive    | 2nd most dominant family |
+| `content`       | Wu + WSMeans + Score    | Content       | MD3 Content variant      |
+| `fruit-salad`   | Wu + WSMeans + Score    | Fruit Salad   | MD3 Fruit Salad variant  |
+| `rainbow`       | Wu + WSMeans + Score    | Rainbow       | MD3 Rainbow variant      |
+| `monochrome`    | Wu + WSMeans + Score    | Monochrome    | MD3 Monochrome variant   |
 
 **Priority chain:** CLI `--scheme-type` > config `[image].scheme_type` > default (`tonal-spot`)
 
+The resolved `--scheme-type` applies to **every** theme source — seeds and theme files, not just images (where it additionally picks the extraction pipeline). The scheme variant is what produces the MD3-correct secondary (desaturated, ~16 chroma), tertiary (seed hue + 60°), and neutrals (4–8 chroma).
+
 **Notes:**
 
-- `hue_shift = 30` rotates colors 30° toward orange
-- `saturation_adjustment = 50` increases saturation by 50%
-- `saturation_adjustment = -50` decreases saturation by 50% (more muted)
+- `hue_shift = 30` rotates the seed 30° toward orange
+- `saturation_adjustment = 50` scales seed chroma up by 50%
+- `saturation_adjustment = -50` reduces seed chroma by 50% (more muted)
 - `lightness_adjustment` is not supported (would break MD3 contrast ratios)
 
 ## Template Color Format
@@ -289,16 +284,17 @@ In tinct's template files, you can use the following color formats to reference 
 
 #### Terminal ANSI Color Roles
 
-You can also use these standard ANSI terminal color values, mapped intelligently from the generated palette:
+These standard ANSI terminal colors are derived from the generated scheme using **fixed hue anchors**, so they stay recognizable instead of drifting with the seed:
 
-- `black` / `bright_black`
-- `red` / `bright_red`
-- `green` / `bright_green`
-- `yellow` / `bright_yellow`
-- `blue` / `bright_blue`
-- `magenta` / `bright_magenta`
-- `cyan` / `bright_cyan`
-- `white` / `bright_white`
+- `red` / `bright_red` — error palette (hue ≈ 25°)
+- `yellow` / `bright_yellow` — hue 70°
+- `green` / `bright_green` — hue 140°
+- `cyan` / `bright_cyan` — hue 200°
+- `blue` / `bright_blue` — hue 260°
+- `magenta` / `bright_magenta` — hue 330°
+- `black` / `bright_black` / `white` / `bright_white` — greyscale ladder from the scheme's neutral palette
+
+The `bright_*` variants shift tone *away* from the background (lighter on dark themes, darker on light themes) so they read as emphasised versions rather than washed-out containers.
 
 ### Color Format Attributes
 

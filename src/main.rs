@@ -57,13 +57,12 @@ fn main() {
     }
 
     // Determine theme source
-    let image_scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);
+    let scheme_type = resolve_scheme_type(&args.scheme_type, &image_config.scheme_type);
     let theme_source = if let Some(ref seed) = args.seed {
         tinct::pipeline::ThemeSource::Seed(seed.clone())
     } else if let Some(ref image_path) = args.image {
         tinct::pipeline::ThemeSource::Image {
             path: image_path.clone(),
-            scheme_type: image_scheme_type,
         }
     } else {
         tinct::pipeline::ThemeSource::File(args.theme.clone().unwrap())
@@ -78,7 +77,7 @@ fn main() {
         preview: args.preview,
         log_level: args.log_level,
         algorithm,
-        image_scheme_type: Some(image_scheme_type),
+        scheme_type,
         theme_source,
     };
 

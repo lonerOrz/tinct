@@ -15,6 +15,7 @@
 //! - `muted` → K-means with muted scoring
 
 use material_colors::color::Argb;
+use material_colors::dynamic_color::Variant;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -51,6 +52,29 @@ impl SchemeType {
             self,
             Self::TonalSpot | Self::Content | Self::FruitSalad | Self::Rainbow | Self::Monochrome
         )
+    }
+
+    /// Map this scheme type to the official MD3 `Variant` used for palette
+    /// generation.
+    ///
+    /// This is independent of the extraction pipeline (see [`Self::is_m3_scheme`]):
+    /// it only chooses which Material You algorithm builds the palette. The
+    /// non-M3 extraction modes (`vibrant`, `faithful`, `dysfunctional`, `muted`)
+    /// have no exact variant, so they map onto the closest official one.
+    pub fn to_variant(self) -> Variant {
+        match self {
+            Self::TonalSpot => Variant::TonalSpot,
+            Self::Content => Variant::Content,
+            Self::FruitSalad => Variant::FruitSalad,
+            Self::Rainbow => Variant::Rainbow,
+            Self::Monochrome => Variant::Monochrome,
+            Self::Vibrant => Variant::Vibrant,
+            // Fidelity keeps the source color; Neutral is the muted scheme;
+            // Expressive is the closest fit for the clashing/dysfunctional mode.
+            Self::Faithful => Variant::Fidelity,
+            Self::Muted => Variant::Neutral,
+            Self::Dysfunctional => Variant::Expressive,
+        }
     }
 
     /// Get the appropriate resize filter for this scheme type.
@@ -321,5 +345,14 @@ mod tests {
             Some(SchemeType::FruitSalad)
         );
         assert_eq!(SchemeType::parse("invalid"), None);
+    }
+
+    #[test]
+    fn test_scheme_type_to_variant() {
+        assert!(SchemeType::TonalSpot.to_variant() == Variant::TonalSpot);
+        assert!(SchemeType::Content.to_variant() == Variant::Content);
+        assert!(SchemeType::Monochrome.to_variant() == Variant::Monochrome);
+        assert!(SchemeType::Faithful.to_variant() == Variant::Fidelity);
+        assert!(SchemeType::Muted.to_variant() == Variant::Neutral);
     }
 }

@@ -1,32 +1,44 @@
-//! Adapter for the legacy palette generator module
+//! Adapter that exposes the palette generation functions as a stateful
+//! generator object.
+//!
+//! Kept under its historical name to avoid churning the public API, but it is
+//! no longer "legacy" in behaviour: generation is fully delegated to the
+//! official Material You algorithm via [`AlgorithmParameters`] + [`SchemeType`].
 
 use crate::core::{Error, Mode, Result};
-use crate::palette::{AlgorithmParameters, ColorHarmony, Palette, generate_palette_with_params};
+use crate::image::SchemeType;
+use crate::palette::{AlgorithmParameters, Palette, generate_palette_with_params};
 use serde_json::Value;
 
-/// Adapter that wraps the legacy palette generator function
+/// Stateful palette generator: seed adjustments plus the MD3 scheme variant.
 pub struct LegacyPaletteGenerator {
     params: AlgorithmParameters,
+    scheme_type: SchemeType,
 }
 
 impl LegacyPaletteGenerator {
-    pub fn new(params: AlgorithmParameters) -> Self {
-        Self { params }
-    }
-
-    pub fn with_defaults() -> Self {
+    pub fn new(params: AlgorithmParameters, scheme_type: SchemeType) -> Self {
         Self {
-            params: AlgorithmParameters {
-                saturation_adjustment: 0,
-                hue_shift: 0,
-                contrast_level: 0.0,
-                color_harmony: ColorHarmony::Md3,
-            },
+            params,
+            scheme_type,
         }
     }
 
+    /// Generator with no seed adjustments and the default Tonal Spot scheme.
+    pub fn with_defaults() -> Self {
+        Self {
+            params: AlgorithmParameters::default(),
+            scheme_type: SchemeType::TonalSpot,
+        }
+    }
+
+    /// The scheme variant this generator produces.
+    pub fn scheme_type(&self) -> SchemeType {
+        self.scheme_type
+    }
+
     pub fn generate(&self, theme: &Value, mode: Mode) -> Result<Palette> {
-        generate_palette_with_params(theme, mode.is_dark(), self.params.clone())
+        generate_palette_with_params(theme, mode.is_dark(), self.scheme_type, self.params)
             .map_err(Error::Palette)
     }
 }
@@ -47,11 +59,11 @@ mod tests {
         let params = AlgorithmParameters {
             saturation_adjustment: 10,
             hue_shift: 15,
-            contrast_level: 0.0,
-            color_harmony: ColorHarmony::Md3,
+            ..Default::default()
         };
-        let generator = LegacyPaletteGenerator::new(params.clone());
+        let generator = LegacyPaletteGenerator::new(params, SchemeType::Content);
         assert_eq!(generator.params.saturation_adjustment, 10);
+        assert_eq!(generator.scheme_type(), SchemeType::Content);
     }
 
     #[test]
@@ -59,6 +71,7 @@ mod tests {
         let generator = LegacyPaletteGenerator::with_defaults();
         assert_eq!(generator.params.saturation_adjustment, 0);
         assert_eq!(generator.params.hue_shift, 0);
+        assert_eq!(generator.scheme_type(), SchemeType::TonalSpot);
     }
 
     #[test]
@@ -108,12 +121,10 @@ mod tests {
     #[test]
     fn test_legacy_palette_generator_generate_with_hue_shift() {
         let params = AlgorithmParameters {
-            saturation_adjustment: 0,
             hue_shift: 180,
-            contrast_level: 0.0,
-            color_harmony: ColorHarmony::Md3,
+            ..Default::default()
         };
-        let generator = LegacyPaletteGenerator::new(params);
+        let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
         let theme = json!({ "seed": "#FF0000" });
 
         let result = generator.generate(&theme, Mode::Dark);
@@ -129,11 +140,9 @@ mod tests {
     fn test_legacy_palette_generator_generate_with_saturation() {
         let params = AlgorithmParameters {
             saturation_adjustment: 50,
-            hue_shift: 0,
-            contrast_level: 0.0,
-            color_harmony: ColorHarmony::Md3,
+            ..Default::default()
         };
-        let generator = LegacyPaletteGenerator::new(params);
+        let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
         let theme = json!({ "seed": "#FF5722" });
 
         let result = generator.generate(&theme, Mode::Dark);
@@ -143,6 +152,23 @@ mod tests {
         let map = palette.to_map();
         let primary = map.get("primary").unwrap();
         assert!(!primary.hex().is_empty());
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_scheme_type_affects_output() {
+        let theme = json!({ "seed": "#FF5722" });
+        let spot =
+            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot)
+                .generate(&theme, Mode::Dark)
+                .unwrap();
+        let mono =
+            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::Monochrome)
+                .generate(&theme, Mode::Dark)
+                .unwrap();
+        assert_ne!(
+            spot.get("primary").unwrap().hex(),
+            mono.get("primary").unwrap().hex()
+        );
     }
 
     #[test]

@@ -64,12 +64,14 @@ impl JsonThemeLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::image::SchemeType;
     use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
     use std::io::Write;
     use tempfile::NamedTempFile;
 
     fn create_test_loader() -> JsonThemeLoader {
-        let generator = LegacyPaletteGenerator::new(AlgorithmParameters::default());
+        let generator =
+            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot);
         JsonThemeLoader::new(generator)
     }
 

@@ -27,7 +27,7 @@ pub use preview::*;
 pub use core::{Error, Mode, Result, Theme};
 
 pub use output::FileOutput;
-pub use palette::{AlgorithmParameters, ColorHarmony, ColorRole, LegacyPaletteGenerator, Palette};
+pub use palette::{AlgorithmParameters, ColorRole, LegacyPaletteGenerator, Palette};
 pub use pipeline::{Pipeline, PipelineConfig};
 pub use template::{ColorFilter, ColorProperty, FilterContext, TemplateProcessor};
 

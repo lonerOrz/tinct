@@ -4,6 +4,7 @@
 
 use crate::color::Color;
 use crate::core::Mode;
+use crate::image::SchemeType;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator, Palette};
 use crate::theme::JsonThemeLoader;
 use colored::*;
@@ -23,7 +24,8 @@ pub fn show_color_preview_from_theme(palette: &Palette, mode: Mode) -> Result<()
 }
 
 pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
-    let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters::default());
+    let palette_gen =
+        LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot);
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load(theme_path).map_err(|e| e.to_string())?;
 
@@ -38,7 +40,8 @@ pub fn show_color_preview(theme_path: &str, mode: &str) -> Result<(), String> {
 }
 
 pub fn show_color_preview_from_json(json: &serde_json::Value, mode: &str) -> Result<(), String> {
-    let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters::default());
+    let palette_gen =
+        LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot);
     let theme_loader = JsonThemeLoader::new(palette_gen);
     let theme = theme_loader.load_value(json).map_err(|e| e.to_string())?;
 

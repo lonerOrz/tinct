@@ -152,8 +152,8 @@ impl Color {
     pub fn hsl_str(&self) -> String {
         let (h, s, l) = self.hsl();
         let h_i = h.round() as u32 % 360;
-        let s_i = (s * 100.0).round().clamp(0.0, 100.0) as u32;
-        let l_i = (l * 100.0).round().clamp(0.0, 100.0) as u32;
+        let s_i = s.round().clamp(0.0, 100.0) as u32;
+        let l_i = l.round().clamp(0.0, 100.0) as u32;
         format!("hsl({}, {}%, {}%)", h_i, s_i, l_i)
     }
 
@@ -161,12 +161,12 @@ impl Color {
     pub fn hsla_str(&self) -> String {
         let (h, s, l) = self.hsl();
         let h_i = h.round() as u32 % 360;
-        let s_i = (s * 100.0).round().clamp(0.0, 100.0) as u32;
-        let l_i = (l * 100.0).round().clamp(0.0, 100.0) as u32;
+        let s_i = s.round().clamp(0.0, 100.0) as u32;
+        let l_i = l.round().clamp(0.0, 100.0) as u32;
         format!("hsla({}, {}%, {}%, {:.1})", h_i, s_i, l_i, self.alpha)
     }
 
-    /// HSL tuple (h: 0–360, s: 0–1, l: 0–1)
+    /// HSL tuple (h: 0–360, s: 0–100, l: 0–100)
     pub fn hsl(&self) -> Hsl {
         rgb_to_hsl(self.r as f64, self.g as f64, self.b as f64)
     }
@@ -176,12 +176,12 @@ impl Color {
         self.hsl().0
     }
 
-    /// Saturation 0–1
+    /// Saturation 0–100
     pub fn saturation(&self) -> f64 {
         self.hsl().1
     }
 
-    /// Lightness 0–1
+    /// Lightness 0–100
     pub fn lightness(&self) -> f64 {
         self.hsl().2
     }
@@ -207,32 +207,35 @@ impl Color {
         }
     }
 
-    /// Apply a color filter (lighten/darken/saturate/desaturate) and return new Color
+    /// Apply a color filter (lighten/darken/saturate/desaturate) and return new Color.
+    ///
+    /// Filtering happens in the perceptually uniform HCT space (the same space
+    /// Material Design 3 uses): `lighten`/`darken` shift tone, `saturate`/
+    /// `desaturate` shift chroma. This keeps results visually even, unlike HSL
+    /// where equal lightness steps are perceptually uneven.
     pub fn apply_filter(&self, filter: &ColorFilter) -> Self {
-        let (h, s, l) = self.hsl();
-        match filter {
-            ColorFilter::Lighten(amount) => {
-                let new_l = (l + amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, s, new_l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::Darken(amount) => {
-                let new_l = (l - amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, s, new_l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::Saturate(amount) => {
-                let new_s = (s + amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::Desaturate(amount) => {
-                let new_s = (s - amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::SetAlpha(a) => Self::new(self.r, self.g, self.b, a.clamp(0.0, 1.0)),
+        // Alpha-only filter: leave RGB untouched.
+        if let ColorFilter::SetAlpha(a) = filter {
+            return Self::new(self.r, self.g, self.b, a.clamp(0.0, 1.0));
         }
+
+        let argb = material_colors::color::Argb::from_u32(
+            0xFF000000 | ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32),
+        );
+        let hct = material_colors::hct::Hct::new(argb);
+        let (hue, chroma, tone) = (hct.get_hue(), hct.get_chroma(), hct.get_tone());
+
+        let (hue, chroma, tone) = match filter {
+            ColorFilter::Lighten(amount) => (hue, chroma, (tone + amount).clamp(0.0, 100.0)),
+            ColorFilter::Darken(amount) => (hue, chroma, (tone - amount).clamp(0.0, 100.0)),
+            ColorFilter::Saturate(amount) => (hue, (chroma + amount).clamp(0.0, 120.0), tone),
+            ColorFilter::Desaturate(amount) => (hue, (chroma - amount).clamp(0.0, 120.0), tone),
+            ColorFilter::SetAlpha(_) => unreachable!("handled above"),
+        };
+
+        let filtered: material_colors::color::Argb =
+            material_colors::hct::Hct::from(hue, chroma, tone).into();
+        Self::new(filtered.red, filtered.green, filtered.blue, self.alpha)
     }
 
     /// Format this color according to a ColorProperty
@@ -610,6 +613,35 @@ mod tests {
         assert_eq!(c.hex8_stripped(), "FF5722FF");
         assert_eq!(c.rgb_str(), "rgb(255, 87, 34)");
         assert_eq!(c.rgba_str(), "rgba(255, 87, 34, 1.0)");
+    }
+
+    #[test]
+    fn test_hsl_str_uses_css_units() {
+        // Regression: saturation/lightness must be 0–100 in the output, not 0–10000.
+        let c = Color::new(255, 87, 34, 1.0);
+        assert_eq!(c.hsl_str(), "hsl(14, 100%, 57%)");
+        assert_eq!(c.hsla_str(), "hsla(14, 100%, 57%, 1.0)");
+    }
+
+    #[test]
+    fn test_filter_lighten_shifts_tone_not_hue() {
+        let c = Color::new(103, 80, 164, 1.0);
+        let lighter = c.apply_filter(&ColorFilter::Lighten(10.0));
+        assert!(
+            calculate_relative_luminance(lighter.r, lighter.g, lighter.b)
+                > calculate_relative_luminance(c.r, c.g, c.b)
+        );
+        assert!(
+            (estimate_hue(c.r, c.g, c.b) - estimate_hue(lighter.r, lighter.g, lighter.b)).abs()
+                < 5.0
+        );
+    }
+
+    #[test]
+    fn test_filter_desaturate_reduces_chroma() {
+        let c = Color::new(103, 80, 164, 1.0);
+        let muted = c.apply_filter(&ColorFilter::Desaturate(30.0));
+        assert!(estimate_chroma(muted.r, muted.g, muted.b) < estimate_chroma(c.r, c.g, c.b));
     }
 
     #[test]

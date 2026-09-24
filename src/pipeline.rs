@@ -14,7 +14,7 @@ use crate::config::{AlgorithmConfig, ConfigSection};
 use crate::core::{Mode, Theme};
 use crate::image::{SchemeType, extract_source_color};
 use crate::log;
-use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
+use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator};
 use crate::path_resolver;
 use crate::template::TemplateProcessor;
 use crate::theme::JsonThemeLoader;
@@ -31,17 +31,15 @@ pub struct PipelineConfig {
     pub preview: bool,
     pub log_level: crate::log::LogLevel,
     pub algorithm: AlgorithmConfig,
-    pub image_scheme_type: Option<SchemeType>,
+    /// MD3 scheme variant used for palette generation (all theme sources).
+    pub scheme_type: SchemeType,
     pub theme_source: ThemeSource,
 }
 
 /// Where the theme data comes from.
 pub enum ThemeSource {
     Seed(String),
-    Image {
-        path: String,
-        scheme_type: SchemeType,
-    },
+    Image { path: String },
     File(String),
 }
 
@@ -59,7 +57,7 @@ impl Pipeline {
             preview,
             log_level,
             algorithm,
-            image_scheme_type: _,
+            scheme_type,
             theme_source,
         } = config;
 
@@ -67,14 +65,14 @@ impl Pipeline {
         log::init_logger(log_level);
 
         // Create theme data from source
-        let theme_data = Self::create_theme_data(&theme_source)?;
+        let theme_data = Self::create_theme_data(&theme_source, scheme_type)?;
 
         // Build theme once — shared by preview and processing
-        let theme = Self::build_theme(&theme_data, &algorithm)?;
+        let theme = Self::build_theme(&theme_data, &algorithm, scheme_type)?;
 
         // Print info
         if !log_level.is_quiet() {
-            Self::print_info(&config_path, &theme_source, mode);
+            Self::print_info(&config_path, &theme_source, mode, scheme_type);
         }
 
         // Validate config sections
@@ -96,10 +94,15 @@ impl Pipeline {
     }
 
     /// Create theme JSON value from the source.
-    fn create_theme_data(source: &ThemeSource) -> crate::Result<serde_json::Value> {
+    ///
+    /// `scheme_type` selects the extraction algorithm for image sources.
+    fn create_theme_data(
+        source: &ThemeSource,
+        scheme_type: SchemeType,
+    ) -> crate::Result<serde_json::Value> {
         match source {
             ThemeSource::Seed(seed) => Ok(json!({ "seed": seed })),
-            ThemeSource::Image { path, scheme_type } => {
+            ThemeSource::Image { path } => {
                 let img_path = Path::new(path);
                 if !img_path.exists() {
                     return Err(crate::core::Error::Config(format!(
@@ -108,7 +111,7 @@ impl Pipeline {
                     )));
                 }
 
-                let source_argb = extract_source_color(img_path, *scheme_type).map_err(|e| {
+                let source_argb = extract_source_color(img_path, scheme_type).map_err(|e| {
                     crate::core::Error::Config(format!("Error extracting color from image: {}", e))
                 })?;
 
@@ -132,7 +135,7 @@ impl Pipeline {
     }
 
     /// Print basic info to stdout.
-    fn print_info(config_path: &str, source: &ThemeSource, mode: Mode) {
+    fn print_info(config_path: &str, source: &ThemeSource, mode: Mode, scheme_type: SchemeType) {
         println!("{}", "tinct - Theme Injector".bold());
         println!("{}: {}", "Config".blue(), config_path);
 
@@ -140,19 +143,15 @@ impl Pipeline {
             ThemeSource::Seed(seed) => {
                 println!("{}: {}", "Seed".blue(), seed);
             }
-            ThemeSource::Image { path, scheme_type } => {
-                println!(
-                    "{}: {} (scheme: {})",
-                    "Image".blue(),
-                    path,
-                    scheme_type.to_string().yellow()
-                );
+            ThemeSource::Image { path } => {
+                println!("{}: {}", "Image".blue(), path);
             }
             ThemeSource::File(theme) => {
                 println!("{}: {}", "Theme".blue(), theme);
             }
         }
 
+        println!("{}: {}", "Scheme".blue(), scheme_type.to_string().yellow());
         println!("{}: {}", "Mode".blue(), mode.to_string().yellow());
         println!();
     }
@@ -176,15 +175,24 @@ impl Pipeline {
     fn build_theme(
         theme_data: &serde_json::Value,
         algorithm: &AlgorithmConfig,
+        scheme_type: SchemeType,
     ) -> crate::Result<Theme> {
-        let harmony = ColorHarmony::parse(&algorithm.color_harmony).unwrap_or(ColorHarmony::Md3);
+        if !algorithm.color_harmony.eq_ignore_ascii_case("md3") {
+            ::log::warn!(
+                "color_harmony = \"{}\" is deprecated and ignored; \
+                 use --scheme-type to choose the MD3 scheme instead",
+                algorithm.color_harmony
+            );
+        }
 
-        let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters {
-            saturation_adjustment: algorithm.saturation_adjustment,
-            hue_shift: algorithm.hue_shift,
-            contrast_level: algorithm.contrast_level,
-            color_harmony: harmony,
-        });
+        let palette_gen = LegacyPaletteGenerator::new(
+            AlgorithmParameters {
+                saturation_adjustment: algorithm.saturation_adjustment,
+                hue_shift: algorithm.hue_shift,
+                contrast_level: algorithm.contrast_level,
+            },
+            scheme_type,
+        );
         let theme_loader = JsonThemeLoader::new(palette_gen);
         theme_loader
             .load_value(theme_data)
@@ -521,7 +529,7 @@ mod tests {
     #[test]
     fn test_build_theme_from_seed() {
         let data = seed_theme_data();
-        let result = Pipeline::build_theme(&data, &default_algorithm());
+        let result = Pipeline::build_theme(&data, &default_algorithm(), SchemeType::TonalSpot);
         assert!(result.is_ok());
         let theme = result.unwrap();
         let dark = theme.dark_colors();
@@ -535,7 +543,8 @@ mod tests {
     #[test]
     fn test_build_theme_dark_has_more_colors() {
         let data = seed_theme_data();
-        let theme = Pipeline::build_theme(&data, &default_algorithm()).unwrap();
+        let theme =
+            Pipeline::build_theme(&data, &default_algorithm(), SchemeType::TonalSpot).unwrap();
         let dark = theme.dark_colors();
         let light = theme.light_colors();
         assert_eq!(dark.len(), light.len());
@@ -544,7 +553,7 @@ mod tests {
     #[test]
     fn test_create_theme_data_seed() {
         let source = ThemeSource::Seed("#FF0000".to_string());
-        let data = Pipeline::create_theme_data(&source).unwrap();
+        let data = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
         assert_eq!(data["seed"], "#FF0000");
     }
 
@@ -552,9 +561,8 @@ mod tests {
     fn test_create_theme_data_image_missing() {
         let source = ThemeSource::Image {
             path: "/nonexistent/image.png".to_string(),
-            scheme_type: SchemeType::TonalSpot,
         };
-        let result = Pipeline::create_theme_data(&source);
+        let result = Pipeline::create_theme_data(&source, SchemeType::TonalSpot);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Image not found"));
@@ -563,7 +571,7 @@ mod tests {
     #[test]
     fn test_create_theme_data_file_missing() {
         let source = ThemeSource::File("/nonexistent/theme.json".to_string());
-        let result = Pipeline::create_theme_data(&source);
+        let result = Pipeline::create_theme_data(&source, SchemeType::TonalSpot);
         assert!(result.is_err());
     }
 
@@ -578,7 +586,7 @@ mod tests {
         .unwrap();
 
         let source = ThemeSource::File(theme_path.to_str().unwrap().to_string());
-        let data = Pipeline::create_theme_data(&source).unwrap();
+        let data = Pipeline::create_theme_data(&source, SchemeType::TonalSpot).unwrap();
         assert_eq!(data["seed"], "#123456");
     }
 
@@ -596,7 +604,12 @@ mod tests {
             post_hook: None,
         };
 
-        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let theme = Pipeline::build_theme(
+            &seed_theme_data(),
+            &default_algorithm(),
+            SchemeType::TonalSpot,
+        )
+        .unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
@@ -619,7 +632,12 @@ mod tests {
             post_hook: None,
         };
 
-        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let theme = Pipeline::build_theme(
+            &seed_theme_data(),
+            &default_algorithm(),
+            SchemeType::TonalSpot,
+        )
+        .unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
@@ -645,7 +663,12 @@ mod tests {
             post_hook: None,
         };
 
-        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let theme = Pipeline::build_theme(
+            &seed_theme_data(),
+            &default_algorithm(),
+            SchemeType::TonalSpot,
+        )
+        .unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 

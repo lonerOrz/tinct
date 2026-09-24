@@ -1,8 +1,9 @@
-//! Color scoring utilities — hue population + chroma weighting.
+//! WSMeans k-means refinement and color scoring utilities.
 //!
-//! This module provides the `score_colors` function used by M3 schemes.
-//! The WSMeans k-means refinement is skipped for performance — Wu quantizer
-//! output alone produces equivalent top-scored colors in ~10x less time.
+//! This module provides the WSMeans refinement (`quantize_wsmeans`) that the M3
+//! extraction pipeline runs over the Wu quantizer's clusters to sharpen them,
+//! together with the `score_colors` hue/chroma scoring used to pick the final
+//! source color.
 //!
 //! Reference: material-color-utilities quantizer pipeline
 

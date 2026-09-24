@@ -1,17 +1,21 @@
-//! Palette generation logic using material-colors crate
+//! Palette generation using the official Material You algorithm.
 //!
-//! This module uses the official Material You algorithm via the material-colors crate
-//! to generate perceptually uniform color palettes from a seed color.
+//! Generation is delegated entirely to the `material-colors` crate. We never
+//! reimplement MD3's hue/chroma tables: we select the official `Variant` that
+//! matches the requested [`SchemeType`], optionally nudge the seed (hue shift /
+//! chroma scaling / contrast level), and let [`DynamicScheme::by_variant`]
+//! derive the complete, spec-compliant scheme.
 
 use material_colors::color::Argb;
-use material_colors::dynamic_color::{DynamicScheme, Variant};
+use material_colors::dynamic_color::DynamicScheme;
 use material_colors::hct::Hct;
-use material_colors::palette::TonalPalette;
 use serde_json::Value;
 
-use super::params::{AlgorithmParameters, ColorHarmony};
+use super::ansi;
+use super::params::AlgorithmParameters;
 use super::types::{ColorRole, Palette};
 use crate::color::Color;
+use crate::image::SchemeType;
 use std::collections::HashMap;
 
 /// Extract seed hex from theme: prefer "seed", fallback to "Primary".
@@ -22,29 +26,68 @@ pub fn extract_seed_hex(theme: &Value) -> Option<&str> {
         .or_else(|| theme.get("Primary").and_then(|v| v.as_str()))
 }
 
-/// Generate color palette from theme data using HCT color space
+/// Generate a palette using the default Tonal Spot scheme and no adjustments.
 pub fn generate_palette(theme: &Value, is_dark_mode: bool) -> Result<Palette, String> {
-    let seed_hex =
-        extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
-
-    let seed_argb = parse_hex_color(seed_hex)?;
-    let scheme =
-        generate_scheme_with_params(seed_argb, is_dark_mode, &AlgorithmParameters::default());
-    scheme_to_palette(&scheme, theme)
+    generate_palette_with_params(
+        theme,
+        is_dark_mode,
+        SchemeType::TonalSpot,
+        AlgorithmParameters::default(),
+    )
 }
 
-/// Generate color palette with algorithm parameters
+/// Generate a palette with an explicit scheme type and seed adjustments.
 pub fn generate_palette_with_params(
     theme: &Value,
     is_dark_mode: bool,
+    scheme_type: SchemeType,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
     let seed_hex =
         extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     let seed_argb = parse_hex_color(seed_hex)?;
-    let scheme = generate_scheme_with_params(seed_argb, is_dark_mode, &params);
+    let scheme = generate_scheme(seed_argb, is_dark_mode, scheme_type, &params);
     scheme_to_palette(&scheme, theme)
+}
+
+/// Build the official MD3 scheme for a seed.
+///
+/// This is the single source of truth for generation: every role is produced by
+/// `material-colors`, so secondary/tertiary/neutral relationships match Material
+/// You exactly. `AlgorithmParameters` only influence the seed itself.
+pub fn generate_scheme(
+    seed: Argb,
+    is_dark_mode: bool,
+    scheme_type: SchemeType,
+    params: &AlgorithmParameters,
+) -> DynamicScheme {
+    let params = params.sanitized();
+    let adjusted_seed = adjust_seed(seed, &params);
+    DynamicScheme::by_variant(
+        adjusted_seed,
+        &scheme_type.to_variant(),
+        is_dark_mode,
+        Some(params.contrast_level),
+    )
+}
+
+/// Apply seed-level adjustments in HCT space, preserving tone.
+///
+/// Returns the seed untouched when the parameters are the defaults, so the
+/// default path is bit-for-bit the official algorithm.
+fn adjust_seed(seed: Argb, params: &AlgorithmParameters) -> Argb {
+    if params.hue_shift == 0 && params.saturation_adjustment == 0 {
+        return seed;
+    }
+
+    let hct = Hct::new(seed);
+    let hue = ((hct.get_hue() + params.hue_shift as f64) % 360.0 + 360.0) % 360.0;
+    let chroma =
+        (hct.get_chroma() * (1.0 + params.saturation_adjustment as f64 / 100.0)).clamp(0.0, 120.0);
+
+    let adjusted: Argb = Hct::from(hue, chroma, hct.get_tone()).into();
+    adjusted
 }
 
 fn parse_hex_color(hex: &str) -> Result<Argb, String> {
@@ -77,121 +120,11 @@ fn pascal_case(key: &str) -> Option<String> {
     Some(format!("{}{}", first.to_uppercase(), chars.as_str()))
 }
 
-/// Calculate secondary hue based on MD3 algorithm
-fn calculate_secondary_hue(hue: f64) -> f64 {
-    let offset = if (0.0..41.0).contains(&hue) {
-        15.0
-    } else if (41.0..61.0).contains(&hue) {
-        10.0
-    } else if (61.0..101.0).contains(&hue) {
-        8.0
-    } else if (101.0..141.0).contains(&hue) {
-        5.0
-    } else if (141.0..181.0).contains(&hue) {
-        3.0
-    } else if (181.0..221.0).contains(&hue) {
-        2.0
-    } else if (221.0..261.0).contains(&hue) {
-        5.0
-    } else if (261.0..301.0).contains(&hue) {
-        10.0
-    } else if (301.0..341.0).contains(&hue) {
-        15.0
-    } else {
-        20.0
-    };
-    (hue + offset) % 360.0
-}
-
-/// Calculate tertiary hue based on MD3 algorithm
-fn calculate_tertiary_hue(hue: f64) -> f64 {
-    let offset = if (0.0..41.0).contains(&hue) {
-        30.0
-    } else if (41.0..61.0).contains(&hue) {
-        25.0
-    } else if (61.0..101.0).contains(&hue) {
-        20.0
-    } else if (101.0..141.0).contains(&hue) {
-        15.0
-    } else if (141.0..181.0).contains(&hue) {
-        10.0
-    } else if (181.0..221.0).contains(&hue) {
-        5.0
-    } else if (221.0..261.0).contains(&hue) {
-        10.0
-    } else if (261.0..301.0).contains(&hue) {
-        20.0
-    } else if (301.0..341.0).contains(&hue) {
-        30.0
-    } else {
-        40.0
-    };
-    (hue + offset) % 360.0
-}
-
-/// Generate a Material You scheme with algorithm parameters
-fn generate_scheme_with_params(
-    seed: Argb,
-    is_dark_mode: bool,
-    params: &AlgorithmParameters,
-) -> DynamicScheme {
-    let hct = Hct::new(seed);
-    let base_hue = hct.get_hue();
-    let base_chroma = hct.get_chroma();
-
-    let (secondary_base_hue, tertiary_base_hue) = match params.color_harmony {
-        ColorHarmony::Md3 => (
-            calculate_secondary_hue(base_hue),
-            calculate_tertiary_hue(base_hue),
-        ),
-        ColorHarmony::Analogous => ((base_hue + 15.0) % 360.0, (base_hue + 30.0) % 360.0),
-        ColorHarmony::Complementary => ((base_hue + 180.0) % 360.0, (base_hue + 180.0) % 360.0),
-        ColorHarmony::Triadic => ((base_hue + 120.0) % 360.0, (base_hue + 240.0) % 360.0),
-        ColorHarmony::SplitComplementary => {
-            ((base_hue + 150.0) % 360.0, (base_hue + 210.0) % 360.0)
-        }
-    };
-
-    let apply_shift =
-        |hue: f64| -> f64 { ((hue + params.hue_shift as f64) % 360.0 + 360.0) % 360.0 };
-
-    let primary_hue = apply_shift(base_hue);
-    let secondary_hue = apply_shift(secondary_base_hue);
-    let tertiary_hue = apply_shift(tertiary_base_hue);
-    let neutral_hue = primary_hue;
-    let neutral_variant_hue = primary_hue;
-
-    let chroma_multiplier = 1.0 + (params.saturation_adjustment as f64 / 100.0);
-    let adjusted_chroma = (base_chroma * chroma_multiplier).max(0.0);
-
-    let secondary_chroma = (adjusted_chroma - 32.0).max(adjusted_chroma * 0.5).max(0.0);
-    let tertiary_chroma = adjusted_chroma;
-    let neutral_chroma = adjusted_chroma / 8.0;
-    let neutral_variant_chroma = adjusted_chroma / 8.0 + 4.0;
-
-    let primary = TonalPalette::from_hue_and_chroma(primary_hue, adjusted_chroma);
-    let secondary = TonalPalette::from_hue_and_chroma(secondary_hue, secondary_chroma);
-    let tertiary = TonalPalette::from_hue_and_chroma(tertiary_hue, tertiary_chroma);
-    let neutral = TonalPalette::from_hue_and_chroma(neutral_hue, neutral_chroma);
-    let neutral_variant =
-        TonalPalette::from_hue_and_chroma(neutral_variant_hue, neutral_variant_chroma);
-
-    DynamicScheme::new(
-        seed,
-        Some(Hct::from(primary_hue, adjusted_chroma, hct.get_tone())),
-        Variant::Fidelity,
-        is_dark_mode,
-        Some(params.contrast_level),
-        primary,
-        secondary,
-        tertiary,
-        neutral,
-        neutral_variant,
-        None,
-    )
-}
-
-/// Convert material-colors scheme to our Palette format
+/// Convert a material-colors scheme to our Palette format.
+///
+/// Every MD3 role comes straight from the scheme; theme entries may override
+/// individual roles by snake_case or PascalCase key. Terminal roles are always
+/// derived by [`ansi::ansi_colors`].
 fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, String> {
     let get_override = |key: &str| -> Option<&str> {
         theme
@@ -412,44 +345,10 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
     insert(ColorRole::Shadow, resolve(|s| s.shadow(), Some("shadow")))?;
     insert(ColorRole::Scrim, resolve(|s| s.scrim(), Some("scrim")))?;
 
-    // Terminal colors
-    insert(ColorRole::Black, resolve(|s| s.surface(), None))?;
-    insert(ColorRole::Red, resolve(|s| s.error(), None))?;
-    insert(ColorRole::Green, resolve(|s| s.tertiary(), None))?;
-    insert(ColorRole::Yellow, resolve(|s| s.primary_fixed(), None))?;
-    insert(ColorRole::Blue, resolve(|s| s.secondary(), None))?;
-    insert(ColorRole::Magenta, resolve(|s| s.tertiary(), None))?;
-    insert(ColorRole::Cyan, resolve(|s| s.secondary_container(), None))?;
-    insert(ColorRole::White, resolve(|s| s.on_surface(), None))?;
-    insert(
-        ColorRole::BrightBlack,
-        resolve(|s| s.surface_variant(), None),
-    )?;
-    insert(ColorRole::BrightRed, resolve(|s| s.error_container(), None))?;
-    insert(
-        ColorRole::BrightGreen,
-        resolve(|s| s.tertiary_container(), None),
-    )?;
-    insert(
-        ColorRole::BrightYellow,
-        resolve(|s| s.primary_fixed(), None),
-    )?;
-    insert(
-        ColorRole::BrightBlue,
-        resolve(|s| s.secondary_fixed(), None),
-    )?;
-    insert(
-        ColorRole::BrightMagenta,
-        resolve(|s| s.primary_fixed_dim(), None),
-    )?;
-    insert(
-        ColorRole::BrightCyan,
-        resolve(|s| s.secondary_fixed_dim(), None),
-    )?;
-    insert(
-        ColorRole::BrightWhite,
-        resolve(|s| s.inverse_surface(), None),
-    )?;
+    // Terminal colors get their own dedicated, fixed-hue mapping.
+    for (role, color) in ansi::ansi_colors(scheme) {
+        colors.insert(role, color);
+    }
 
     Ok(Palette::new(colors))
 }
@@ -457,6 +356,7 @@ fn scheme_to_palette(scheme: &DynamicScheme, theme: &Value) -> Result<Palette, S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use material_colors::dynamic_color::Variant;
     use serde_json::json;
 
     #[test]
@@ -484,5 +384,73 @@ mod tests {
         let theme = json!({ "seed": "#2196F3" });
         let palette = generate_palette(&theme, true).unwrap();
         assert!(palette.get("surface").is_some());
+    }
+
+    /// With default parameters our generation must be exactly the official
+    /// `DynamicScheme::by_variant` output — this is the guarantee that the
+    /// palette is real Material You.
+    #[test]
+    fn test_default_scheme_matches_official_algorithm() {
+        let seed = parse_hex_color("#FF5722").unwrap();
+        let mine = generate_scheme(
+            seed,
+            false,
+            SchemeType::TonalSpot,
+            &AlgorithmParameters::default(),
+        );
+        let official = DynamicScheme::by_variant(seed, &Variant::TonalSpot, false, Some(0.0));
+
+        assert_eq!(mine.primary(), official.primary());
+        assert_eq!(mine.secondary(), official.secondary());
+        assert_eq!(mine.tertiary(), official.tertiary());
+        assert_eq!(mine.surface(), official.surface());
+        assert_eq!(mine.error(), official.error());
+    }
+
+    /// MD3 guarantees secondary is desaturated and tertiary sits ~60° from the
+    /// seed. Asserting chroma/hue relationships guards against regressions to a
+    /// hand-rolled algorithm.
+    #[test]
+    fn test_tonal_spot_relationships() {
+        use crate::color::{estimate_chroma, estimate_hct, hue_distance};
+
+        let theme = json!({ "seed": "#FF5722" });
+        let palette = generate_palette(&theme, false).unwrap();
+
+        let primary = palette.get("primary").unwrap();
+        let tertiary = palette.get("tertiary").unwrap();
+        let secondary = palette.get("secondary").unwrap();
+
+        let (primary_hue, _) = estimate_hct(primary.r, primary.g, primary.b);
+        let (tertiary_hue, _) = estimate_hct(tertiary.r, tertiary.g, tertiary.b);
+        assert!(
+            (hue_distance(primary_hue, tertiary_hue) - 60.0).abs() < 25.0,
+            "tertiary should be ~60° from primary (got {:.1}°)",
+            hue_distance(primary_hue, tertiary_hue)
+        );
+
+        let secondary_chroma = estimate_chroma(secondary.r, secondary.g, secondary.b);
+        assert!(
+            secondary_chroma < 40.0,
+            "secondary should be desaturated (got chroma {:.1})",
+            secondary_chroma
+        );
+    }
+
+    /// Different scheme types must actually change the palette.
+    #[test]
+    fn test_scheme_type_changes_palette() {
+        let theme = json!({ "seed": "#FF5722" });
+        let spot =
+            generate_palette_with_params(&theme, false, SchemeType::TonalSpot, Default::default())
+                .unwrap();
+        let mono =
+            generate_palette_with_params(&theme, false, SchemeType::Monochrome, Default::default())
+                .unwrap();
+
+        assert_ne!(
+            spot.get("primary").unwrap().hex(),
+            mono.get("primary").unwrap().hex()
+        );
     }
 }
