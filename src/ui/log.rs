@@ -1,6 +1,15 @@
+//! Terminal status logging.
+//!
+//! A tiny leveled logger built on `colored`. The verbosity is set once at
+//! startup via [`init_logger`] and read by the `info` / `error` / `hook` /
+//! `general` helper modules.
+
+use std::sync::OnceLock;
+
 use colored::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
+/// Verbosity of terminal output, ordered `Quiet < Normal < Verbose`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum LogLevel {
     Quiet,
     Normal,
@@ -12,8 +21,6 @@ impl LogLevel {
         matches!(self, LogLevel::Quiet)
     }
 }
-
-use std::sync::OnceLock;
 
 // Global logger instance using thread-safe OnceLock
 static LOGGER: OnceLock<Logger> = OnceLock::new();
@@ -38,7 +45,7 @@ pub mod info {
 
     pub fn success(section: &str, msg: &str) {
         if let Some(logger) = LOGGER.get()
-            && logger.level as u8 >= LogLevel::Normal as u8
+            && logger.level >= LogLevel::Normal
         {
             println!(
                 "{} [{}] {}",
@@ -59,12 +66,8 @@ pub mod error {
     use super::*;
 
     pub fn message(section: &str, msg: &str) {
-        if let Some(logger) = LOGGER.get()
-            && logger.level as u8 >= LogLevel::Quiet as u8
-        {
-            // Always show errors
-            eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
-        }
+        // Errors are always shown, regardless of the configured level.
+        eprintln!("{} [{}] {}", "✗".red().bold(), section.red(), msg.red());
     }
 
     pub fn hook_error(section: &str, error: &str) {
@@ -78,7 +81,7 @@ pub mod hook {
 
     pub fn executing(section: &str) {
         if let Some(logger) = LOGGER.get()
-            && logger.level as u8 >= LogLevel::Verbose as u8
+            && logger.level >= LogLevel::Verbose
         {
             println!(
                 "{} [{}] {}",
@@ -91,7 +94,7 @@ pub mod hook {
 
     pub fn success(section: &str) {
         if let Some(logger) = LOGGER.get()
-            && logger.level as u8 >= LogLevel::Normal as u8
+            && logger.level >= LogLevel::Normal
         {
             println!(
                 "{} [{}] {}",
@@ -106,11 +109,10 @@ pub mod hook {
 // General purpose functions
 pub mod general {
     use super::*;
-    use colored::Colorize;
 
     pub fn info(msg: &str) {
         if let Some(logger) = LOGGER.get()
-            && logger.level as u8 >= LogLevel::Normal as u8
+            && logger.level >= LogLevel::Normal
         {
             println!("{}", msg);
         }

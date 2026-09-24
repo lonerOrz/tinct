@@ -9,6 +9,7 @@ mod dynamic;
 mod params;
 mod types;
 
+pub use ansi::AnsiParams;
 pub use dynamic::{
     LegacyPaletteGenerator, build_palette, collect_theme_colors, extract_seed_hex,
     generate_palette, generate_palette_with_params,

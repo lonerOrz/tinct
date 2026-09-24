@@ -31,22 +31,87 @@ use palette::convert::FromColorUnclamped;
 use palette::{Clamp, IntoColor, LabHue, Lch, Srgb};
 
 use super::types::ColorRole;
+use crate::config::{AnsiConfig, AnsiPalette};
 use crate::core::color::Color;
-
-/// Near-grey clusters are useless for hue snapping, so they are ignored.
-/// Clusters at or below this chroma are effectively neutral (MD3 neutrals carry
-/// 4–8 chroma, and UI backgrounds/surfaces sit around 10–12). They are ignored
-/// for hue snapping so a theme's background never contaminates a chromatic slot.
-const MIN_CLUSTER_CHROMA: f32 = 12.0;
-
-/// Minimum contrast ratio between a chromatic slot and the terminal background.
-/// WCAG AA for large text (3:1) — enough to stay readable without washing out.
-const CONTRAST_TARGET: f32 = 3.0;
 
 /// Upper bound on CIE LCh chroma; roughly the edge of the sRGB gamut.
 const MAX_CHROMA: f32 = 132.0;
 
+/// Light-mode colors compress their wallust anchor by this factor into a band
+/// around L\*40, so no slot (blue, red) collapses to near-black on a light
+/// background while the per-slot character is preserved.
+const LIGHT_L_SCALE: f32 = 0.55;
+
+/// Lightness shift paired with [`LIGHT_L_SCALE`].
+const LIGHT_L_SHIFT: f32 = 2.0;
+
+/// Resolved terminal-palette knobs.
+///
+/// Built from [`AnsiConfig`] via [`AnsiParams::from_config`]: values are
+/// clamped to sane ranges and hex strings are parsed once, so the generation
+/// hot path never touches strings.
+#[derive(Debug, Clone)]
+pub struct AnsiParams {
+    pub palette: AnsiPalette,
+    pub source_weight: f32,
+    pub chroma_threshold: f32,
+    pub brightness_delta: f32,
+    pub bright_chroma_multiplier: f32,
+    pub contrast_target: f32,
+    pub background: Option<Color>,
+    pub foreground: Option<Color>,
+    /// Per-slot anchor overrides, in [`SLOTS`] order.
+    pub anchors: [Option<Lch>; 6],
+}
+
+impl Default for AnsiParams {
+    fn default() -> Self {
+        Self::from_config(&AnsiConfig::default())
+    }
+}
+
+impl AnsiParams {
+    /// Resolve user configuration into concrete, clamped values.
+    pub fn from_config(config: &AnsiConfig) -> Self {
+        Self {
+            palette: config.palette,
+            source_weight: config.source_weight.clamp(0.0, 1.0),
+            chroma_threshold: config.chroma_threshold.max(0.0),
+            brightness_delta: config.brightness_delta,
+            bright_chroma_multiplier: config.bright_chroma_multiplier.max(0.0),
+            contrast_target: config.contrast_target.clamp(0.0, 21.0),
+            background: config.background.as_deref().and_then(parse_color_hex),
+            foreground: config.foreground.as_deref().and_then(parse_color_hex),
+            anchors: [
+                parse_anchor(&config.anchors.red),
+                parse_anchor(&config.anchors.green),
+                parse_anchor(&config.anchors.yellow),
+                parse_anchor(&config.anchors.blue),
+                parse_anchor(&config.anchors.magenta),
+                parse_anchor(&config.anchors.cyan),
+            ],
+        }
+    }
+}
+
+/// Parse a hex color, warning and falling back on invalid input.
+fn parse_color_hex(hex: &str) -> Option<Color> {
+    match Color::from_hex(hex) {
+        Ok(color) => Some(color),
+        Err(_) => {
+            ::log::warn!("[ansi] ignoring invalid color '{}'", hex);
+            None
+        }
+    }
+}
+
+/// Parse an anchor hex into its CIE LCh representation.
+fn parse_anchor(hex: &Option<String>) -> Option<Lch> {
+    Some(lch_of(color_to_argb(&parse_color_hex(hex.as_deref()?)?)))
+}
+
 /// One chromatic ANSI slot.
+#[derive(Clone, Copy)]
 struct Slot {
     normal: ColorRole,
     bright: ColorRole,
@@ -129,39 +194,73 @@ const SLOTS: [Slot; 6] = [
 /// `source_colors` are the representative clusters extracted from the wallpaper
 /// (empty for seed/theme sources, in which case every chromatic slot is
 /// synthesized from the seed). The returned roles are unique.
-pub fn ansi_colors(scheme: &DynamicScheme, source_colors: &[Color]) -> Vec<(ColorRole, Color)> {
+pub fn ansi_colors(
+    scheme: &DynamicScheme,
+    source_colors: &[Color],
+    params: &AnsiParams,
+) -> Vec<(ColorRole, Color)> {
     let is_dark = scheme.is_dark;
 
     // Wallpaper clusters, in CIE LCh, grey ones dropped.
     let mut remaining: Vec<Lch> = source_colors
         .iter()
         .map(|c| lch_of(color_to_argb(c)))
-        .filter(|c| c.chroma > MIN_CLUSTER_CHROMA)
+        .filter(|c| c.chroma > params.chroma_threshold)
         .collect();
 
-    let background = srgb_of(lch_of(scheme.surface()));
+    // Contrast is measured against a pinned background when one is configured,
+    // otherwise against the scheme's own surface.
+    let background = match &params.background {
+        Some(bg) => srgb_of(lch_of(color_to_argb(bg))),
+        None => srgb_of(lch_of(scheme.surface())),
+    };
 
     let mut colors = Vec::with_capacity(16);
 
     // Greyscale ladder from the scheme's neutral palette: fixed tones, so it
-    // always forms a canonical dark→light ramp that matches the mode.
+    // always forms a canonical dark→light ramp that matches the mode. A pinned
+    // background/foreground replaces ANSI 0 / ANSI 7.
     let neutral = &scheme.neutral_palette;
-    colors.push((ColorRole::Black, from_palette(neutral, 10.0)));
+    colors.push((
+        ColorRole::Black,
+        params
+            .background
+            .unwrap_or_else(|| from_palette(neutral, 10.0)),
+    ));
     colors.push((ColorRole::BrightBlack, from_palette(neutral, 30.0)));
-    colors.push((ColorRole::White, from_palette(neutral, 90.0)));
+    colors.push((
+        ColorRole::White,
+        params
+            .foreground
+            .unwrap_or_else(|| from_palette(neutral, 90.0)),
+    ));
     colors.push((ColorRole::BrightWhite, from_palette(neutral, 100.0)));
 
-    for slot in &SLOTS {
-        let (hue, chroma, light) = slot_texture(slot, &mut remaining);
+    for (index, slot) in SLOTS.iter().enumerate() {
+        let slot = apply_anchor(slot, &params.anchors[index]);
+        let (hue, chroma, light) = slot_texture(&slot, &mut remaining, params.source_weight);
 
-        let normal = render(hue, chroma, light, is_dark, false, background);
-        let bright = render(hue, chroma, light, is_dark, true, background);
+        let normal = render(hue, chroma, light, is_dark, false, background, params);
+        let bright = render(hue, chroma, light, is_dark, true, background, params);
 
         colors.push((slot.normal, normal));
         colors.push((slot.bright, bright));
     }
 
     colors
+}
+
+/// Overlay a user-provided anchor color onto a slot's built-in anchor.
+fn apply_anchor(slot: &Slot, anchor: &Option<Lch>) -> Slot {
+    match anchor {
+        Some(a) => Slot {
+            anchor_hue: a.hue.into_inner(),
+            light: a.l,
+            chroma: a.chroma,
+            ..*slot
+        },
+        None => *slot,
+    }
 }
 
 /// Resolve a slot's hue, chroma and lightness from the remaining candidates.
@@ -173,7 +272,7 @@ pub fn ansi_colors(scheme: &DynamicScheme, source_colors: &[Color]) -> Vec<(Colo
 /// the palette but the slot keeps the vividness and legibility the anchor
 /// encodes. With no match the anchor itself is used, which is what keeps a
 /// monochrome input from collapsing into a washed-out palette.
-fn slot_texture(slot: &Slot, remaining: &mut Vec<Lch>) -> (f32, f32, f32) {
+fn slot_texture(slot: &Slot, remaining: &mut Vec<Lch>, source_weight: f32) -> (f32, f32, f32) {
     let mut hues = Vec::new();
     let mut chromas = Vec::new();
     let mut lights = Vec::new();
@@ -194,30 +293,20 @@ fn slot_texture(slot: &Slot, remaining: &mut Vec<Lch>) -> (f32, f32, f32) {
         (slot.anchor_hue, slot.chroma, slot.light)
     } else {
         let hue = mean(&hues).rem_euclid(360.0);
-        let chroma = (slot.chroma + 2.0 * mean(&chromas)) / 3.0;
-        let light = (slot.light + 2.0 * mean(&lights)) / 3.0;
+        let anchor_weight = 1.0 - source_weight;
+        let chroma = slot.chroma * anchor_weight + mean(&chromas) * source_weight;
+        let light = slot.light * anchor_weight + mean(&lights) * source_weight;
         (hue, chroma.clamp(0.0, MAX_CHROMA), light)
     }
 }
 
-/// Light-mode colors compress their wallust anchor by this factor into a band
-/// around L\*40, so no slot (blue, red) collapses to near-black on a light
-/// background while the per-slot character is preserved.
-const LIGHT_L_SCALE: f32 = 0.55;
-
-/// Lightness shift paired with [`LIGHT_L_SCALE`].
-const LIGHT_L_SHIFT: f32 = 2.0;
-
-/// How much lighter the `bright_*` variant is than its normal counterpart.
-/// (Bright variants also receive a chroma boost; see [`render`].)
-const BRIGHT_LIFT: f32 = 8.0;
-
 /// Turn a slot's hue/chroma/lightness into a final color.
 ///
 /// Lightness is normalized per mode so the whole set stays legible, and the
-/// `bright_*` variant is both lighter and more saturated. Every color is gamut
-/// mapped (preserving hue) and pushed away from the background until it clears
-/// the WCAG contrast floor.
+/// `bright_*` variant is both more extreme in lightness and more saturated
+/// (lighter/darker per [`AnsiPalette`]). Every color is gamut mapped
+/// (preserving hue) and pushed away from the background until it clears the
+/// configured WCAG contrast floor.
 fn render(
     hue: f32,
     chroma: f32,
@@ -225,6 +314,7 @@ fn render(
     is_dark: bool,
     bright: bool,
     background: Srgb<f32>,
+    params: &AnsiParams,
 ) -> Color {
     let base = if is_dark {
         light.clamp(18.0, 88.0)
@@ -233,21 +323,27 @@ fn render(
         // so no slot collapses to near-black on a light background.
         (light * LIGHT_L_SCALE + LIGHT_L_SHIFT).clamp(30.0, 60.0)
     };
+
+    let (lo, hi) = if is_dark { (18.0, 88.0) } else { (30.0, 64.0) };
+    let delta = match params.palette {
+        AnsiPalette::Dark => params.brightness_delta,
+        AnsiPalette::Light => -params.brightness_delta,
+    };
     let lightness = if bright {
-        (base + BRIGHT_LIFT).min(if is_dark { 88.0 } else { 64.0 })
+        (base + delta).clamp(lo, hi)
     } else {
         base
     };
 
     let chroma = if bright {
-        (chroma * 1.2).min(MAX_CHROMA)
+        (chroma * params.bright_chroma_multiplier).min(MAX_CHROMA)
     } else {
         chroma.min(MAX_CHROMA)
     };
 
     // Fit to sRGB *before* contrast so clipping never distorts the hue.
     let lch = gamut_map(Lch::new(lightness, chroma, LabHue::from_degrees(hue)));
-    let lch = ensure_contrast(lch, background, is_dark);
+    let lch = ensure_contrast(lch, background, is_dark, params.contrast_target);
     // The contrast step changes lightness, which can leave the gamut again.
     lch_to_color(gamut_map(lch))
 }
@@ -280,11 +376,14 @@ fn in_gamut(lch: Lch) -> bool {
     fits(srgb.red) && fits(srgb.green) && fits(srgb.blue)
 }
 
-/// Push a color away from the background until it clears [`CONTRAST_TARGET`].
-fn ensure_contrast(mut lch: Lch, background: Srgb<f32>, is_dark: bool) -> Lch {
+/// Push a color away from the background until it clears `target`.
+fn ensure_contrast(mut lch: Lch, background: Srgb<f32>, is_dark: bool, target: f32) -> Lch {
+    if target <= 0.0 {
+        return lch;
+    }
     let step = if is_dark { 6.0 } else { -6.0 };
     let mut i = 0;
-    while srgb_of(lch).relative_contrast(background) < CONTRAST_TARGET && i < 12 {
+    while srgb_of(lch).relative_contrast(background) < target && i < 12 {
         lch.l = (lch.l + step).clamp(0.0, 100.0);
         i += 1;
     }
@@ -344,6 +443,12 @@ mod tests {
 
     fn lch(color: &Color) -> Lch {
         lch_of(color_to_argb(color))
+    }
+
+    /// Test-local wrapper: every test exercises the default knobs unless it
+    /// explicitly builds its own [`AnsiParams`].
+    fn ansi_colors(scheme: &DynamicScheme, source_colors: &[Color]) -> Vec<(ColorRole, Color)> {
+        super::ansi_colors(scheme, source_colors, &AnsiParams::default())
     }
 
     #[test]
@@ -446,7 +551,7 @@ mod tests {
             ] {
                 let ratio = srgb_of(lch(&colors[&role])).relative_contrast(background);
                 assert!(
-                    ratio >= CONTRAST_TARGET - 0.05,
+                    ratio >= AnsiParams::default().contrast_target - 0.05,
                     "{role:?} contrast {ratio:.2} below floor (dark={is_dark})"
                 );
             }
@@ -522,5 +627,124 @@ mod tests {
                 c.chroma
             );
         }
+    }
+
+    fn cyan_chroma(params: &AnsiParams, source: &[Color]) -> f32 {
+        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), source, params)
+            .into_iter()
+            .collect();
+        lch(&colors[&ColorRole::Cyan]).chroma
+    }
+
+    #[test]
+    fn test_source_weight_controls_blend() {
+        let teal = rgb(0, 150, 136);
+        let anchor_only = AnsiParams {
+            source_weight: 0.0,
+            ..Default::default()
+        };
+        let source_only = AnsiParams {
+            source_weight: 1.0,
+            ..Default::default()
+        };
+        assert!(
+            cyan_chroma(&anchor_only, &[teal]) > cyan_chroma(&source_only, &[teal]),
+            "a higher source weight must pull chroma toward the source"
+        );
+    }
+
+    #[test]
+    fn test_chroma_threshold_drops_candidates() {
+        let teal = rgb(0, 150, 136);
+        let params = AnsiParams {
+            chroma_threshold: 1000.0,
+            ..Default::default()
+        };
+        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), &[teal], &params)
+            .into_iter()
+            .collect();
+        let hue = lch(&colors[&ColorRole::Cyan]).hue.into_inner();
+        assert!(
+            (hue - 204.0).abs() < 1.0,
+            "with every candidate dropped the cyan slot must fall back to its anchor"
+        );
+    }
+
+    #[test]
+    fn test_light_palette_makes_brights_darker() {
+        let params = AnsiParams {
+            palette: AnsiPalette::Light,
+            ..Default::default()
+        };
+        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), &[], &params)
+            .into_iter()
+            .collect();
+        for (normal, bright) in [
+            (ColorRole::Red, ColorRole::BrightRed),
+            (ColorRole::Cyan, ColorRole::BrightCyan),
+        ] {
+            assert!(
+                lch(&colors[&bright]).l < lch(&colors[&normal]).l,
+                "{bright:?} must be darker than {normal:?} with palette=light"
+            );
+        }
+    }
+
+    #[test]
+    fn test_background_and_foreground_pins() {
+        let background = rgb(0x12, 0x12, 0x12);
+        let foreground = rgb(0xEE, 0xEE, 0xEE);
+        let params = AnsiParams {
+            background: Some(background),
+            foreground: Some(foreground),
+            ..Default::default()
+        };
+        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), &[], &params)
+            .into_iter()
+            .collect();
+        assert_eq!(colors[&ColorRole::Black].hex(), background.hex());
+        assert_eq!(colors[&ColorRole::White].hex(), foreground.hex());
+    }
+
+    #[test]
+    fn test_anchor_override_changes_fallback() {
+        let custom = rgb(0xE0, 0x6C, 0x75);
+        let params = AnsiParams {
+            anchors: [
+                Some(lch_of(color_to_argb(&custom))),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            ..Default::default()
+        };
+        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), &[], &params)
+            .into_iter()
+            .collect();
+        let hue = lch(&colors[&ColorRole::Red]).hue.into_inner();
+        let expected = lch(&custom).hue.into_inner();
+        let diff = (hue - expected).rem_euclid(360.0);
+        assert!(
+            diff.min(360.0 - diff) < 3.0,
+            "red slot must adopt the custom anchor hue ({hue:.1} vs {expected:.1})"
+        );
+    }
+
+    #[test]
+    fn test_from_config_resolves_and_clamps() {
+        let config = AnsiConfig {
+            source_weight: 5.0,
+            contrast_target: 100.0,
+            background: Some("#123456".to_string()),
+            foreground: Some("not-a-color".to_string()),
+            ..AnsiConfig::default()
+        };
+        let params = AnsiParams::from_config(&config);
+        assert_eq!(params.source_weight, 1.0);
+        assert_eq!(params.contrast_target, 21.0);
+        assert!(params.background.is_some());
+        assert!(params.foreground.is_none(), "invalid hex must be ignored");
     }
 }

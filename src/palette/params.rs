@@ -22,6 +22,12 @@ pub struct AlgorithmParameters {
 
     /// MD3 contrast level (-1.0..=1.0, `0.0` = the design as specified).
     pub contrast_level: f64,
+
+    /// Force the seed to this HCT tone (0..=100). `None` keeps the seed tone.
+    pub seed_tone: Option<f64>,
+
+    /// Minimum seed chroma (0..=120). `0.0` disables the floor.
+    pub chroma_floor: f64,
 }
 
 impl Default for AlgorithmParameters {
@@ -30,6 +36,8 @@ impl Default for AlgorithmParameters {
             saturation_adjustment: 0,
             hue_shift: 0,
             contrast_level: 0.0,
+            seed_tone: None,
+            chroma_floor: 0.0,
         }
     }
 }
@@ -41,12 +49,18 @@ impl AlgorithmParameters {
             saturation_adjustment: self.saturation_adjustment.clamp(-100, 100),
             hue_shift: self.hue_shift.clamp(-180, 180),
             contrast_level: self.contrast_level.clamp(-1.0, 1.0),
+            seed_tone: self.seed_tone.map(|t| t.clamp(0.0, 100.0)),
+            chroma_floor: self.chroma_floor.clamp(0.0, 120.0),
         }
     }
 
     /// Whether any adjustment differs from the defaults.
     pub fn is_identity(&self) -> bool {
-        self.saturation_adjustment == 0 && self.hue_shift == 0 && self.contrast_level == 0.0
+        self.saturation_adjustment == 0
+            && self.hue_shift == 0
+            && self.contrast_level == 0.0
+            && self.seed_tone.is_none()
+            && self.chroma_floor == 0.0
     }
 }
 
@@ -65,10 +79,29 @@ mod tests {
             saturation_adjustment: 127,
             hue_shift: 300,
             contrast_level: 5.0,
+            seed_tone: Some(150.0),
+            chroma_floor: 500.0,
         };
         let sanitized = params.sanitized();
         assert_eq!(sanitized.saturation_adjustment, 100);
         assert_eq!(sanitized.hue_shift, 180);
         assert_eq!(sanitized.contrast_level, 1.0);
+        assert_eq!(sanitized.seed_tone, Some(100.0));
+        assert_eq!(sanitized.chroma_floor, 120.0);
+    }
+
+    #[test]
+    fn test_seed_extras_break_identity() {
+        let tone = AlgorithmParameters {
+            seed_tone: Some(50.0),
+            ..Default::default()
+        };
+        assert!(!tone.is_identity());
+
+        let floor = AlgorithmParameters {
+            chroma_floor: 10.0,
+            ..Default::default()
+        };
+        assert!(!floor.is_identity());
     }
 }

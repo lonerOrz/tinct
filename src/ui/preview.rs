@@ -2,7 +2,7 @@
 //!
 //! Displays Material Design 3 color palettes in the terminal with actual color blocks.
 
-use crate::core::color::Color;
+use crate::core::color::{Color, calculate_relative_luminance};
 use crate::core::{Mode, Theme};
 use crate::image::SchemeType;
 use crate::palette::{AlgorithmParameters, LegacyPaletteGenerator, Palette};
@@ -302,9 +302,7 @@ fn display_md3_cards_grid(colors: &HashMap<String, Color>) -> Result<(), String>
                         );
 
                         let color_block = centered.on_truecolor(color.r, color.g, color.b);
-                        let luminance = crate::core::color::calculate_relative_luminance(
-                            color.r, color.g, color.b,
-                        );
+                        let luminance = calculate_relative_luminance(color.r, color.g, color.b);
                         let text_color = if luminance > 0.1791 {
                             color_block.black()
                         } else {
@@ -358,8 +356,7 @@ fn print_terminal_palette(colors: &HashMap<String, Color>) {
         let (_, key2) = &terminal_colors[i + mid];
 
         if let Some(color1) = colors.get(*key1) {
-            let luminance1 =
-                crate::core::color::calculate_relative_luminance(color1.r, color1.g, color1.b);
+            let luminance1 = calculate_relative_luminance(color1.r, color1.g, color1.b);
             let block1 = format!(" {:<24} ", key1);
             let color_block1 = if luminance1 > 0.1791 {
                 block1.black().on_truecolor(color1.r, color1.g, color1.b)
@@ -372,8 +369,7 @@ fn print_terminal_palette(colors: &HashMap<String, Color>) {
         print!("  ");
 
         if let Some(color2) = colors.get(*key2) {
-            let luminance2 =
-                crate::core::color::calculate_relative_luminance(color2.r, color2.g, color2.b);
+            let luminance2 = calculate_relative_luminance(color2.r, color2.g, color2.b);
             let block2 = format!(" {:<24} ", key2);
             let color_block2 = if luminance2 > 0.1791 {
                 block2.black().on_truecolor(color2.r, color2.g, color2.b)

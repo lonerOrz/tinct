@@ -1,8 +1,8 @@
 //! Template processor implementation
 
-use crate::core::color::Color;
 use crate::core::{Mode, Result, Theme};
 use crate::template::filters::{ColorFilter, ColorProperty};
+use crate::ui::log::general;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -33,13 +33,9 @@ impl Default for TemplateProcessor {
 
 impl TemplateProcessor {
     pub fn render(&self, template: &str, theme: &Theme, mode: Mode) -> Result<String> {
-        // Build color maps once, inject source_color into both.
-        let mut dark_colors = theme.dark_colors();
-        let mut light_colors = theme.light_colors();
-        if let Ok(c) = Color::from_hex(&theme.source_color) {
-            dark_colors.insert("source_color".to_string(), c);
-            light_colors.insert("source_color".to_string(), c);
-        }
+        // Build color maps once. Every key is a spec-compliant MD3 role.
+        let dark_colors = theme.dark_colors();
+        let light_colors = theme.light_colors();
 
         let content = COLOR_REGEX.replace_all(template, |caps: &regex::Captures| {
             let key = &caps[1];
@@ -78,7 +74,7 @@ impl TemplateProcessor {
                     color.format(&prop_enum)
                 }
             } else {
-                crate::ui::log::general::info(&format!(
+                general::info(&format!(
                     "Warning: color '{}' not found in palette, using #000000",
                     key
                 ));
@@ -109,7 +105,7 @@ mod tests {
     use crate::palette::ColorRole;
 
     fn make_theme_with_color(role: ColorRole, hex: &str) -> Theme {
-        let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
+        let mut theme = Theme::new("test".to_string());
         let color = Color::from_hex(hex).unwrap();
         theme.dark_palette.insert(role, color);
         theme.light_palette.insert(role, color);
@@ -134,7 +130,7 @@ mod tests {
     #[test]
     fn test_template_processor_render_mode_placeholders() {
         let processor = TemplateProcessor::new();
-        let theme = Theme::new("test".to_string(), "#FF5722".to_string());
+        let theme = Theme::new("test".to_string());
 
         let template = "Mode: {{mode}}, Is Dark: {{is_dark}}, Is Light: {{is_light}}";
 
@@ -152,7 +148,7 @@ mod tests {
     #[test]
     fn test_template_processor_render_dark_light_suffix() {
         let processor = TemplateProcessor::new();
-        let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
+        let mut theme = Theme::new("test".to_string());
 
         theme
             .dark_palette

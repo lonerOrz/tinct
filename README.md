@@ -17,9 +17,10 @@ tinct is a command-line utility that generates themed configuration files based 
 - Support for light and dark themes
 - Template-based theme injection with **parallel processing** (10x faster)
 - Color preview functionality
-- Configurable via TOML files with algorithm parameters
-  - `contrast_level` for accessibility
-  - `hue_shift` / `saturation_adjustment` to nudge the seed color
+- Configurable via TOML files
+  - `[algorithm]` — seed nudging (`hue_shift`, `saturation_adjustment`, `contrast_level`, `seed_tone`, `chroma_floor`) plus per-mode `variant_dark` / `variant_light`
+  - `[image]` — extraction tuning (`max_colors`, `min_population`, `filter`, `quantizer`)
+  - `[ansi]` — terminal palette tuning (`palette`, `source_weight`, `chroma_threshold`, `contrast_target`, colour pins and anchors)
 - Support for post-processing hooks
 - Layered architecture (domain / infrastructure / presentation) with high cohesion and low coupling
 - **Smart color generation** from single seed color
@@ -39,14 +40,14 @@ src/
 ├── palette/            # domain: MD3 generation (dynamic.rs), ANSI, params
 ├── image/              # domain: quantization + source-color extraction
 ├── template/           # domain: placeholder rendering + color filters
-├── config/             # infrastructure: TOML parsing + path resolution
+├── config/             # infrastructure: TOML loading + path canonicalization
 ├── output/             # infrastructure: file writing
 └── ui/                 # presentation: logging + color preview
 ```
 
 `lib.rs` re-exports the public API, including backward-compatible aliases
-(`tinct::color`, `tinct::log`, `tinct::preview`, `tinct::path_resolver`) for
-modules that moved during the reorganisation.
+(`tinct::color`, `tinct::log`, `tinct::preview`) for modules that moved during
+the reorganisation.
 
 ## Installation
 
@@ -107,7 +108,7 @@ tinct -t MyTheme -c config.toml -m light -p
 
 Options:
 
-- `-c, --config`: Path to the TOML config file (defaults to `~/.config/tinct/config.toml`)
+- `-c, --config`: Path to the TOML config file (defaults to `$XDG_CONFIG_HOME/tinct/config.toml`, falling back to `~/.config/tinct/config.toml`)
 - `-t, --theme`: Path to theme.json file or theme name in themes/ folder
 - `-s, --seed`: Seed color for generating palette (e.g., `"#7aa2f7"`)
 - `-i, --image`: Path to wallpaper image for color extraction (PNG/JPG/WebP)
@@ -183,7 +184,11 @@ Combine seed with color overrides for precise control.
 
 ## Configuration File
 
-The configuration file is written in TOML format and is located at `~/.config/tinct/config.toml` by default. It contains template injection definitions, color generation algorithm tuning, and image extraction preferences.
+The configuration file is written in TOML format and is located at `$XDG_CONFIG_HOME/tinct/config.toml` (falling back to `~/.config/tinct/config.toml`) by default. It contains template injection definitions, color generation algorithm tuning, and image extraction preferences.
+
+On first run, if the default config file does not exist, `tinct` writes a fully commented default there, prints its path, and exits — edit it and run again. An explicit `--config <path>` that does not exist is an error: `tinct` never writes to a path you did not ask for. Every option has a built-in default, so a partially filled config (or none of the optional sections at all) is valid.
+
+Relative `input_path` / `output_path` values are resolved against the directory containing the config file, so `tinct` behaves identically no matter which directory you run it from. `~` is expanded.
 
 ### 1. Template File Configurations
 
@@ -210,7 +215,11 @@ You can adjust the color generation algorithm behavior:
 hue_shift = 0               # Rotate the seed hue by degrees (-180 to 180)
 saturation_adjustment = 0   # Scale the seed chroma by percentage (-100 to 100)
 contrast_level = 0.0        # MD3 contrast level (-1.0 to 1.0)
-# color_harmony = "md3"     # DEPRECATED — accepted but ignored; use --scheme-type
+# seed_tone = 50            # Force the seed's HCT tone (0-100); unset keeps it
+# chroma_floor = 20.0       # Minimum seed chroma (0-120); rescues grey seeds
+# variant_dark = "vibrant"  # MD3 variant used only in dark mode
+# variant_light = "tonal-spot"  # MD3 variant used only in light mode
+# color_harmony = "md3"     # DEPRECATED and ignored; use --scheme-type
 ```
 
 **Algorithm parameters:**
@@ -220,10 +229,16 @@ contrast_level = 0.0        # MD3 contrast level (-1.0 to 1.0)
 | `hue_shift`             | -180 ~ 180 | `0`     | Rotates the seed hue before generation      |
 | `saturation_adjustment` | -100 ~ 100 | `0`     | Scales seed chroma (`-100` → grey, `+100` → double) |
 | `contrast_level`        | -1.0 ~ 1.0 | `0.0`   | MD3 contrast level for accessibility        |
+| `seed_tone`             | 0 ~ 100    | unset   | Force the seed's HCT tone before generation |
+| `chroma_floor`          | 0 ~ 120    | `0`     | Minimum seed chroma; grey seeds still yield a lively palette |
+| `variant_dark`          | scheme name | unset  | MD3 variant used in dark mode only          |
+| `variant_light`         | scheme name | unset  | MD3 variant used in light mode only         |
 
 These parameters only **nudge the seed color**. All secondary/tertiary/neutral/error relationships are defined by the selected MD3 scheme and are no longer hand-tuned — that is what keeps the output faithful to Material You.
 
-**Deprecated:** `color_harmony` (analogous, complementary, triadic, split-complementary) is accepted for backwards compatibility with old config files but **ignored** (a warning is logged). The old hue-table relationships were not part of MD3. Use `--scheme-type` / `[image].scheme_type` to pick the scheme instead.
+**Scheme precedence:** the base scheme is `--scheme-type` (CLI) > `[image].scheme_type` (config) > `tonal-spot`. `variant_dark` / `variant_light` then override that base for the respective mode; unset modes keep the base.
+
+**Deprecated:** `color_harmony` (analogous, complementary, triadic, split-complementary) is no longer part of the algorithm — if present in an old config file it is simply ignored. The old hue-table relationships were not part of MD3. Use `--scheme-type` / `[image].scheme_type` to pick the scheme instead.
 
 ### 3. Image Configuration
 
@@ -232,6 +247,10 @@ Extract colors from wallpaper images using the `[image]` section. The selected s
 ```toml
 [image]
 scheme_type = "vibrant"    # Extraction algorithm and MD3 scheme variant
+# max_colors = 64          # Cap on returned colour clusters (default 32)
+# min_population = 0.01    # Drop clusters below this share of total pixels (0-1)
+# filter = "saturation"    # Pixel pre-filter: "none" | "saturation" | "brightness"
+# quantizer = "wsmeans"    # M3 pipeline quantizer: "wsmeans" | "wu"
 ```
 
 **Scheme types:**
@@ -247,6 +266,15 @@ scheme_type = "vibrant"    # Extraction algorithm and MD3 scheme variant
 | `fruit-salad`   | Wu + WSMeans + Score    | Fruit Salad   | MD3 Fruit Salad variant  |
 | `rainbow`       | Wu + WSMeans + Score    | Rainbow       | MD3 Rainbow variant      |
 | `monochrome`    | Wu + WSMeans + Score    | Monochrome    | MD3 Monochrome variant   |
+
+**Extraction options:**
+
+| Option           | Range                    | Default   | Effect                                              |
+| ---------------- | ------------------------ | --------- | --------------------------------------------------- |
+| `max_colors`     | 1+                       | `32`      | Cap on the number of returned colour clusters       |
+| `min_population` | 0.0 ~ 1.0                | `0.0`     | Drop clusters below this fraction of the total pixels |
+| `filter`         | `none`/`saturation`/`brightness` | `none` | Pre-filter pixels before clustering          |
+| `quantizer`      | `wsmeans` / `wu`         | `wsmeans` | `wu` skips WSMeans refinement (faster, coarser)     |
 
 **Priority chain:** CLI `--scheme-type` > config `[image].scheme_type` > default (`tonal-spot`)
 
@@ -265,6 +293,43 @@ Same scheme, same output variant; only the seed source differs. The mapping is: 
 - `saturation_adjustment = 50` scales seed chroma up by 50%
 - `saturation_adjustment = -50` reduces seed chroma by 50% (more muted)
 - `lightness_adjustment` is not supported (would break MD3 contrast ratios)
+
+### 4. Terminal (ANSI) Configuration
+
+The UI/MD3 roles are always pure Material You. The **16-color terminal palette** is generated separately (wallust-inspired): each chromatic slot snaps to a hue actually present in the source, so a wallpaper or theme yields a matching terminal. Tune it via `[ansi]`:
+
+```toml
+[ansi]
+palette = "dark"              # "dark" | "light" — bright-colour orientation
+source_weight = 0.6667        # 0.0 = anchor hue, 1.0 = source hue (matched slots)
+chroma_threshold = 12.0       # Candidates below this chroma are not trusted
+brightness_delta = 8.0        # Lightness delta applied to bright variants
+bright_chroma_multiplier = 1.2  # Chroma scale for bright variants
+contrast_target = 3.0         # Minimum WCAG contrast ratio against the background
+# background = "#101010"      # Pin ANSI black (colour 0)
+# foreground = "#F0F0F0"      # Pin ANSI white (colour 7)
+
+[ansi.anchors]                # Power-user: override the six hue anchors
+# red = "#E06C75"
+# green = "#98C379"
+# yellow = "#E5C07B"
+# blue = "#61AFEF"
+# magenta = "#C678DD"
+# cyan = "#56B6C2"
+```
+
+| Option                   | Range          | Default  | Effect                                          |
+| ------------------------ | -------------- | -------- | ----------------------------------------------- |
+| `palette`                | `dark`/`light` | `dark`   | Bright variants get lighter (`dark`) or darker (`light`) |
+| `source_weight`          | 0.0 ~ 1.0      | `0.6667` | Blend between the fixed anchor and the source hue |
+| `chroma_threshold`       | 0+             | `12.0`   | Ignore source candidates below this chroma      |
+| `brightness_delta`       | 0+             | `8.0`    | Lightness shift for bright variants             |
+| `bright_chroma_multiplier` | 0+           | `1.2`    | Chroma multiplier for bright variants           |
+| `contrast_target`        | 0.0 ~ 21.0     | `3.0`    | Minimum contrast ratio against the background   |
+| `background` / `foreground` | hex colour  | unset    | Pin ANSI black (0) / white (7)                  |
+| `anchors.<hue>`          | hex colour     | unset    | Override an individual hue anchor               |
+
+Setting `contrast_target = 0.0` disables the contrast nudge; `source_weight = 0.0` reproduces fixed, wallust-like anchors. All values are clamped to their valid range.
 
 ## Template Color Format
 

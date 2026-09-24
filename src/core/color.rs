@@ -1,3 +1,8 @@
+//! Color model.
+//!
+//! A lean RGB + alpha value ([`Color`]) with on-demand format conversions,
+//! plus the built-in [`ColorFilter`] transformations used by templates.
+
 /// RGB components as (r, g, b)
 pub type Rgb = (u8, u8, u8);
 
@@ -646,7 +651,6 @@ mod tests {
 
     #[test]
     fn test_color_lighten() {
-        use crate::core::color::ColorFilter;
         let c = Color::new(200, 200, 200, 1.0);
         let lit = c.apply_filter(&ColorFilter::Lighten(15.0));
         assert!(lit.lightness() > c.lightness());
@@ -654,7 +658,6 @@ mod tests {
 
     #[test]
     fn test_color_darken() {
-        use crate::core::color::ColorFilter;
         let c = Color::new(50, 50, 50, 1.0);
         let d = c.apply_filter(&ColorFilter::Darken(15.0));
         assert!(d.lightness() < c.lightness());

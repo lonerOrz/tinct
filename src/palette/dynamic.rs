@@ -93,7 +93,14 @@ pub fn generate_palette_with_params(
     scheme_type: SchemeType,
     params: AlgorithmParameters,
 ) -> Result<Palette, String> {
-    build_palette(theme, is_dark_mode, scheme_type, params, &[])
+    build_palette(
+        theme,
+        is_dark_mode,
+        scheme_type,
+        params,
+        &[],
+        &ansi::AnsiParams::default(),
+    )
 }
 
 /// Generate a palette, threading the source image's color clusters into the
@@ -104,13 +111,14 @@ pub fn build_palette(
     scheme_type: SchemeType,
     params: AlgorithmParameters,
     source_colors: &[Color],
+    ansi_params: &ansi::AnsiParams,
 ) -> Result<Palette, String> {
     let seed_hex =
         extract_seed_hex(theme).ok_or("Theme must contain either 'seed' or 'Primary' color")?;
 
     let seed_argb = parse_hex_color(seed_hex)?;
     let scheme = generate_scheme(seed_argb, is_dark_mode, scheme_type, &params);
-    scheme_to_palette(&scheme, theme, source_colors)
+    scheme_to_palette(&scheme, theme, source_colors, ansi_params)
 }
 
 /// Build the official MD3 scheme for a seed.
@@ -139,16 +147,20 @@ pub fn generate_scheme(
 /// Returns the seed untouched when the parameters are the defaults, so the
 /// default path is bit-for-bit the official algorithm.
 fn adjust_seed(seed: Argb, params: &AlgorithmParameters) -> Argb {
-    if params.hue_shift == 0 && params.saturation_adjustment == 0 {
+    let has_tone = params.seed_tone.is_some();
+    let has_floor = params.chroma_floor > 0.0;
+    if params.hue_shift == 0 && params.saturation_adjustment == 0 && !has_tone && !has_floor {
         return seed;
     }
 
     let hct = Hct::new(seed);
     let hue = ((hct.get_hue() + params.hue_shift as f64) % 360.0 + 360.0) % 360.0;
-    let chroma =
-        (hct.get_chroma() * (1.0 + params.saturation_adjustment as f64 / 100.0)).clamp(0.0, 120.0);
+    let chroma = (hct.get_chroma() * (1.0 + params.saturation_adjustment as f64 / 100.0))
+        .clamp(0.0, 120.0)
+        .max(params.chroma_floor);
+    let tone = params.seed_tone.unwrap_or_else(|| hct.get_tone());
 
-    let adjusted: Argb = Hct::from(hue, chroma, hct.get_tone()).into();
+    let adjusted: Argb = Hct::from(hue, chroma, tone).into();
     adjusted
 }
 
@@ -191,6 +203,7 @@ fn scheme_to_palette(
     scheme: &DynamicScheme,
     theme: &Value,
     source_colors: &[Color],
+    ansi_params: &ansi::AnsiParams,
 ) -> Result<Palette, String> {
     let get_override = |key: &str| -> Option<&str> {
         theme
@@ -413,7 +426,7 @@ fn scheme_to_palette(
 
     // Terminal colors get their own dedicated, wallust-inspired mapping, using
     // the real image clusters where they match an ANSI hue slot.
-    for (role, color) in ansi::ansi_colors(scheme, source_colors) {
+    for (role, color) in ansi::ansi_colors(scheme, source_colors, ansi_params) {
         colors.insert(role, color);
     }
 
@@ -428,6 +441,11 @@ fn scheme_to_palette(
 pub struct LegacyPaletteGenerator {
     params: AlgorithmParameters,
     scheme_type: SchemeType,
+    /// Optional scheme variant used only in light mode. Falls back to
+    /// `scheme_type` when unset.
+    light_scheme_type: Option<SchemeType>,
+    /// Terminal (ANSI) mapping knobs.
+    ansi: ansi::AnsiParams,
     /// Representative wallpaper clusters, used for ANSI hue snapping.
     source_colors: Vec<Color>,
 }
@@ -437,6 +455,8 @@ impl LegacyPaletteGenerator {
         Self {
             params,
             scheme_type,
+            light_scheme_type: None,
+            ansi: ansi::AnsiParams::default(),
             source_colors: Vec::new(),
         }
     }
@@ -446,6 +466,8 @@ impl LegacyPaletteGenerator {
         Self {
             params: AlgorithmParameters::default(),
             scheme_type: SchemeType::TonalSpot,
+            light_scheme_type: None,
+            ansi: ansi::AnsiParams::default(),
             source_colors: Vec::new(),
         }
     }
@@ -457,18 +479,36 @@ impl LegacyPaletteGenerator {
         self
     }
 
-    /// The scheme variant this generator produces.
+    /// Configure the terminal (ANSI) mapping.
+    pub fn with_ansi(mut self, ansi: ansi::AnsiParams) -> Self {
+        self.ansi = ansi;
+        self
+    }
+
+    /// Use a different MD3 variant in light mode.
+    pub fn with_light_scheme(mut self, scheme_type: SchemeType) -> Self {
+        self.light_scheme_type = Some(scheme_type);
+        self
+    }
+
+    /// The scheme variant this generator produces in dark mode.
     pub fn scheme_type(&self) -> SchemeType {
         self.scheme_type
     }
 
     pub fn generate(&self, theme: &Value, mode: Mode) -> crate::core::Result<Palette> {
+        let scheme_type = if mode.is_light() {
+            self.light_scheme_type.unwrap_or(self.scheme_type)
+        } else {
+            self.scheme_type
+        };
         build_palette(
             theme,
             mode.is_dark(),
-            self.scheme_type,
+            scheme_type,
             self.params,
             &self.source_colors,
+            &self.ansi,
         )
         .map_err(crate::core::Error::Palette)
     }

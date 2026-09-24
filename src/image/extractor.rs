@@ -23,13 +23,14 @@ use super::kmeans;
 use super::quantizer;
 use super::reader::{self, ResizeFilter};
 use super::wsmeans;
-use crate::core::color::{Color, Rgb};
+use crate::core::color::{Color, Rgb, estimate_chroma};
 
 /// Supported scheme types for color extraction.
 #[derive(
     Debug, Clone, Copy, PartialEq, clap::ValueEnum, serde::Serialize, serde::Deserialize, Default,
 )]
 #[clap(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum SchemeType {
     // M3 schemes (Wu + Score)
     #[default]
@@ -133,6 +134,126 @@ pub struct ExtractedPalette {
     pub colors: Vec<Color>,
 }
 
+/// Optional pixel pre-filter applied before clustering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImageFilter {
+    /// Keep every pixel.
+    #[default]
+    None,
+    /// Drop low-chroma (near-grey) pixels.
+    Saturation,
+    /// Drop near-black and near-white pixels.
+    Brightness,
+}
+
+/// Which quantizer the M3 extraction pipeline uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Quantizer {
+    /// Wu quantization followed by WSMeans refinement (default, matches MD3).
+    #[default]
+    Wsmeans,
+    /// Wu quantization only — faster, slightly coarser.
+    Wu,
+}
+
+/// Tunable knobs for image extraction (`[image]` in the config file).
+#[derive(Debug, Clone, Copy)]
+pub struct ImageOptions {
+    /// Cap on the number of returned clusters. `None` keeps the built-in
+    /// default (32).
+    pub max_colors: Option<usize>,
+    /// Drop clusters whose population is below this fraction of the total
+    /// (0..1). `0.0` disables the filter.
+    pub min_population: f64,
+    pub filter: ImageFilter,
+    pub quantizer: Quantizer,
+}
+
+impl Default for ImageOptions {
+    fn default() -> Self {
+        Self {
+            max_colors: None,
+            min_population: 0.0,
+            filter: ImageFilter::None,
+            quantizer: Quantizer::Wsmeans,
+        }
+    }
+}
+
+impl ImageOptions {
+    /// The effective cluster cap (defaults to 32).
+    fn cluster_cap(&self) -> usize {
+        self.max_colors.unwrap_or(32).max(1)
+    }
+}
+
+/// Apply the optional pixel pre-filter.
+fn apply_filter(pixels: &[Rgb], filter: ImageFilter) -> Vec<Rgb> {
+    match filter {
+        ImageFilter::None => pixels.to_vec(),
+        ImageFilter::Saturation => pixels
+            .iter()
+            .copied()
+            .filter(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0)
+            .collect(),
+        ImageFilter::Brightness => pixels
+            .iter()
+            .copied()
+            .filter(|&(r, g, b)| {
+                let luma = (0.299 * r as f64 + 0.587 * g as f64 + 0.114 * b as f64) / 255.0;
+                (0.1..=0.9).contains(&luma)
+            })
+            .collect(),
+    }
+}
+
+/// Drop clusters whose population is below `min_pop` of the total. Falls back
+/// to the input when the filter would remove everything.
+fn filter_population_counts(counts: &HashMap<u32, i64>, min_pop: f64) -> HashMap<u32, i64> {
+    if min_pop <= 0.0 {
+        return counts.clone();
+    }
+    let total: i64 = counts.values().sum();
+    if total <= 0 {
+        return counts.clone();
+    }
+    let threshold = total as f64 * min_pop;
+    let kept: HashMap<u32, i64> = counts
+        .iter()
+        .filter(|&(_, &n)| n as f64 >= threshold)
+        .map(|(&c, &n)| (c, n))
+        .collect();
+    if kept.is_empty() {
+        counts.clone()
+    } else {
+        kept
+    }
+}
+
+/// Same as [`filter_population_counts`] but for scored `(rgb, weight)` lists.
+fn filter_population_scored(scored: &[(Rgb, f64)], min_pop: f64) -> Vec<(Rgb, f64)> {
+    if min_pop <= 0.0 {
+        return scored.to_vec();
+    }
+    let total: f64 = scored.iter().map(|(_, w)| *w).sum();
+    if total <= 0.0 {
+        return scored.to_vec();
+    }
+    let threshold = total * min_pop;
+    let kept: Vec<(Rgb, f64)> = scored
+        .iter()
+        .filter(|(_, w)| *w >= threshold)
+        .copied()
+        .collect();
+    if kept.is_empty() {
+        scored.to_vec()
+    } else {
+        kept
+    }
+}
+
 /// Extract the source color from an image file.
 ///
 /// # Arguments
@@ -142,7 +263,16 @@ pub struct ExtractedPalette {
 /// # Returns
 /// The extracted source color as an ARGB value, ready for palette generation.
 pub fn extract_source_color(path: &Path, scheme_type: SchemeType) -> Result<Argb, String> {
-    Ok(extract_source_palette(path, scheme_type)?.source)
+    extract_source_color_with(path, scheme_type, &ImageOptions::default())
+}
+
+/// Like [`extract_source_color`] but with explicit [`ImageOptions`].
+pub fn extract_source_color_with(
+    path: &Path,
+    scheme_type: SchemeType,
+    options: &ImageOptions,
+) -> Result<Argb, String> {
+    Ok(extract_source_palette_with(path, scheme_type, options)?.source)
 }
 
 /// Extract the source color **and** the representative color clusters.
@@ -153,6 +283,15 @@ pub fn extract_source_palette(
     path: &Path,
     scheme_type: SchemeType,
 ) -> Result<ExtractedPalette, String> {
+    extract_source_palette_with(path, scheme_type, &ImageOptions::default())
+}
+
+/// Like [`extract_source_palette`] but with explicit [`ImageOptions`].
+pub fn extract_source_palette_with(
+    path: &Path,
+    scheme_type: SchemeType,
+    options: &ImageOptions,
+) -> Result<ExtractedPalette, String> {
     let filter = scheme_type.resize_filter();
     let pixels = reader::read_image(path, filter)?;
 
@@ -160,10 +299,15 @@ pub fn extract_source_palette(
         return Err("Image contains no opaque pixels".to_string());
     }
 
+    let pixels = apply_filter(&pixels, options.filter);
+    if pixels.is_empty() {
+        return Err("Image contains no pixels after applying the filter".to_string());
+    }
+
     let (argb, colors) = if scheme_type.is_m3_scheme() {
-        extract_m3_source_color(&pixels)?
+        extract_m3_source_color(&pixels, options)?
     } else {
-        extract_kmeans_source_color(&pixels, scheme_type)?
+        extract_kmeans_source_color(&pixels, scheme_type, options)?
     };
 
     Ok(ExtractedPalette {
@@ -205,7 +349,10 @@ fn clusters_from_scored(scored: &[(Rgb, f64)], cap: usize) -> Vec<Color> {
 /// Extract source color using Wu + WSMeans + Score pipeline (M3 schemes).
 ///
 /// Matches the Python `extract_source_color` in theming/lib/quantizer.py exactly.
-fn extract_m3_source_color(pixels: &[Rgb]) -> Result<(u32, Vec<Color>), String> {
+fn extract_m3_source_color(
+    pixels: &[Rgb],
+    options: &ImageOptions,
+) -> Result<(u32, Vec<Color>), String> {
     // Step 1: Wu quantization (128 colors)
     let wu_result = quantizer::quantize_wu(pixels, 128);
 
@@ -213,22 +360,26 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<(u32, Vec<Color>), String> 
         return Err("Wu quantizer produced no colors".to_string());
     }
 
-    // Step 2: WSMeans refinement in Lab space.
+    // Step 2: WSMeans refinement in Lab space (unless Wu-only was requested).
     //
     // WSMeans is deterministic *given* the order of the starting clusters, so
     // the order must not come from `HashMap` iteration (which is randomized per
     // process). Order by population (then ARGB) so the same image always yields
     // the same palette.
-    let mut starting: Vec<(u32, i64)> = wu_result.iter().map(|(&c, &n)| (c, n)).collect();
-    starting.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    let starting_clusters: Vec<u32> = starting.into_iter().map(|(c, _)| c).collect();
-    let wsmeans_result = wsmeans::quantize_wsmeans(pixels, 128, &starting_clusters);
-
-    let color_to_count = if wsmeans_result.is_empty() {
-        // Fall back to Wu result if WSMeans fails
+    let color_to_count = if options.quantizer == Quantizer::Wu {
         wu_result
     } else {
-        wsmeans_result
+        let mut starting: Vec<(u32, i64)> = wu_result.iter().map(|(&c, &n)| (c, n)).collect();
+        starting.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        let starting_clusters: Vec<u32> = starting.into_iter().map(|(c, _)| c).collect();
+        let wsmeans_result = wsmeans::quantize_wsmeans(pixels, 128, &starting_clusters);
+
+        if wsmeans_result.is_empty() {
+            // Fall back to Wu result if WSMeans fails
+            wu_result
+        } else {
+            wsmeans_result
+        }
     };
 
     // Step 3: Filter low-chroma colors (like Python)
@@ -238,7 +389,7 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<(u32, Vec<Color>), String> 
         let r = ((argb >> 16) & 0xFF) as u8;
         let g = ((argb >> 8) & 0xFF) as u8;
         let b = (argb & 0xFF) as u8;
-        let chroma = crate::core::color::estimate_chroma(r, g, b);
+        let chroma = estimate_chroma(r, g, b);
         if chroma >= MIN_CHROMA {
             filtered.insert(argb, count);
         }
@@ -249,9 +400,10 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<(u32, Vec<Color>), String> 
     } else {
         filtered
     };
+    let filtered = filter_population_counts(&filtered, options.min_population);
 
     // Step 4: Score and pick the best color
-    let clusters = clusters_from_counts(&filtered, 32);
+    let clusters = clusters_from_counts(&filtered, options.cluster_cap());
     let scored = wsmeans::score_colors(&filtered, 4, true);
     let best = scored
         .first()
@@ -265,6 +417,7 @@ fn extract_m3_source_color(pixels: &[Rgb]) -> Result<(u32, Vec<Color>), String> 
 fn extract_kmeans_source_color(
     pixels: &[Rgb],
     scheme_type: SchemeType,
+    options: &ImageOptions,
 ) -> Result<(u32, Vec<Color>), String> {
     // Downsample for performance
     let sampled = kmeans::downsample_pixels(pixels, 4);
@@ -281,7 +434,7 @@ fn extract_kmeans_source_color(
     // For vibrant mode, pre-filter to colorful pixels
     let mut filtered_pixels = sampled.to_vec();
     if matches!(scheme_type, SchemeType::Vibrant) {
-        filtered_pixels.retain(|&(r, g, b)| crate::core::color::estimate_chroma(r, g, b) >= 5.0);
+        filtered_pixels.retain(|&(r, g, b)| estimate_chroma(r, g, b) >= 5.0);
     }
 
     if filtered_pixels.is_empty() {
@@ -298,7 +451,8 @@ fn extract_kmeans_source_color(
         if scored.is_empty() {
             return Err("No colors scored".to_string());
         }
-        let clusters = clusters_from_scored(&scored, 32);
+        let scored = filter_population_scored(&scored, options.min_population);
+        let clusters = clusters_from_scored(&scored, options.cluster_cap());
         let (r, g, b) = scored[0].0;
         return Ok((
             (0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
@@ -351,7 +505,8 @@ fn extract_kmeans_source_color(
         return Err("No colors scored after k-means".to_string());
     }
 
-    let clusters = clusters_from_scored(&scored, 32);
+    let scored = filter_population_scored(&scored, options.min_population);
+    let clusters = clusters_from_scored(&scored, options.cluster_cap());
     let (r, g, b) = scored[0].0;
     Ok((
         (0xFFu32 << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
@@ -425,6 +580,57 @@ mod tests {
         // The source color must match the thin wrapper.
         let direct = extract_source_color(file.path(), SchemeType::TonalSpot).unwrap();
         assert_eq!(palette.source, direct);
+    }
+
+    #[test]
+    fn test_max_colors_caps_clusters() {
+        let file = create_test_png();
+        let options = ImageOptions {
+            max_colors: Some(1),
+            ..ImageOptions::default()
+        };
+        let palette =
+            extract_source_palette_with(file.path(), SchemeType::TonalSpot, &options).unwrap();
+        assert_eq!(palette.colors.len(), 1);
+    }
+
+    #[test]
+    fn test_wu_quantizer_still_extracts() {
+        let file = create_test_png();
+        let options = ImageOptions {
+            quantizer: Quantizer::Wu,
+            ..ImageOptions::default()
+        };
+        let argb = extract_source_color_with(file.path(), SchemeType::TonalSpot, &options).unwrap();
+        assert!(argb.red > 0 || argb.green > 0 || argb.blue > 0);
+    }
+
+    #[test]
+    fn test_saturation_filter_keeps_chromatic_pixels() {
+        let file = create_test_png();
+        let options = ImageOptions {
+            filter: ImageFilter::Saturation,
+            ..ImageOptions::default()
+        };
+        // #6750A4 is chromatic, so the filtered pipeline still succeeds.
+        let palette =
+            extract_source_palette_with(file.path(), SchemeType::TonalSpot, &options).unwrap();
+        assert!(!palette.colors.is_empty());
+    }
+
+    #[test]
+    fn test_min_population_keeps_fallback_cluster() {
+        let file = create_test_png();
+        let options = ImageOptions {
+            min_population: 0.9,
+            ..ImageOptions::default()
+        };
+        let palette =
+            extract_source_palette_with(file.path(), SchemeType::TonalSpot, &options).unwrap();
+        assert!(
+            !palette.colors.is_empty(),
+            "fallback must keep at least one cluster"
+        );
     }
 
     #[test]

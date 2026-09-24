@@ -18,8 +18,7 @@ pub mod ui;
 
 // Backwards-compatible module paths for modules that moved during the
 // domain-driven reorganisation. Library consumers can keep using
-// `tinct::color`, `tinct::log`, `tinct::preview` and `tinct::path_resolver`.
-pub use config::path as path_resolver;
+// `tinct::color`, `tinct::log` and `tinct::preview`.
 pub use core::color;
 pub use ui::{log, preview};
 
