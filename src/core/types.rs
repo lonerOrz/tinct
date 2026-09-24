@@ -125,6 +125,7 @@ mod tests {
     use super::*;
     use crate::core::color::Color;
     use crate::palette::ColorRole;
+    use crate::palette::test_support::ANSI_ROLE_NAMES;
 
     #[test]
     fn test_mode_display() {
@@ -256,24 +257,7 @@ mod tests {
         let json = json!({ "seed": "#6750A4" });
         let theme = Theme::from_json_value(&json, &test_generator()).unwrap();
         let map = theme.dark_colors();
-        for role in [
-            "black",
-            "red",
-            "green",
-            "yellow",
-            "blue",
-            "magenta",
-            "cyan",
-            "white",
-            "bright_black",
-            "bright_red",
-            "bright_green",
-            "bright_yellow",
-            "bright_blue",
-            "bright_magenta",
-            "bright_cyan",
-            "bright_white",
-        ] {
+        for role in ANSI_ROLE_NAMES {
             assert!(map.contains_key(role), "missing ANSI role: {}", role);
         }
     }

@@ -393,13 +393,4 @@ mod tests {
         assert_eq!(parse_mode("light"), Mode::Light);
         assert_eq!(parse_mode("anything"), Mode::Light);
     }
-
-    #[test]
-    fn test_color_map_access() {
-        let mut colors = HashMap::new();
-        colors.insert("primary".to_string(), Color::new(255, 0, 0, 1.0));
-        assert!(colors.contains_key("primary"));
-        assert!(!colors.contains_key("secondary"));
-        assert_eq!(colors.get("primary").unwrap().r, 255);
-    }
 }

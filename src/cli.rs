@@ -55,24 +55,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cli_args_derive() {
-        let args = CliArgs {
-            config: Some(PathBuf::from("custom.toml")),
-            theme: Some("mytheme".to_string()),
-            seed: None,
-            image: None,
-            scheme_type: Some(SchemeType::TonalSpot),
-            mode: tinct::Mode::Light,
-            preview: true,
-            skip_sequences: false,
-            log_level: tinct::LogLevel::Verbose,
-        };
-        assert_eq!(args.theme, Some("mytheme".to_string()));
-        assert_eq!(args.mode, tinct::Mode::Light);
-        assert!(args.preview);
-    }
-
-    #[test]
     fn test_arg_group_requires_exactly_one_source() {
         // No source at all → error.
         assert!(CliArgs::try_parse_from(["tinct"]).is_err());
@@ -84,12 +66,5 @@ mod tests {
         assert!(CliArgs::try_parse_from(["tinct", "--seed", "#fff"]).is_ok());
         assert!(CliArgs::try_parse_from(["tinct", "-t", "mytheme"]).is_ok());
         assert!(CliArgs::try_parse_from(["tinct", "--image", "wall.png"]).is_ok());
-    }
-
-    #[test]
-    fn test_log_level_variants() {
-        let _ = tinct::LogLevel::Quiet;
-        let _ = tinct::LogLevel::Normal;
-        let _ = tinct::LogLevel::Verbose;
     }
 }

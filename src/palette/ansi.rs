@@ -428,6 +428,16 @@ mod tests {
     use material_colors::dynamic_color::Variant;
     use std::collections::{HashMap, HashSet};
 
+    /// The six chromatic slots and their `bright_*` counterparts, in order.
+    const CHROMATIC_PAIRS: [(ColorRole, ColorRole); 6] = [
+        (ColorRole::Red, ColorRole::BrightRed),
+        (ColorRole::Green, ColorRole::BrightGreen),
+        (ColorRole::Yellow, ColorRole::BrightYellow),
+        (ColorRole::Blue, ColorRole::BrightBlue),
+        (ColorRole::Magenta, ColorRole::BrightMagenta),
+        (ColorRole::Cyan, ColorRole::BrightCyan),
+    ];
+
     fn scheme(is_dark: bool) -> DynamicScheme {
         DynamicScheme::by_variant(
             Argb::from_u32(0xFF_6750A4),
@@ -460,18 +470,37 @@ mod tests {
     }
 
     #[test]
-    fn test_chromatic_anchors_keep_expected_hues() {
-        // With no image clusters each slot falls back to its vivid anchor.
-        let colors: HashMap<_, _> = ansi_colors(&scheme(false), &[]).into_iter().collect();
-        let hue = |role| lch(&colors[&role]).hue.into_inner();
-        let near = |a: f32, b: f32| (a - b).rem_euclid(360.0).min((b - a).rem_euclid(360.0)) < 15.0;
-
-        assert!(near(hue(ColorRole::Red), 40.0));
-        assert!(near(hue(ColorRole::Green), 151.0));
-        assert!(near(hue(ColorRole::Yellow), 104.0));
-        assert!(near(hue(ColorRole::Blue), 288.0));
-        assert!(near(hue(ColorRole::Magenta), 350.0));
-        assert!(near(hue(ColorRole::Cyan), 204.0));
+    fn test_chromatic_anchors_when_no_clusters() {
+        // With no image clusters every chromatic slot falls back to its vivid
+        // anchor (in both modes), and the fallback must stay vivid -- never
+        // washed out into a grey-ish terminal palette.
+        let anchors = [
+            (ColorRole::Red, 40.0),
+            (ColorRole::Green, 151.0),
+            (ColorRole::Yellow, 104.0),
+            (ColorRole::Blue, 288.0),
+            (ColorRole::Magenta, 350.0),
+            (ColorRole::Cyan, 204.0),
+        ];
+        for is_dark in [true, false] {
+            let colors: HashMap<_, _> = ansi_colors(&scheme(is_dark), &[]).into_iter().collect();
+            for (role, expected) in anchors {
+                let c = lch(&colors[&role]);
+                let hue = c.hue.into_inner();
+                let diff = (hue - expected).rem_euclid(360.0);
+                assert!(
+                    diff.min(360.0 - diff) < 15.0,
+                    "{role:?} hue {hue:.1} drifted from anchor {expected:.1} (dark={is_dark})"
+                );
+                if is_dark {
+                    assert!(
+                        c.chroma > 45.0,
+                        "{role:?} chroma {:.1} is too washed out for a monochrome input",
+                        c.chroma
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -496,22 +525,15 @@ mod tests {
     }
 
     /// `bright_*` must read as a distinct, livelier version of the normal slot:
-    /// always lighter, always a different color. (Chroma is boosted as much as
-    /// sRGB allows, but a lighter color physically holds less chroma for some
-    /// hues, so vividness is not asserted per-slot.)
+    /// with the default (dark) palette always lighter and always a different
+    /// color, and with `palette = light` inverted (darker). Chroma is boosted
+    /// as much as sRGB allows, but a lighter color physically holds less chroma
+    /// for some hues, so vividness is not asserted per-slot.
     #[test]
-    fn test_bright_variants_are_lighter_and_distinct() {
+    fn test_bright_variants_direction_and_distinctness() {
         for is_dark in [true, false] {
             let colors: HashMap<_, _> = ansi_colors(&scheme(is_dark), &[]).into_iter().collect();
-
-            for (normal, bright) in [
-                (ColorRole::Red, ColorRole::BrightRed),
-                (ColorRole::Green, ColorRole::BrightGreen),
-                (ColorRole::Yellow, ColorRole::BrightYellow),
-                (ColorRole::Blue, ColorRole::BrightBlue),
-                (ColorRole::Magenta, ColorRole::BrightMagenta),
-                (ColorRole::Cyan, ColorRole::BrightCyan),
-            ] {
+            for (normal, bright) in CHROMATIC_PAIRS {
                 let normal_l = lch(&colors[&normal]).l;
                 let bright_l = lch(&colors[&bright]).l;
                 assert!(
@@ -525,6 +547,21 @@ mod tests {
                     "{bright:?} must differ from {normal:?} (dark={is_dark})"
                 );
             }
+        }
+
+        // palette = light inverts the bright direction.
+        let params = AnsiParams {
+            palette: AnsiPalette::Light,
+            ..Default::default()
+        };
+        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), &[], &params)
+            .into_iter()
+            .collect();
+        for (normal, bright) in CHROMATIC_PAIRS {
+            assert!(
+                lch(&colors[&bright]).l < lch(&colors[&normal]).l,
+                "{bright:?} must be darker than {normal:?} with palette=light"
+            );
         }
     }
 
@@ -607,28 +644,6 @@ mod tests {
         }
     }
 
-    /// A monochrome input must still produce a full, vivid 16-color set (the
-    /// wallust anchors), never a washed-out grey-ish palette.
-    #[test]
-    fn test_monochrome_input_still_yields_vivid_anchors() {
-        let colors: HashMap<_, _> = ansi_colors(&scheme(true), &[]).into_iter().collect();
-        for role in [
-            ColorRole::Red,
-            ColorRole::Green,
-            ColorRole::Yellow,
-            ColorRole::Blue,
-            ColorRole::Magenta,
-            ColorRole::Cyan,
-        ] {
-            let c = lch(&colors[&role]);
-            assert!(
-                c.chroma > 45.0,
-                "{role:?} chroma {:.1} is too washed out for a monochrome input",
-                c.chroma
-            );
-        }
-    }
-
     fn cyan_chroma(params: &AnsiParams, source: &[Color]) -> f32 {
         let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), source, params)
             .into_iter()
@@ -668,26 +683,6 @@ mod tests {
             (hue - 204.0).abs() < 1.0,
             "with every candidate dropped the cyan slot must fall back to its anchor"
         );
-    }
-
-    #[test]
-    fn test_light_palette_makes_brights_darker() {
-        let params = AnsiParams {
-            palette: AnsiPalette::Light,
-            ..Default::default()
-        };
-        let colors: HashMap<_, _> = super::ansi_colors(&scheme(true), &[], &params)
-            .into_iter()
-            .collect();
-        for (normal, bright) in [
-            (ColorRole::Red, ColorRole::BrightRed),
-            (ColorRole::Cyan, ColorRole::BrightCyan),
-        ] {
-            assert!(
-                lch(&colors[&bright]).l < lch(&colors[&normal]).l,
-                "{bright:?} must be darker than {normal:?} with palette=light"
-            );
-        }
     }
 
     #[test]

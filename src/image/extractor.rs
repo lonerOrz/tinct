@@ -526,28 +526,14 @@ enum ScoringMode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::ImageEncoder;
-    use tempfile::NamedTempFile;
+    use crate::image::test_support::{TEST_IMAGE_SIZE, solid_png};
 
-    fn create_test_png() -> NamedTempFile {
-        let mut file = tempfile::Builder::new()
-            .prefix("test_")
-            .suffix(".png")
-            .tempfile()
-            .unwrap();
-        let encoder = image::codecs::png::PngEncoder::new(&mut file);
-        let pixels: Vec<u8> = (0..112 * 112)
-            .flat_map(|_| vec![103, 80, 164, 255]) // #6750A4 (Material purple)
-            .collect();
-        encoder
-            .write_image(&pixels, 112, 112, image::ExtendedColorType::Rgba8)
-            .unwrap();
-        file
-    }
+    /// Material purple (#6750A4) used as the wall of the test image.
+    const PURPLE: [u8; 3] = [103, 80, 164];
 
     #[test]
     fn test_extract_source_color_tonal_spot() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let argb = extract_source_color(file.path(), SchemeType::TonalSpot).unwrap();
         // Should extract something close to #6750A4
         let r = argb.red;
@@ -560,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_extract_source_color_vibrant() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let argb = extract_source_color(file.path(), SchemeType::Vibrant).unwrap();
         let r = argb.red;
         let g = argb.green;
@@ -571,7 +557,7 @@ mod tests {
 
     #[test]
     fn test_extract_source_palette_returns_clusters() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let palette = extract_source_palette(file.path(), SchemeType::TonalSpot).unwrap();
         assert!(
             !palette.colors.is_empty(),
@@ -584,7 +570,7 @@ mod tests {
 
     #[test]
     fn test_max_colors_caps_clusters() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let options = ImageOptions {
             max_colors: Some(1),
             ..ImageOptions::default()
@@ -596,7 +582,7 @@ mod tests {
 
     #[test]
     fn test_wu_quantizer_still_extracts() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let options = ImageOptions {
             quantizer: Quantizer::Wu,
             ..ImageOptions::default()
@@ -607,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_saturation_filter_keeps_chromatic_pixels() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let options = ImageOptions {
             filter: ImageFilter::Saturation,
             ..ImageOptions::default()
@@ -620,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_min_population_keeps_fallback_cluster() {
-        let file = create_test_png();
+        let file = solid_png(PURPLE, TEST_IMAGE_SIZE);
         let options = ImageOptions {
             min_population: 0.9,
             ..ImageOptions::default()

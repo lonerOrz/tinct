@@ -23,6 +23,8 @@ mod extractor;
 mod kmeans;
 mod quantizer;
 mod reader;
+#[cfg(test)]
+mod test_support;
 mod wsmeans;
 
 pub use crate::core::color::Rgb;

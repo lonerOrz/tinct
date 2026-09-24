@@ -43,14 +43,10 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_file_output_new() {
-        let output = FileOutput::new();
-        assert_eq!(output.format_name(), "file");
-    }
-
-    #[test]
     fn test_file_output_write() {
         let output = FileOutput::new();
+        assert_eq!(output.format_name(), "file");
+
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_output.txt");
 

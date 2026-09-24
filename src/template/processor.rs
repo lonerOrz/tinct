@@ -113,11 +113,6 @@ mod tests {
     }
 
     #[test]
-    fn test_template_processor_new() {
-        let _processor = TemplateProcessor::new();
-    }
-
-    #[test]
     fn test_template_processor_render_basic() {
         let processor = TemplateProcessor::new();
         let theme = make_theme_with_color(ColorRole::Primary, "#FF5722");

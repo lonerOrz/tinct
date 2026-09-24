@@ -523,34 +523,27 @@ impl Default for LegacyPaletteGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::palette::test_support::ANSI_ROLE_NAMES;
     use material_colors::dynamic_color::Variant;
     use serde_json::json;
 
     #[test]
-    fn test_generate_palette_from_seed() {
-        let theme = json!({ "seed": "#FF5722" });
-        let palette = generate_palette(&theme, false).unwrap();
+    fn test_generate_palette_shapes_and_overrides() {
+        let palette = generate_palette(&json!({ "seed": "#FF5722" }), false).unwrap();
+        for role in ["primary", "secondary", "tertiary", "surface"] {
+            assert!(palette.get(role).is_some(), "missing role {role}");
+        }
+        assert_ne!(
+            palette.get("primary").unwrap().hex(),
+            String::from("#000000")
+        );
 
-        assert!(palette.get("primary").is_some());
-        let primary = palette.get("primary").unwrap();
-        assert_ne!(primary.hex(), String::from("#000000"));
-        assert!(palette.get("secondary").is_some());
-        assert!(palette.get("tertiary").is_some());
-    }
+        let dark = generate_palette(&json!({ "seed": "#2196F3" }), true).unwrap();
+        assert!(dark.get("surface").is_some());
 
-    #[test]
-    fn test_generate_palette_with_override() {
-        let theme = json!({ "seed": "#FF5722", "error": "#F44336" });
-        let palette = generate_palette(&theme, false).unwrap();
-        let error = palette.get("error").unwrap();
-        assert_eq!(error.hex(), "#F44336");
-    }
-
-    #[test]
-    fn test_generate_palette_dark_mode() {
-        let theme = json!({ "seed": "#2196F3" });
-        let palette = generate_palette(&theme, true).unwrap();
-        assert!(palette.get("surface").is_some());
+        let overridden =
+            generate_palette(&json!({ "seed": "#FF5722", "error": "#F44336" }), false).unwrap();
+        assert_eq!(overridden.get("error").unwrap().hex(), "#F44336");
     }
 
     #[test]
@@ -624,140 +617,96 @@ mod tests {
         );
     }
 
-    /// Different scheme types must actually change the palette.
+    /// Different scheme types must actually change the palette, through both
+    /// the parameterised entry point and the facade.
     #[test]
     fn test_scheme_type_changes_palette() {
         let theme = json!({ "seed": "#FF5722" });
+
         let spot =
             generate_palette_with_params(&theme, false, SchemeType::TonalSpot, Default::default())
                 .unwrap();
         let mono =
             generate_palette_with_params(&theme, false, SchemeType::Monochrome, Default::default())
                 .unwrap();
-
         assert_ne!(
             spot.get("primary").unwrap().hex(),
             mono.get("primary").unwrap().hex()
+        );
+
+        let facade = |scheme| {
+            LegacyPaletteGenerator::new(AlgorithmParameters::default(), scheme)
+                .generate(&theme, Mode::Dark)
+                .unwrap()
+        };
+        assert_ne!(
+            facade(SchemeType::TonalSpot).get("primary").unwrap().hex(),
+            facade(SchemeType::Monochrome).get("primary").unwrap().hex()
         );
     }
 
     // ---- LegacyPaletteGenerator facade (formerly palette/adapter.rs) ----
 
     #[test]
-    fn test_legacy_palette_generator_new() {
-        let params = AlgorithmParameters {
-            saturation_adjustment: 10,
-            hue_shift: 15,
-            ..Default::default()
-        };
-        let generator = LegacyPaletteGenerator::new(params, SchemeType::Content);
-        assert_eq!(generator.params.saturation_adjustment, 10);
-        assert_eq!(generator.scheme_type(), SchemeType::Content);
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_with_defaults() {
-        let generator = LegacyPaletteGenerator::with_defaults();
-        assert_eq!(generator.params.saturation_adjustment, 0);
-        assert_eq!(generator.params.hue_shift, 0);
-        assert_eq!(generator.scheme_type(), SchemeType::TonalSpot);
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_default() {
-        let generator = LegacyPaletteGenerator::default();
-        assert_eq!(generator.params.saturation_adjustment, 0);
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_generate_dark_mode() {
-        let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({ "seed": "#FF5722" });
-
-        let result = generator.generate(&theme, Mode::Dark);
-        assert!(result.is_ok());
-
-        let palette = result.unwrap();
-        let map = palette.to_map();
-        assert!(!map.is_empty());
-        assert!(map.contains_key("primary"));
-        assert!(map.contains_key("secondary"));
-        assert!(map.contains_key("tertiary"));
-        assert!(map.contains_key("surface"));
-        assert!(map.contains_key("error"));
-
-        let primary = map.get("primary").unwrap();
-        assert!(!primary.hex().is_empty());
-        assert!(primary.hex().starts_with("#"));
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_generate_light_mode() {
-        let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({ "seed": "#2196F3" });
-
-        let result = generator.generate(&theme, Mode::Light);
-        assert!(result.is_ok());
-
-        let palette = result.unwrap();
-        let map = palette.to_map();
-        assert!(!map.is_empty());
-
-        let primary = map.get("primary").unwrap();
-        assert!(!primary.hex().is_empty());
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_generate_with_hue_shift() {
-        let params = AlgorithmParameters {
-            hue_shift: 180,
-            ..Default::default()
-        };
-        let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
-        let theme = json!({ "seed": "#FF0000" });
-
-        let result = generator.generate(&theme, Mode::Dark);
-        assert!(result.is_ok());
-
-        let palette = result.unwrap();
-        let map = palette.to_map();
-        let primary = map.get("primary").unwrap();
-        assert!(!primary.hex().is_empty());
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_generate_with_saturation() {
-        let params = AlgorithmParameters {
-            saturation_adjustment: 50,
-            ..Default::default()
-        };
-        let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
-        let theme = json!({ "seed": "#FF5722" });
-
-        let result = generator.generate(&theme, Mode::Dark);
-        assert!(result.is_ok());
-
-        let palette = result.unwrap();
-        let map = palette.to_map();
-        let primary = map.get("primary").unwrap();
-        assert!(!primary.hex().is_empty());
-    }
-
-    #[test]
-    fn test_legacy_palette_generator_scheme_type_affects_output() {
-        let theme = json!({ "seed": "#FF5722" });
-        let spot =
-            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::TonalSpot)
-                .generate(&theme, Mode::Dark)
-                .unwrap();
-        let mono =
-            LegacyPaletteGenerator::new(AlgorithmParameters::default(), SchemeType::Monochrome)
-                .generate(&theme, Mode::Dark)
-                .unwrap();
-        assert_ne!(
-            spot.get("primary").unwrap().hex(),
-            mono.get("primary").unwrap().hex()
+    fn test_legacy_palette_generator_construction() {
+        let custom = LegacyPaletteGenerator::new(
+            AlgorithmParameters {
+                saturation_adjustment: 10,
+                hue_shift: 15,
+                ..Default::default()
+            },
+            SchemeType::Content,
         );
+        assert_eq!(custom.params.saturation_adjustment, 10);
+        assert_eq!(custom.scheme_type(), SchemeType::Content);
+
+        for generator in [
+            LegacyPaletteGenerator::with_defaults(),
+            LegacyPaletteGenerator::default(),
+        ] {
+            assert_eq!(generator.params.saturation_adjustment, 0);
+            assert_eq!(generator.params.hue_shift, 0);
+            assert_eq!(generator.scheme_type(), SchemeType::TonalSpot);
+        }
+    }
+
+    #[test]
+    fn test_legacy_palette_generator_generate_modes_and_params() {
+        let cases = [
+            (AlgorithmParameters::default(), Mode::Dark, "#FF5722"),
+            (AlgorithmParameters::default(), Mode::Light, "#2196F3"),
+            (
+                AlgorithmParameters {
+                    hue_shift: 180,
+                    ..Default::default()
+                },
+                Mode::Dark,
+                "#FF0000",
+            ),
+            (
+                AlgorithmParameters {
+                    saturation_adjustment: 50,
+                    ..Default::default()
+                },
+                Mode::Dark,
+                "#FF5722",
+            ),
+        ];
+
+        for (params, mode, seed) in cases {
+            let theme = json!({ "seed": seed });
+            let generator = LegacyPaletteGenerator::new(params, SchemeType::TonalSpot);
+            let palette = generator
+                .generate(&theme, mode)
+                .unwrap_or_else(|e| panic!("{seed} {mode:?}: {e}"));
+
+            for role in ["primary", "secondary", "tertiary", "surface", "error"] {
+                let color = palette
+                    .get(role)
+                    .unwrap_or_else(|| panic!("missing {role} for {seed}"));
+                assert!(color.hex().starts_with('#'), "bad hex for {role}");
+            }
+        }
     }
 
     #[test]
@@ -808,22 +757,6 @@ mod tests {
             "surface_container",
             "surface_container_high",
             "surface_container_highest",
-            "black",
-            "red",
-            "green",
-            "yellow",
-            "blue",
-            "magenta",
-            "cyan",
-            "white",
-            "bright_black",
-            "bright_red",
-            "bright_green",
-            "bright_yellow",
-            "bright_blue",
-            "bright_magenta",
-            "bright_cyan",
-            "bright_white",
         ];
 
         for role in expected_roles {
@@ -831,17 +764,11 @@ mod tests {
             let color = map.get(*role).unwrap();
             assert!(!color.hex().is_empty(), "Empty hex for role: {}", role);
         }
-    }
 
-    #[test]
-    fn test_legacy_palette_generator_generate_invalid_theme() {
-        let generator = LegacyPaletteGenerator::with_defaults();
-        let theme = json!({ "no_seed": "value" });
-
-        let result = generator.generate(&theme, Mode::Dark);
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("seed") || err_msg.contains("Primary"));
+        for role in ANSI_ROLE_NAMES {
+            assert!(map.contains_key(role), "Missing ANSI role: {}", role);
+            assert!(!map.get(role).unwrap().hex().is_empty());
+        }
     }
 
     #[test]

@@ -490,25 +490,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hex_to_rgb() {
-        let (r, g, b) = hex_to_rgb("#ffffff").unwrap();
-        assert_eq!(r, 255);
-        assert_eq!(g, 255);
-        assert_eq!(b, 255);
+    fn test_hex_to_rgb_and_back() {
+        assert_eq!(hex_to_rgb("#ffffff").unwrap(), (255, 255, 255));
+        assert_eq!(hex_to_rgb("#000000").unwrap(), (0, 0, 0));
 
-        let (r, g, b) = hex_to_rgb("#000000").unwrap();
-        assert_eq!(r, 0);
-        assert_eq!(g, 0);
-        assert_eq!(b, 0);
-    }
-
-    #[test]
-    fn test_rgb_to_hex() {
-        let hex = rgb_to_hex(255.0, 255.0, 255.0);
-        assert_eq!(hex, "#FFFFFF");
-
-        let hex = rgb_to_hex(0.0, 0.0, 0.0);
-        assert_eq!(hex, "#000000");
+        assert_eq!(rgb_to_hex(255.0, 255.0, 255.0), "#FFFFFF");
+        assert_eq!(rgb_to_hex(0.0, 0.0, 0.0), "#000000");
     }
 
     #[test]
@@ -585,15 +572,14 @@ mod tests {
     }
 
     #[test]
-    fn test_estimate_chroma() {
-        let chroma = estimate_chroma(255, 0, 0);
-        assert!(chroma > 0.0);
-    }
-
-    #[test]
-    fn test_estimate_hue() {
+    fn test_estimate_hue_and_chroma() {
+        // Pure red: both estimates agree it is a vivid, roughly hue-0 colour.
         let hue = estimate_hue(255, 0, 0);
         assert!((0.0..=360.0).contains(&hue));
+        assert!(
+            estimate_chroma(255, 0, 0) > 45.0,
+            "pure red must register as strongly chromatic"
+        );
     }
 
     #[test]
@@ -650,16 +636,11 @@ mod tests {
     }
 
     #[test]
-    fn test_color_lighten() {
-        let c = Color::new(200, 200, 200, 1.0);
-        let lit = c.apply_filter(&ColorFilter::Lighten(15.0));
-        assert!(lit.lightness() > c.lightness());
-    }
+    fn test_color_lighten_and_darken() {
+        let light = Color::new(200, 200, 200, 1.0);
+        assert!(light.apply_filter(&ColorFilter::Lighten(15.0)).lightness() > light.lightness());
 
-    #[test]
-    fn test_color_darken() {
-        let c = Color::new(50, 50, 50, 1.0);
-        let d = c.apply_filter(&ColorFilter::Darken(15.0));
-        assert!(d.lightness() < c.lightness());
+        let dark = Color::new(50, 50, 50, 1.0);
+        assert!(dark.apply_filter(&ColorFilter::Darken(15.0)).lightness() < dark.lightness());
     }
 }

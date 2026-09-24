@@ -9,6 +9,9 @@ mod dynamic;
 mod params;
 mod types;
 
+#[cfg(test)]
+pub(crate) mod test_support;
+
 pub use ansi::AnsiParams;
 pub use dynamic::{
     LegacyPaletteGenerator, build_palette, collect_theme_colors, extract_seed_hex,

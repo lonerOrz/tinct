@@ -96,28 +96,11 @@ pub enum ResizeFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::ImageEncoder;
-    use tempfile::NamedTempFile;
-
-    fn create_test_png() -> NamedTempFile {
-        let mut file = tempfile::Builder::new()
-            .prefix("test_")
-            .suffix(".png")
-            .tempfile()
-            .unwrap();
-        let encoder = image::codecs::png::PngEncoder::new(&mut file);
-        let pixels: Vec<u8> = (0..112 * 112)
-            .flat_map(|_| vec![255, 87, 34, 255]) // #FF5722
-            .collect();
-        encoder
-            .write_image(&pixels, 112, 112, image::ExtendedColorType::Rgba8)
-            .unwrap();
-        file
-    }
+    use crate::image::test_support::{TEST_IMAGE_SIZE, solid_png};
 
     #[test]
     fn test_read_image_solid_color() {
-        let file = create_test_png();
+        let file = solid_png([255, 87, 34], TEST_IMAGE_SIZE);
         let pixels = read_image(file.path(), ResizeFilter::Triangle).unwrap();
         assert!(!pixels.is_empty());
         // All pixels should be approximately #FF5722
@@ -129,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_read_image_filter_types() {
-        let file = create_test_png();
+        let file = solid_png([255, 87, 34], TEST_IMAGE_SIZE);
         for filter in [ResizeFilter::Triangle, ResizeFilter::Nearest] {
             let pixels = read_image(file.path(), filter).unwrap();
             assert!(!pixels.is_empty());

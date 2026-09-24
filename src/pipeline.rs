@@ -465,15 +465,22 @@ mod tests {
         json!({ "seed": "#6750A4" })
     }
 
-    /// Build a theme with no image clusters and the default Tonal Spot scheme.
-    fn build_theme(data: &serde_json::Value) -> crate::Result<Theme> {
+    fn build_theme_with(
+        data: &serde_json::Value,
+        algorithm: &AlgorithmConfig,
+    ) -> crate::Result<Theme> {
         Pipeline::build_theme(
             data,
             &[],
-            &default_algorithm(),
+            algorithm,
             SchemeType::TonalSpot,
             &AnsiConfig::default(),
         )
+    }
+
+    /// Build a theme with no image clusters and the default Tonal Spot scheme.
+    fn build_theme(data: &serde_json::Value) -> crate::Result<Theme> {
+        build_theme_with(data, &default_algorithm())
     }
 
     fn section(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> ConfigSection {
@@ -489,22 +496,8 @@ mod tests {
         let mut algorithm = default_algorithm();
         algorithm.variant_dark = Some(SchemeType::Monochrome);
 
-        let base = Pipeline::build_theme(
-            &seed_theme_data(),
-            &[],
-            &default_algorithm(),
-            SchemeType::TonalSpot,
-            &AnsiConfig::default(),
-        )
-        .unwrap();
-        let overridden = Pipeline::build_theme(
-            &seed_theme_data(),
-            &[],
-            &algorithm,
-            SchemeType::TonalSpot,
-            &AnsiConfig::default(),
-        )
-        .unwrap();
+        let base = build_theme(&seed_theme_data()).unwrap();
+        let overridden = build_theme_with(&seed_theme_data(), &algorithm).unwrap();
 
         assert_ne!(
             base.dark_palette.get("primary").unwrap().hex(),
@@ -519,78 +512,53 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_config_section_valid() {
-        assert!(validate_config_section(
-            &section("input.css", "output.css"),
-            "test_section"
-        ));
+    fn test_validate_config_section_requires_input_and_output() {
+        let cases = [
+            ("input.css", "output.css", true),
+            ("", "output.css", false),
+            ("input.css", "", false),
+            ("", "", false),
+        ];
+        for (input, output, expected) in cases {
+            assert_eq!(
+                validate_config_section(&section(input, output), "test_section"),
+                expected,
+                "input={input:?} output={output:?}"
+            );
+        }
     }
 
     #[test]
-    fn test_validate_config_section_empty_input() {
-        assert!(!validate_config_section(
-            &section("", "output.css"),
-            "test_section"
-        ));
-    }
+    fn test_validate_config_aggregates_sections() {
+        let mut valid = HashMap::new();
+        valid.insert("group1.section1".to_string(), section("a.css", "b.css"));
+        assert!(Pipeline::validate_config(&valid));
 
-    #[test]
-    fn test_validate_config_section_empty_output() {
-        assert!(!validate_config_section(
-            &section("input.css", ""),
-            "test_section"
-        ));
-    }
-
-    #[test]
-    fn test_validate_config_section_both_empty() {
-        assert!(!validate_config_section(&section("", ""), "test_section"));
-    }
-
-    #[test]
-    fn test_validate_config_all_valid() {
-        let mut config = HashMap::new();
-        config.insert("group1.section1".to_string(), section("a.css", "b.css"));
-        assert!(Pipeline::validate_config(&config));
-    }
-
-    #[test]
-    fn test_validate_config_one_invalid() {
-        let mut config = HashMap::new();
-        config.insert("group1.bad_section".to_string(), section("", "b.css"));
-        assert!(!Pipeline::validate_config(&config));
+        let mut invalid = HashMap::new();
+        invalid.insert("group1.bad_section".to_string(), section("", "b.css"));
+        assert!(!Pipeline::validate_config(&invalid));
     }
 
     #[test]
     fn test_build_theme_from_seed() {
-        let data = seed_theme_data();
-        let result = build_theme(&data);
-        assert!(result.is_ok());
-        let theme = result.unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let dark = theme.dark_colors();
         let light = theme.light_colors();
         assert!(!dark.is_empty());
         assert!(!light.is_empty());
         assert!(dark.contains_key("primary"));
         assert!(light.contains_key("primary"));
-    }
-
-    #[test]
-    fn test_build_theme_dark_has_more_colors() {
-        let data = seed_theme_data();
-        let theme = build_theme(&data).unwrap();
-        let dark = theme.dark_colors();
-        let light = theme.light_colors();
         assert_eq!(dark.len(), light.len());
     }
 
     #[test]
     fn test_create_theme_data_seed() {
         let source = ThemeSource::Seed("#FF0000".to_string());
-        let (data, _) =
+        let (data, colors) =
             Pipeline::create_theme_data(&source, SchemeType::TonalSpot, &ImageConfig::default())
                 .unwrap();
         assert_eq!(data["seed"], "#FF0000");
+        assert_eq!(colors.len(), 1);
     }
 
     #[test]
@@ -632,15 +600,6 @@ mod tests {
     }
 
     #[test]
-    fn test_create_theme_data_seed_yields_seed_color() {
-        let source = ThemeSource::Seed("#FF0000".to_string());
-        let (_, colors) =
-            Pipeline::create_theme_data(&source, SchemeType::TonalSpot, &ImageConfig::default())
-                .unwrap();
-        assert_eq!(colors.len(), 1);
-    }
-
-    #[test]
     fn test_process_section_missing_input() {
         let tmp = TempDir::new().unwrap();
         let section = section(
@@ -658,10 +617,10 @@ mod tests {
     }
 
     #[test]
-    fn test_process_section_happy_path() {
+    fn test_process_section_creates_parent_dirs_and_writes() {
         let tmp = TempDir::new().unwrap();
         let input = tmp.path().join("input.css");
-        let output_path = tmp.path().join("output.css");
+        let output_path = tmp.path().join("deep").join("nested").join("out.css");
 
         fs::write(&input, "color: {{colors.primary.default.hex}};").unwrap();
 
@@ -680,29 +639,11 @@ mod tests {
     }
 
     #[test]
-    fn test_process_section_creates_parent_dirs() {
-        let tmp = TempDir::new().unwrap();
-        let input = tmp.path().join("input.css");
-        let output_path = tmp.path().join("deep").join("nested").join("out.css");
-
-        fs::write(&input, "body { }").unwrap();
-
-        let section = section(input, output_path.clone());
-
-        let theme = build_theme(&seed_theme_data()).unwrap();
-        let engine = TemplateProcessor::new();
-        let output = FileOutput::new();
-
-        let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
-        assert!(success, "process_section failed: {:?}", error);
-        assert!(output_path.exists());
-    }
-
-    #[test]
     fn test_post_hook_empty_returns_true() {
         assert!(run_post_hook("", Path::new("output.css"), None));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_is_executable_nonexistent() {
         let path = Path::new("/nonexistent/file");

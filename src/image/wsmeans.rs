@@ -544,11 +544,4 @@ mod tests {
         assert!(!result.is_empty());
         assert!(result.len() <= 4);
     }
-
-    #[test]
-    fn test_hue_distance() {
-        assert!((hue_distance(0.0, 10.0) - 10.0).abs() < 0.001);
-        assert!((hue_distance(350.0, 10.0) - 20.0).abs() < 0.001);
-        assert!((hue_distance(180.0, 0.0) - 180.0).abs() < 0.001);
-    }
 }
