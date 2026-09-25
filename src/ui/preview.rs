@@ -237,6 +237,7 @@ impl<'a> PaletteView<'a> {
     }
 
     /// Prints the top banner with tinct logo and theme mode.
+    #[allow(clippy::print_literal)]
     fn render_header(&self) {
         let mode_str = match self.mode {
             Mode::Dark => "DARK",
