@@ -1,9 +1,9 @@
-//! File output format implementation
+//! File output — writes rendered template content to disk.
 
 use crate::core::{Error, Result};
 use std::path::Path;
 
-/// Output to a file
+/// Output to a local file.
 pub struct FileOutput;
 
 impl FileOutput {
@@ -11,9 +11,9 @@ impl FileOutput {
         Self
     }
 
-    pub fn write(&self, content: &str, destination: &str) -> Result<()> {
-        let expanded = shellexpand::tilde(destination);
-        let path = Path::new(expanded.as_ref());
+    pub fn write(&self, content: &str, destination: &Path) -> Result<()> {
+        let expanded = shellexpand::tilde(&destination.to_string_lossy()).into_owned();
+        let path = Path::new(&expanded);
 
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -43,18 +43,14 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_file_output_new() {
-        let output = FileOutput::new();
-        assert_eq!(output.format_name(), "file");
-    }
-
-    #[test]
     fn test_file_output_write() {
         let output = FileOutput::new();
+        assert_eq!(output.format_name(), "file");
+
         let temp_dir = TempDir::new().unwrap();
         let output_path = temp_dir.path().join("test_output.txt");
 
-        let result = output.write("Hello, World!", output_path.to_str().unwrap());
+        let result = output.write("Hello, World!", &output_path);
         assert!(result.is_ok());
 
         let content = std::fs::read_to_string(output_path).unwrap();
@@ -71,7 +67,7 @@ mod tests {
             .join("subdir2")
             .join("output.txt");
 
-        let result = output.write("Nested", nested_path.to_str().unwrap());
+        let result = output.write("Nested", &nested_path);
         assert!(result.is_ok());
         assert!(nested_path.exists());
     }

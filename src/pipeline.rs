@@ -1,47 +1,45 @@
-//! Pipeline module — single entry point for the entire tinct workflow.
+//! Pipeline — single entry point for the entire tinct workflow.
 //!
 //! `Pipeline::run(config)` handles theme creation, palette generation,
-//! template rendering, output, and post-hooks. One interface, one place to test.
+//! template rendering, output, and post-hooks.
 
 use colored::*;
 use rayon::prelude::*;
 use serde_json::json;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::FileOutput;
-use crate::config::{AlgorithmConfig, ConfigSection};
+use crate::config::{AnsiConfig, Config, ConfigSection, ImageConfig, resolve_theme_path};
+use crate::core::color::Color;
 use crate::core::{Mode, Theme};
-use crate::image::{SchemeType, extract_source_color};
-use crate::log;
-use crate::palette::{AlgorithmParameters, ColorHarmony, LegacyPaletteGenerator};
-use crate::path_resolver;
+use crate::image::{ImageOptions, SchemeType, extract_source_palette_with};
+use crate::palette::{
+    AlgorithmParameters, AnsiParams, LegacyPaletteGenerator, collect_theme_colors,
+};
 use crate::template::TemplateProcessor;
-use crate::theme::JsonThemeLoader;
+use crate::ui::log;
+use crate::ui::preview::show_color_preview_from_theme;
 
 /// Pre-parsed configuration for the pipeline.
 ///
-/// Constructed by `main` after CLI parsing and config resolution.
-/// The pipeline owns all execution logic; main owns I/O and arg parsing.
+/// Constructed by `main` after CLI parsing. The pipeline owns all execution
+/// logic; main only assembles this struct.
 pub struct PipelineConfig {
-    pub config_path: String,
-    pub flat_config: crate::config::Config,
-    pub config_dir: String,
+    pub config: Config,
     pub mode: Mode,
     pub preview: bool,
-    pub log_level: crate::log::LogLevel,
-    pub algorithm: AlgorithmConfig,
-    pub image_scheme_type: Option<SchemeType>,
+    pub log_level: log::LogLevel,
+    /// MD3 scheme variant used for palette generation (all theme sources).
+    pub scheme_type: SchemeType,
     pub theme_source: ThemeSource,
 }
 
 /// Where the theme data comes from.
 pub enum ThemeSource {
     Seed(String),
-    Image {
-        path: String,
-        scheme_type: SchemeType,
-    },
+    Image(PathBuf),
     File(String),
 }
 
@@ -50,35 +48,38 @@ pub struct Pipeline;
 
 impl Pipeline {
     /// Run the full tinct pipeline.
-    pub fn run(config: PipelineConfig) -> crate::Result<()> {
+    pub fn run(pipeline: PipelineConfig) -> crate::Result<()> {
         let PipelineConfig {
-            config_path,
-            flat_config,
-            config_dir: _,
+            config,
             mode,
             preview,
             log_level,
-            algorithm,
-            image_scheme_type: _,
+            scheme_type,
             theme_source,
-        } = config;
+        } = pipeline;
 
-        // Initialize logger
         log::init_logger(log_level);
 
-        // Create theme data from source
-        let theme_data = Self::create_theme_data(&theme_source)?;
+        // Create theme data from source (image sources also yield clusters)
+        let (theme_data, source_colors) =
+            Self::create_theme_data(&theme_source, scheme_type, &config.image)?;
 
         // Build theme once — shared by preview and processing
-        let theme = Self::build_theme(&theme_data, &algorithm)?;
+        let theme = Self::build_theme(
+            &theme_data,
+            &source_colors,
+            &config.algorithm,
+            scheme_type,
+            &config.ansi,
+        )?;
 
-        // Print info
-        if !log_level.is_quiet() {
-            Self::print_info(&config_path, &theme_source, mode);
+        // Print info (unless in preview mode, where the palette display is the focus)
+        if !preview && !log_level.is_quiet() {
+            Self::print_info(&config.config_path, &theme_source, mode, scheme_type);
         }
 
         // Validate config sections
-        let is_valid = Self::validate_config(&flat_config);
+        let is_valid = Self::validate_config(&config.sections);
         if !is_valid && !preview {
             return Err(crate::core::Error::Config(
                 "Configuration validation failed".to_string(),
@@ -89,82 +90,98 @@ impl Pipeline {
         if preview {
             Self::run_preview(&theme, mode)?;
         } else {
-            Self::run_processing(&theme, mode, &flat_config, log_level)?;
+            Self::run_processing(&theme, mode, &config.sections, log_level)?;
         }
 
         Ok(())
     }
 
     /// Create theme JSON value from the source.
-    fn create_theme_data(source: &ThemeSource) -> crate::Result<serde_json::Value> {
+    ///
+    /// `scheme_type` selects the extraction algorithm for image sources.
+    fn create_theme_data(
+        source: &ThemeSource,
+        scheme_type: SchemeType,
+        image: &ImageConfig,
+    ) -> crate::Result<(serde_json::Value, Vec<Color>)> {
         match source {
-            ThemeSource::Seed(seed) => Ok(json!({ "seed": seed })),
-            ThemeSource::Image { path, scheme_type } => {
-                let img_path = Path::new(path);
-                if !img_path.exists() {
+            ThemeSource::Seed(seed) => {
+                let value = json!({ "seed": seed });
+                let colors = collect_theme_colors(&value);
+                Ok((value, colors))
+            }
+            ThemeSource::Image(path) => {
+                if !path.exists() {
                     return Err(crate::core::Error::Config(format!(
                         "Image not found: {}",
-                        path
+                        path.display()
                     )));
                 }
 
-                let source_argb = extract_source_color(img_path, *scheme_type).map_err(|e| {
-                    crate::core::Error::Config(format!("Error extracting color from image: {}", e))
-                })?;
+                let options = ImageOptions {
+                    max_colors: image.max_colors,
+                    min_population: image.min_population,
+                    filter: image.filter,
+                    quantizer: image.quantizer,
+                };
+                let extracted =
+                    extract_source_palette_with(path, scheme_type, &options).map_err(|e| {
+                        crate::core::Error::Config(format!(
+                            "Error extracting color from image: {}",
+                            e
+                        ))
+                    })?;
 
                 let material_colors::color::Argb {
                     red, green, blue, ..
-                } = source_argb;
+                } = extracted.source;
                 let hex = format!("#{:02X}{:02X}{:02X}", red, green, blue);
 
-                Ok(json!({ "seed": hex }))
+                Ok((json!({ "seed": hex }), extracted.colors))
             }
             ThemeSource::File(theme_path) => {
-                let resolved = path_resolver::resolve_theme_path(theme_path)?;
+                let resolved = resolve_theme_path(theme_path)?;
                 let content = fs::read_to_string(&resolved).map_err(|e| {
                     crate::core::Error::Config(format!("Error reading theme file: {}", e))
                 })?;
-                serde_json::from_str::<serde_json::Value>(&content).map_err(|e| {
+                let value = serde_json::from_str::<serde_json::Value>(&content).map_err(|e| {
                     crate::core::Error::Config(format!("Error parsing theme JSON: {}", e))
-                })
+                })?;
+                // A theme file's own colors drive the terminal palette.
+                let colors = collect_theme_colors(&value);
+                Ok((value, colors))
             }
         }
     }
 
     /// Print basic info to stdout.
-    fn print_info(config_path: &str, source: &ThemeSource, mode: Mode) {
+    fn print_info(config_path: &Path, source: &ThemeSource, mode: Mode, scheme_type: SchemeType) {
         println!("{}", "tinct - Theme Injector".bold());
-        println!("{}: {}", "Config".blue(), config_path);
+        println!("{}: {}", "Config".blue(), config_path.display());
 
         match source {
             ThemeSource::Seed(seed) => {
                 println!("{}: {}", "Seed".blue(), seed);
             }
-            ThemeSource::Image { path, scheme_type } => {
-                println!(
-                    "{}: {} (scheme: {})",
-                    "Image".blue(),
-                    path,
-                    scheme_type.to_string().yellow()
-                );
+            ThemeSource::Image(path) => {
+                println!("{}: {}", "Image".blue(), path.display());
             }
             ThemeSource::File(theme) => {
                 println!("{}: {}", "Theme".blue(), theme);
             }
         }
 
+        println!("{}: {}", "Scheme".blue(), scheme_type.to_string().yellow());
         println!("{}: {}", "Mode".blue(), mode.to_string().yellow());
         println!();
     }
 
     /// Validate all config sections.
-    fn validate_config(config: &crate::config::Config) -> bool {
+    fn validate_config(sections: &HashMap<String, ConfigSection>) -> bool {
         let mut is_valid = true;
-        for group in config.values() {
-            for (section_name, section) in group.iter() {
-                if !validate_config_section(section, section_name) {
-                    is_valid = false;
-                }
+        for (section_name, section) in sections {
+            if !validate_config_section(section, section_name) {
+                is_valid = false;
             }
         }
         is_valid
@@ -175,19 +192,27 @@ impl Pipeline {
     /// Single entry point for theme construction — used by both preview and processing.
     fn build_theme(
         theme_data: &serde_json::Value,
-        algorithm: &AlgorithmConfig,
+        source_colors: &[Color],
+        algorithm: &crate::config::AlgorithmConfig,
+        scheme_type: SchemeType,
+        ansi: &AnsiConfig,
     ) -> crate::Result<Theme> {
-        let harmony = ColorHarmony::parse(&algorithm.color_harmony).unwrap_or(ColorHarmony::Md3);
-
-        let palette_gen = LegacyPaletteGenerator::new(AlgorithmParameters {
-            saturation_adjustment: algorithm.saturation_adjustment,
-            hue_shift: algorithm.hue_shift,
-            contrast_level: algorithm.contrast_level,
-            color_harmony: harmony,
-        });
-        let theme_loader = JsonThemeLoader::new(palette_gen);
-        theme_loader
-            .load_value(theme_data)
+        let dark_scheme = algorithm.variant_dark.unwrap_or(scheme_type);
+        let light_scheme = algorithm.variant_light.unwrap_or(scheme_type);
+        let palette_gen = LegacyPaletteGenerator::new(
+            AlgorithmParameters {
+                saturation_adjustment: algorithm.saturation_adjustment,
+                hue_shift: algorithm.hue_shift,
+                contrast_level: algorithm.contrast_level,
+                seed_tone: algorithm.seed_tone,
+                chroma_floor: algorithm.chroma_floor,
+            },
+            dark_scheme,
+        )
+        .with_light_scheme(light_scheme)
+        .with_ansi(AnsiParams::from_config(ansi))
+        .with_source_colors(source_colors.to_vec());
+        Theme::from_json_value(theme_data, &palette_gen)
             .map_err(|e| crate::core::Error::Config(format!("Theme loading error: {}", e)))
     }
 
@@ -197,7 +222,7 @@ impl Pipeline {
             Mode::Dark => &theme.dark_palette,
             Mode::Light => &theme.light_palette,
         };
-        crate::preview::show_color_preview_from_theme(palette, mode)
+        show_color_preview_from_theme(palette, mode)
             .map_err(|e| crate::core::Error::Config(format!("Preview error: {}", e)))?;
         Ok(())
     }
@@ -206,35 +231,23 @@ impl Pipeline {
     fn run_processing(
         theme: &Theme,
         mode: Mode,
-        flat_config: &crate::config::Config,
-        log_level: crate::log::LogLevel,
+        sections: &HashMap<String, ConfigSection>,
+        log_level: log::LogLevel,
     ) -> crate::Result<()> {
         let template_engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
-        let sections: Vec<_> = flat_config
-            .values()
-            .flat_map(|group| {
-                group
-                    .iter()
-                    .map(|(name, section)| (name.clone(), section))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        let entries: Vec<(&String, &ConfigSection)> = sections.iter().collect();
 
-        let mut success_count = 0;
-        let total_count = sections.len();
-
-        let results: Vec<_> = sections
+        let results: Vec<_> = entries
             .par_iter()
-            .map(|(section_name, section)| {
-                let (success, error) =
-                    process_section(section, theme, mode, &template_engine, &output);
-                (section_name.clone(), success, error)
-            })
+            .map(|(_, section)| process_section(section, theme, mode, &template_engine, &output))
             .collect();
 
-        for (section_name, success, error) in &results {
+        let total_count = results.len();
+        let mut success_count = 0;
+
+        for ((section_name, _section), (success, error)) in entries.iter().zip(results.iter()) {
             if *success {
                 success_count += 1;
             }
@@ -250,13 +263,16 @@ impl Pipeline {
             }
         }
 
-        // Run post-hooks sequentially after all processing
-        for (section_name, section) in sections.iter() {
+        // Run post-hooks sequentially after all processing, but only for
+        // sections whose processing succeeded.
+        for ((section_name, section), (success, _)) in entries.iter().zip(results.iter()) {
+            if !success {
+                continue;
+            }
             if let Some(ref post_hook) = section.post_hook
                 && !post_hook.is_empty()
             {
-                let output_path = &section.output_path;
-                run_post_hook(post_hook, output_path, Some(section_name));
+                run_post_hook(post_hook, &section.output_path, Some(section_name));
             }
         }
 
@@ -280,14 +296,17 @@ fn process_section(
     let input_path = &section.input_path;
     let output_path = &section.output_path;
 
-    if !Path::new(input_path).exists() {
+    if !input_path.exists() {
         return (
             false,
-            Some(format!("Input file '{}' does not exist", input_path)),
+            Some(format!(
+                "Input file '{}' does not exist",
+                input_path.display()
+            )),
         );
     }
 
-    if let Some(parent) = Path::new(output_path).parent()
+    if let Some(parent) = output_path.parent()
         && let Err(e) = fs::create_dir_all(parent)
     {
         return (
@@ -314,15 +333,15 @@ fn process_section(
 }
 
 /// Validate a config section has required fields.
-fn validate_config_section(section: &crate::config::ConfigSection, section_name: &str) -> bool {
+fn validate_config_section(section: &ConfigSection, section_name: &str) -> bool {
     let mut is_valid = true;
 
-    if section.input_path.is_empty() {
+    if section.input_path.as_os_str().is_empty() {
         eprintln!("[{}] Missing required key: input_path", section_name);
         is_valid = false;
     }
 
-    if section.output_path.is_empty() {
+    if section.output_path.as_os_str().is_empty() {
         eprintln!("[{}] Missing required key: output_path", section_name);
         is_valid = false;
     }
@@ -331,65 +350,79 @@ fn validate_config_section(section: &crate::config::ConfigSection, section_name:
 }
 
 /// Run a post-hook command after processing a section.
-fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>) -> bool {
+fn run_post_hook(post_hook: &str, output_file: &Path, section_name: Option<&str>) -> bool {
     if post_hook.is_empty() {
         return true;
     }
 
-    let post_hook_cmd = post_hook.replace("{{output_file}}", output_file);
+    let output = output_file.to_string_lossy();
 
-    if post_hook_cmd.starts_with("./") {
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let post_hook_path = cwd.join(&post_hook_cmd);
+    // Split the leading program token from its arguments. A script path is
+    // executed directly (arguments passed separately); anything else goes
+    // through the platform shell.
+    let (program, args) = post_hook
+        .split_once(char::is_whitespace)
+        .map_or((post_hook, ""), |(p, a)| (p, a));
+    let program_path = Path::new(program);
+    let is_script = program_path.is_absolute() || program.starts_with("./");
 
-        if post_hook_path.exists() && is_executable(&post_hook_path) {
+    if is_script {
+        let resolved = if program_path.is_absolute() {
+            program_path.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(program)
+        };
+
+        if !(resolved.exists() && is_executable(&resolved)) {
             if let Some(name) = section_name {
-                log::hook::executing(name);
+                log::error::message(
+                    name,
+                    &format!("post_hook '{}' not found. Skipping.", resolved.display()),
+                );
             }
+            return false;
+        }
 
-            match std::process::Command::new(&post_hook_path).output() {
-                Ok(result) => {
-                    if result.status.success() {
-                        if let Some(name) = section_name {
-                            log::hook::success(name);
-                        }
-                        true
-                    } else {
-                        if let Some(name) = section_name {
-                            log::error::message(name, "Error executing hook script");
-                        }
-                        false
-                    }
-                }
-                Err(e) => {
+        if let Some(name) = section_name {
+            log::hook::executing(name);
+        }
+
+        let args = args.replace("{{output_file}}", output.as_ref());
+
+        match std::process::Command::new(&resolved)
+            .args(args.split_whitespace())
+            .output()
+        {
+            Ok(result) => {
+                if result.status.success() {
                     if let Some(name) = section_name {
-                        log::error::message(name, &format!("Error executing hook script: {}", e));
+                        log::hook::success(name);
+                    }
+                    true
+                } else {
+                    if let Some(name) = section_name {
+                        log::error::message(name, "Error executing hook script");
                     }
                     false
                 }
             }
-        } else {
-            if let Some(name) = section_name {
-                log::error::message(
-                    name,
-                    &format!(
-                        "post_hook '{}' not found. Skipping.",
-                        post_hook_path.display()
-                    ),
-                );
+            Err(e) => {
+                if let Some(name) = section_name {
+                    log::error::message(name, &format!("Error executing hook script: {}", e));
+                }
+                false
             }
-            false
         }
     } else {
         if let Some(name) = section_name {
             log::hook::executing(name);
         }
 
-        match std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&post_hook_cmd)
-            .output()
-        {
+        let cmd = post_hook.replace("{{output_file}}", &shell_quote(output.as_ref()));
+
+        match shell_command(&cmd).output() {
             Ok(result) => {
                 if result.status.success() {
                     if let Some(name) = section_name {
@@ -416,6 +449,34 @@ fn run_post_hook(post_hook: &str, output_file: &str, section_name: Option<&str>)
     }
 }
 
+/// Build a shell invocation for the current platform.
+#[cfg(unix)]
+fn shell_command(cmd: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("sh");
+    command.arg("-c").arg(cmd);
+    command
+}
+
+/// Build a shell invocation for the current platform.
+#[cfg(windows)]
+fn shell_command(cmd: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("cmd");
+    command.arg("/C").arg(cmd);
+    command
+}
+
+/// Quote a value so a POSIX shell receives it as a single literal argument.
+#[cfg(unix)]
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+/// Quote a value so `cmd.exe` receives it as a single literal argument.
+#[cfg(windows)]
+fn shell_quote(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
 #[cfg(unix)]
 fn is_executable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
@@ -434,8 +495,7 @@ fn is_executable(_path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AlgorithmConfig, ConfigSection};
-    use std::collections::HashMap;
+    use crate::config::AlgorithmConfig;
     use tempfile::TempDir;
 
     fn default_algorithm() -> AlgorithmConfig {
@@ -446,115 +506,107 @@ mod tests {
         json!({ "seed": "#6750A4" })
     }
 
-    #[test]
-    fn test_validate_config_section_valid() {
-        let section = ConfigSection {
-            input_path: "input.css".to_string(),
-            output_path: "output.css".to_string(),
+    fn build_theme_with(
+        data: &serde_json::Value,
+        algorithm: &AlgorithmConfig,
+    ) -> crate::Result<Theme> {
+        Pipeline::build_theme(
+            data,
+            &[],
+            algorithm,
+            SchemeType::TonalSpot,
+            &AnsiConfig::default(),
+        )
+    }
+
+    /// Build a theme with no image clusters and the default Tonal Spot scheme.
+    fn build_theme(data: &serde_json::Value) -> crate::Result<Theme> {
+        build_theme_with(data, &default_algorithm())
+    }
+
+    fn section(input: impl Into<PathBuf>, output: impl Into<PathBuf>) -> ConfigSection {
+        ConfigSection {
+            input_path: input.into(),
+            output_path: output.into(),
             post_hook: None,
-        };
-        assert!(validate_config_section(&section, "test_section"));
+        }
     }
 
     #[test]
-    fn test_validate_config_section_empty_input() {
-        let section = ConfigSection {
-            input_path: String::new(),
-            output_path: "output.css".to_string(),
-            post_hook: None,
-        };
-        assert!(!validate_config_section(&section, "test_section"));
-    }
+    fn test_variant_dark_overrides_only_dark_mode() {
+        let mut algorithm = default_algorithm();
+        algorithm.variant_dark = Some(SchemeType::Monochrome);
 
-    #[test]
-    fn test_validate_config_section_empty_output() {
-        let section = ConfigSection {
-            input_path: "input.css".to_string(),
-            output_path: String::new(),
-            post_hook: None,
-        };
-        assert!(!validate_config_section(&section, "test_section"));
-    }
+        let base = build_theme(&seed_theme_data()).unwrap();
+        let overridden = build_theme_with(&seed_theme_data(), &algorithm).unwrap();
 
-    #[test]
-    fn test_validate_config_section_both_empty() {
-        let section = ConfigSection {
-            input_path: String::new(),
-            output_path: String::new(),
-            post_hook: None,
-        };
-        assert!(!validate_config_section(&section, "test_section"));
-    }
-
-    #[test]
-    fn test_validate_config_all_valid() {
-        let mut config: crate::config::Config = HashMap::new();
-        let mut group = HashMap::new();
-        group.insert(
-            "section1".to_string(),
-            ConfigSection {
-                input_path: "a.css".to_string(),
-                output_path: "b.css".to_string(),
-                post_hook: None,
-            },
+        assert_ne!(
+            base.dark_palette.get("primary").unwrap().hex(),
+            overridden.dark_palette.get("primary").unwrap().hex(),
+            "variant_dark should change the dark palette"
         );
-        config.insert("group1".to_string(), group);
-        assert!(Pipeline::validate_config(&config));
+        assert_eq!(
+            base.light_palette.get("primary").unwrap().hex(),
+            overridden.light_palette.get("primary").unwrap().hex(),
+            "light mode must keep the base scheme when variant_light is unset"
+        );
     }
 
     #[test]
-    fn test_validate_config_one_invalid() {
-        let mut config: crate::config::Config = HashMap::new();
-        let mut group = HashMap::new();
-        group.insert(
-            "bad_section".to_string(),
-            ConfigSection {
-                input_path: String::new(),
-                output_path: "b.css".to_string(),
-                post_hook: None,
-            },
-        );
-        config.insert("group1".to_string(), group);
-        assert!(!Pipeline::validate_config(&config));
+    fn test_validate_config_section_requires_input_and_output() {
+        let cases = [
+            ("input.css", "output.css", true),
+            ("", "output.css", false),
+            ("input.css", "", false),
+            ("", "", false),
+        ];
+        for (input, output, expected) in cases {
+            assert_eq!(
+                validate_config_section(&section(input, output), "test_section"),
+                expected,
+                "input={input:?} output={output:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_config_aggregates_sections() {
+        let mut valid = HashMap::new();
+        valid.insert("group1.section1".to_string(), section("a.css", "b.css"));
+        assert!(Pipeline::validate_config(&valid));
+
+        let mut invalid = HashMap::new();
+        invalid.insert("group1.bad_section".to_string(), section("", "b.css"));
+        assert!(!Pipeline::validate_config(&invalid));
     }
 
     #[test]
     fn test_build_theme_from_seed() {
-        let data = seed_theme_data();
-        let result = Pipeline::build_theme(&data, &default_algorithm());
-        assert!(result.is_ok());
-        let theme = result.unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let dark = theme.dark_colors();
         let light = theme.light_colors();
         assert!(!dark.is_empty());
         assert!(!light.is_empty());
         assert!(dark.contains_key("primary"));
         assert!(light.contains_key("primary"));
-    }
-
-    #[test]
-    fn test_build_theme_dark_has_more_colors() {
-        let data = seed_theme_data();
-        let theme = Pipeline::build_theme(&data, &default_algorithm()).unwrap();
-        let dark = theme.dark_colors();
-        let light = theme.light_colors();
         assert_eq!(dark.len(), light.len());
     }
 
     #[test]
     fn test_create_theme_data_seed() {
         let source = ThemeSource::Seed("#FF0000".to_string());
-        let data = Pipeline::create_theme_data(&source).unwrap();
+        let (data, colors) =
+            Pipeline::create_theme_data(&source, SchemeType::TonalSpot, &ImageConfig::default())
+                .unwrap();
         assert_eq!(data["seed"], "#FF0000");
+        assert_eq!(colors.len(), 1);
     }
 
     #[test]
     fn test_create_theme_data_image_missing() {
-        let source = ThemeSource::Image {
-            path: "/nonexistent/image.png".to_string(),
-            scheme_type: SchemeType::TonalSpot,
-        };
-        let result = Pipeline::create_theme_data(&source);
+        let source = ThemeSource::Image(PathBuf::from("/nonexistent/image.png"));
+        let result =
+            Pipeline::create_theme_data(&source, SchemeType::TonalSpot, &ImageConfig::default());
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Image not found"));
@@ -563,7 +615,8 @@ mod tests {
     #[test]
     fn test_create_theme_data_file_missing() {
         let source = ThemeSource::File("/nonexistent/theme.json".to_string());
-        let result = Pipeline::create_theme_data(&source);
+        let result =
+            Pipeline::create_theme_data(&source, SchemeType::TonalSpot, &ImageConfig::default());
         assert!(result.is_err());
     }
 
@@ -578,25 +631,24 @@ mod tests {
         .unwrap();
 
         let source = ThemeSource::File(theme_path.to_str().unwrap().to_string());
-        let data = Pipeline::create_theme_data(&source).unwrap();
+        let (data, colors) =
+            Pipeline::create_theme_data(&source, SchemeType::TonalSpot, &ImageConfig::default())
+                .unwrap();
         assert_eq!(data["seed"], "#123456");
+        // The theme file's own colors are captured so the terminal palette can
+        // be generated from them, not just from the seed.
+        assert_eq!(colors.len(), 2);
     }
 
     #[test]
     fn test_process_section_missing_input() {
         let tmp = TempDir::new().unwrap();
-        let section = ConfigSection {
-            input_path: tmp
-                .path()
-                .join("nonexistent.css")
-                .to_str()
-                .unwrap()
-                .to_string(),
-            output_path: tmp.path().join("out.css").to_str().unwrap().to_string(),
-            post_hook: None,
-        };
+        let section = section(
+            tmp.path().join("nonexistent.css"),
+            tmp.path().join("out.css"),
+        );
 
-        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
@@ -606,20 +658,16 @@ mod tests {
     }
 
     #[test]
-    fn test_process_section_happy_path() {
+    fn test_process_section_creates_parent_dirs_and_writes() {
         let tmp = TempDir::new().unwrap();
         let input = tmp.path().join("input.css");
-        let output_path = tmp.path().join("output.css");
+        let output_path = tmp.path().join("deep").join("nested").join("out.css");
 
         fs::write(&input, "color: {{colors.primary.default.hex}};").unwrap();
 
-        let section = ConfigSection {
-            input_path: input.to_str().unwrap().to_string(),
-            output_path: output_path.to_str().unwrap().to_string(),
-            post_hook: None,
-        };
+        let section = section(input, output_path.clone());
 
-        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
+        let theme = build_theme(&seed_theme_data()).unwrap();
         let engine = TemplateProcessor::new();
         let output = FileOutput::new();
 
@@ -632,33 +680,11 @@ mod tests {
     }
 
     #[test]
-    fn test_process_section_creates_parent_dirs() {
-        let tmp = TempDir::new().unwrap();
-        let input = tmp.path().join("input.css");
-        let output_path = tmp.path().join("deep").join("nested").join("out.css");
-
-        fs::write(&input, "body { }").unwrap();
-
-        let section = ConfigSection {
-            input_path: input.to_str().unwrap().to_string(),
-            output_path: output_path.to_str().unwrap().to_string(),
-            post_hook: None,
-        };
-
-        let theme = Pipeline::build_theme(&seed_theme_data(), &default_algorithm()).unwrap();
-        let engine = TemplateProcessor::new();
-        let output = FileOutput::new();
-
-        let (success, error) = process_section(&section, &theme, Mode::Dark, &engine, &output);
-        assert!(success, "process_section failed: {:?}", error);
-        assert!(output_path.exists());
-    }
-
-    #[test]
     fn test_post_hook_empty_returns_true() {
-        assert!(run_post_hook("", "output.css", None));
+        assert!(run_post_hook("", Path::new("output.css"), None));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_is_executable_nonexistent() {
         let path = Path::new("/nonexistent/file");

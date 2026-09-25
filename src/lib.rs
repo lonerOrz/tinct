@@ -1,35 +1,44 @@
-//! tinct - A theme injector tool that applies Material Design 3 color palettes
+//! tinct - A theme injector tool that applies Material Design 3 color palettes.
 //!
-//! This library provides a modular architecture for:
-//! - Loading themes from various sources
-//! - Generating Material Design 3 color palettes
-//! - Processing templates with theme data
-//! - Outputting to various formats
+//! Layered architecture:
+//! - **domain** — [`core`] (color model, errors, `Mode`/`Theme`), [`palette`]
+//!   (MD3 generation + ANSI), [`image`] (extraction), [`template`] (rendering)
+//! - **infrastructure** — [`config`] (TOML + paths), [`output`] (file writing)
+//! - **presentation** — [`ui`] (logging + preview)
+//! - **application** — [`pipeline`] orchestrates everything
 
-pub mod color;
+#![forbid(unsafe_code)]
+
 pub mod config;
 pub mod core;
 pub mod image;
-pub mod log;
 pub mod output;
 pub mod palette;
-pub mod path_resolver;
 pub mod pipeline;
-pub mod preview;
 pub mod template;
-pub mod theme;
+pub mod ui;
 
-pub use color::{Color, Hsl, Rgb};
-pub use config::*;
-pub use log::*;
-pub use preview::*;
+// Backwards-compatible module paths for modules that moved during the
+// domain-driven reorganisation. Library consumers can keep using
+// `tinct::color`, `tinct::log` and `tinct::preview`.
+pub use core::color;
+pub use ui::{log, preview};
+
+pub use config::{
+    AlgorithmConfig, AnsiAnchors, AnsiConfig, AnsiPalette, Config, ConfigLoad, ConfigSection,
+    ImageConfig, resolve_theme_path,
+};
+pub use core::color::{Color, Hsl, Rgb};
+pub use ui::log::{LogLevel, error, general, hook, info, init_logger};
+pub use ui::preview::{
+    show_color_preview, show_color_preview_from_json, show_color_preview_from_theme,
+};
 
 pub use core::{Error, Mode, Result, Theme};
 
 pub use output::FileOutput;
-pub use palette::{AlgorithmParameters, ColorHarmony, ColorRole, LegacyPaletteGenerator, Palette};
+pub use palette::{AlgorithmParameters, ColorRole, LegacyPaletteGenerator, Palette};
 pub use pipeline::{Pipeline, PipelineConfig};
 pub use template::{ColorFilter, ColorProperty, FilterContext, TemplateProcessor};
 
-pub use image::{SchemeType, extract_source_color};
-pub use path_resolver::{resolve_config_file_path, resolve_config_paths, resolve_theme_path};
+pub use image::{ExtractedPalette, SchemeType, extract_source_color, extract_source_palette};

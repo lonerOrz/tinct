@@ -1,8 +1,8 @@
 //! Wu color quantizer — Xiaolin Wu's algorithm from Graphics Gems II (1991).
 //!
 //! Divides image pixels into clusters by recursively cutting an RGB cube
-//! based on the weight of pixels in each area. Matches the Python
-//! `QuantizerWu` implementation exactly.
+//! based on pixel weight in each area. Matches the Python `QuantizerWu`
+//! implementation exactly.
 
 use std::collections::HashMap;
 
@@ -120,11 +120,11 @@ impl QuantizerWu {
 
     fn compute_moments(&mut self) {
         for r in 1..SIDE_LENGTH {
-            let mut area = vec![0i64; SIDE_LENGTH];
-            let mut area_r = vec![0i64; SIDE_LENGTH];
-            let mut area_g = vec![0i64; SIDE_LENGTH];
-            let mut area_b = vec![0i64; SIDE_LENGTH];
-            let mut area2 = vec![0.0f64; SIDE_LENGTH];
+            let mut area = [0i64; SIDE_LENGTH];
+            let mut area_r = [0i64; SIDE_LENGTH];
+            let mut area_g = [0i64; SIDE_LENGTH];
+            let mut area_b = [0i64; SIDE_LENGTH];
+            let mut area2 = [0.0f64; SIDE_LENGTH];
 
             for g in 1..SIDE_LENGTH {
                 let mut line = 0i64;

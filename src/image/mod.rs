@@ -23,8 +23,13 @@ mod extractor;
 mod kmeans;
 mod quantizer;
 mod reader;
+#[cfg(test)]
+mod test_support;
 mod wsmeans;
 
-pub use crate::color::Rgb;
-pub use extractor::{SchemeType, extract_source_color};
+pub use crate::core::color::Rgb;
+pub use extractor::{
+    ExtractedPalette, ImageFilter, ImageOptions, Quantizer, SchemeType, extract_source_color,
+    extract_source_color_with, extract_source_palette, extract_source_palette_with,
+};
 pub use reader::{ResizeFilter, read_image};

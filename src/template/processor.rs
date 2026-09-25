@@ -1,8 +1,14 @@
-//! Template processor implementation
+//! Template processor — regex-driven placeholder replacement.
+//!
+//! Two `LazyLock<Regex>` drive the render pass: `COLOR_REGEX` handles all
+//! color placeholders (`{{colors.role.mode.prop|filter:param}}`), while
+//! `META_REGEX` handles mode metadata (`{{mode}}`, `{{is_dark}}`,
+//! `{{is_light}}`). Both tolerate arbitrary whitespace around the keys.
 
-use crate::color::Color;
+use crate::core::color::Color;
 use crate::core::{Mode, Result, Theme};
 use crate::template::filters::{ColorFilter, ColorProperty};
+use crate::ui::log::general;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -15,6 +21,10 @@ static COLOR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     )
     .unwrap()
 });
+
+/// Regex for the mode metadata placeholders, tolerant of surrounding spaces.
+static META_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{\s*(mode|is_dark|is_light)\s*\}\}").unwrap());
 
 /// Default template processor implementation
 pub struct TemplateProcessor;
@@ -33,13 +43,9 @@ impl Default for TemplateProcessor {
 
 impl TemplateProcessor {
     pub fn render(&self, template: &str, theme: &Theme, mode: Mode) -> Result<String> {
-        // Build color maps once, inject source_color into both.
-        let mut dark_colors = theme.dark_colors();
-        let mut light_colors = theme.light_colors();
-        if let Ok(c) = Color::from_hex(&theme.source_color) {
-            dark_colors.insert("source_color".to_string(), c);
-            light_colors.insert("source_color".to_string(), c);
-        }
+        // Build color maps once. Every key is a spec-compliant MD3 role.
+        let dark_colors = theme.dark_colors();
+        let light_colors = theme.light_colors();
 
         let content = COLOR_REGEX.replace_all(template, |caps: &regex::Captures| {
             let key = &caps[1];
@@ -78,47 +84,41 @@ impl TemplateProcessor {
                     color.format(&prop_enum)
                 }
             } else {
-                crate::log::general::info(&format!(
-                    "Warning: color '{}' not found in palette, using #000000",
+                general::info(&format!(
+                    "Warning: color '{}' not found in palette, using black",
                     key
                 ));
-                "#000000".to_string()
+                Color::new(0, 0, 0, 1.0).format(&prop_enum)
             }
         });
 
-        let mut output = content.into_owned();
         let mode_str = match mode {
             Mode::Dark => "dark",
             Mode::Light => "light",
         };
-        output = output.replace("{{mode}}", mode_str);
-        output = output.replace("{{is_dark}}", if mode.is_dark() { "true" } else { "false" });
-        output = output.replace(
-            "{{is_light}}",
-            if mode.is_light() { "true" } else { "false" },
-        );
+        let output =
+            META_REGEX.replace_all(content.as_ref(), |caps: &regex::Captures| match &caps[1] {
+                "mode" => mode_str.to_string(),
+                "is_dark" => mode.is_dark().to_string(),
+                _ => mode.is_light().to_string(),
+            });
 
-        Ok(output)
+        Ok(output.into_owned())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::color::Color;
+    use crate::core::color::Color;
     use crate::palette::ColorRole;
 
     fn make_theme_with_color(role: ColorRole, hex: &str) -> Theme {
-        let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
+        let mut theme = Theme::new("test".to_string());
         let color = Color::from_hex(hex).unwrap();
         theme.dark_palette.insert(role, color);
         theme.light_palette.insert(role, color);
         theme
-    }
-
-    #[test]
-    fn test_template_processor_new() {
-        let _processor = TemplateProcessor::new();
     }
 
     #[test]
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn test_template_processor_render_mode_placeholders() {
         let processor = TemplateProcessor::new();
-        let theme = Theme::new("test".to_string(), "#FF5722".to_string());
+        let theme = Theme::new("test".to_string());
 
         let template = "Mode: {{mode}}, Is Dark: {{is_dark}}, Is Light: {{is_light}}";
 
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_template_processor_render_dark_light_suffix() {
         let processor = TemplateProcessor::new();
-        let mut theme = Theme::new("test".to_string(), "#FF5722".to_string());
+        let mut theme = Theme::new("test".to_string());
 
         theme
             .dark_palette
@@ -201,5 +201,41 @@ mod tests {
         let template = "Primary: {{colors.primary.default.rgb|lighten:0.15}}";
         let result = processor.render(template, &theme, Mode::Dark).unwrap();
         assert!(result.starts_with("Primary: rgb("), "got: {}", result);
+    }
+
+    #[test]
+    fn test_missing_color_fallback_respects_property() {
+        let processor = TemplateProcessor::new();
+        let theme = Theme::new("test".to_string());
+
+        // Missing colour must format through the requested property so non-hex
+        // templates don't receive a raw "#000000" string.
+        let t_red = processor
+            .render("{{colors.nonexistent.default.red}}", &theme, Mode::Dark)
+            .unwrap();
+        assert_eq!(t_red, "0", "expected red channel of black, got: {t_red}");
+
+        let t_rgb = processor
+            .render("{{colors.nonexistent.default.rgb}}", &theme, Mode::Dark)
+            .unwrap();
+        assert_eq!(t_rgb, "rgb(0, 0, 0)", "expected rgb of black, got: {t_rgb}");
+
+        let t_hsl = processor
+            .render("{{colors.nonexistent.default.hsl}}", &theme, Mode::Dark)
+            .unwrap();
+        assert!(
+            t_hsl.starts_with("hsl(0, 0%, 0%)"),
+            "expected hsl of black, got: {t_hsl}"
+        );
+    }
+
+    #[test]
+    fn test_meta_placeholders_tolerate_whitespace() {
+        let processor = TemplateProcessor::new();
+        let theme = Theme::new("test".to_string());
+
+        let template = "M: {{ mode }}, D: {{ is_dark }}, L: {{is_light }}";
+        let result = processor.render(template, &theme, Mode::Light).unwrap();
+        assert_eq!(result, "M: light, D: false, L: true");
     }
 }

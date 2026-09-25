@@ -1,14 +1,13 @@
-//! Color scoring utilities — hue population + chroma weighting.
+//! WSMeans k-means refinement and color scoring utilities.
 //!
-//! This module provides the `score_colors` function used by M3 schemes.
-//! The WSMeans k-means refinement is skipped for performance — Wu quantizer
-//! output alone produces equivalent top-scored colors in ~10x less time.
-//!
-//! Reference: material-color-utilities quantizer pipeline
+//! Provides the WSMeans refinement (`quantize_wsmeans`) that the M3 extraction
+//! pipeline runs over the Wu quantizer's clusters, together with the
+//! `score_colors` hue/chroma scoring used to pick the final source color.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
-use crate::color::{estimate_hct, estimate_hue, hue_distance};
+use crate::core::color::{estimate_hct, estimate_hue, hue_distance};
 
 // ============================================================================
 // LCG Random for cluster initialization
@@ -31,7 +30,7 @@ impl Random {
     }
 
     fn next_range(&mut self, range: usize) -> usize {
-        if range.isolate_lowest_one() == range {
+        if range.is_power_of_two() {
             ((range as i64 * self.next(31) as i64) >> 31) as usize
         } else {
             loop {
@@ -216,12 +215,16 @@ pub fn quantize_wsmeans(
 
     for &(r, g, b) in pixels {
         let argb = argb_from_rgb(r, g, b);
-        pixel_to_count.entry(argb).or_insert_with(|| {
-            unique_pixels.push(argb);
-            points.push(rgb_to_lab(r, g, b));
-            0
-        });
-        *pixel_to_count.get_mut(&argb).unwrap() += 1;
+        match pixel_to_count.entry(argb) {
+            Entry::Occupied(mut e) => {
+                *e.get_mut() += 1;
+            }
+            Entry::Vacant(e) => {
+                unique_pixels.push(argb);
+                points.push(rgb_to_lab(r, g, b));
+                e.insert(1);
+            }
+        }
     }
 
     let cluster_count = max_colors.min(points.len());
@@ -272,7 +275,7 @@ pub fn quantize_wsmeans(
                 distance_matrix[i][j] = (dist, j);
             }
             // Sort row by distance
-            distance_matrix[i].sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            distance_matrix[i].sort_by(|a, b| a.0.total_cmp(&b.0));
         }
 
         // Assignment step
@@ -399,7 +402,13 @@ pub fn score_colors(
     let mut hue_population = vec![0i64; 360];
     let mut population_sum: i64 = 0;
 
-    for (&argb, &population) in color_to_population {
+    // Iterate in a deterministic order so score ties resolve the same way on
+    // every run (the map itself has randomized iteration order).
+    let mut population_order: Vec<(u32, i64)> =
+        color_to_population.iter().map(|(&c, &n)| (c, n)).collect();
+    population_order.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+
+    for &(argb, population) in &population_order {
         let (r, g, b) = rgb_from_argb(argb);
         let (hue, chroma) = estimate_hct(r, g, b);
         let hue_bucket = (hue.round() as usize) % 360;
@@ -453,12 +462,12 @@ pub fn score_colors(
         // Fallback: return top colors by population
         let mut by_pop: Vec<(u32, i64)> =
             color_to_population.iter().map(|(&k, &v)| (k, v)).collect();
-        by_pop.sort_by_key(|&(_, v)| -v);
+        by_pop.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         return by_pop.into_iter().take(desired).map(|(k, _)| k).collect();
     }
 
-    // Sort by score descending
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    // Sort by score descending, then ARGB ascending for a stable total order.
+    scored.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
 
     // Deduplicate by hue distance
     let min_hue_diffs = [90, 80, 70, 60, 50, 40, 30, 25, 20, 15];
@@ -536,12 +545,5 @@ mod tests {
         // Gray should be filtered out (low chroma)
         assert!(!result.is_empty());
         assert!(result.len() <= 4);
-    }
-
-    #[test]
-    fn test_hue_distance() {
-        assert!((hue_distance(0.0, 10.0) - 10.0).abs() < 0.001);
-        assert!((hue_distance(350.0, 10.0) - 20.0).abs() < 0.001);
-        assert!((hue_distance(180.0, 0.0) - 180.0).abs() < 0.001);
     }
 }

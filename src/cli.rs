@@ -1,13 +1,19 @@
-use clap::Parser;
+use clap::{ArgGroup, Parser};
+use std::path::PathBuf;
 
 use tinct::SchemeType;
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about = "Material Design 3 theme injector", long_about = None)]
+#[command(group(
+    ArgGroup::new("source")
+        .required(true)
+        .args(["theme", "seed", "image"])
+))]
 pub struct CliArgs {
-    /// Path to the TOML config file
-    #[arg(short, long)]
-    pub config: Option<String>,
+    /// Path to the TOML config file [default: $XDG_CONFIG_HOME/tinct/config.toml]
+    #[arg(short, long, value_name = "FILE")]
+    pub config: Option<PathBuf>,
 
     /// Path to theme.json file or theme name in themes/ folder
     #[arg(short, long)]
@@ -18,11 +24,12 @@ pub struct CliArgs {
     pub seed: Option<String>,
 
     /// Path to wallpaper image for color extraction (PNG/JPG/WebP)
-    #[arg(short = 'i', long)]
-    pub image: Option<String>,
+    #[arg(short = 'i', long, value_name = "IMAGE")]
+    pub image: Option<PathBuf>,
 
-    /// Color scheme type for image extraction (tonal-spot, vibrant, faithful, etc.)
-    /// If not provided, uses config file or defaults to tonal-spot
+    /// MD3 scheme variant used to build the palette (tonal-spot, vibrant, content, ...).
+    /// For image sources it also selects the extraction pipeline. If not provided, the
+    /// config file value (`[image] scheme_type`) is used, defaulting to tonal-spot.
     #[arg(long, value_name = "SCHEME")]
     pub scheme_type: Option<SchemeType>,
 
@@ -34,66 +41,26 @@ pub struct CliArgs {
     #[arg(short, long)]
     pub preview: bool,
 
-    /// Skip sending ANSI escape sequences to update terminal colors
-    #[arg(long)]
-    pub skip_sequences: bool,
-
     /// Logging level: quiet, normal, verbose
     #[arg(long, value_enum, default_value = "normal")]
     pub log_level: tinct::LogLevel,
 }
 
-impl CliArgs {
-    /// Validate that either --theme, --seed, or --image is provided
-    pub fn validate(&self) -> Result<(), String> {
-        let has_theme = self.theme.is_some();
-        let has_seed = self.seed.is_some();
-        let has_image = self.image.is_some();
-
-        let count = [has_theme, has_seed, has_image]
-            .iter()
-            .filter(|&&x| x)
-            .count();
-
-        if count == 0 {
-            return Err("Either --theme, --seed, or --image must be provided".to_string());
-        }
-        if count > 1 {
-            return Err(
-                "--theme, --seed, and --image are mutually exclusive, use only one".to_string(),
-            );
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tinct::SchemeType;
 
     #[test]
-    fn test_cli_args_derive() {
-        let args = CliArgs {
-            config: Some("custom.toml".to_string()),
-            theme: Some("mytheme".to_string()),
-            seed: None,
-            image: None,
-            scheme_type: Some(SchemeType::TonalSpot),
-            mode: tinct::Mode::Light,
-            preview: true,
-            skip_sequences: false,
-            log_level: tinct::LogLevel::Verbose,
-        };
-        assert_eq!(args.theme, Some("mytheme".to_string()));
-        assert_eq!(args.mode, tinct::Mode::Light);
-        assert!(args.preview);
-    }
+    fn test_arg_group_requires_exactly_one_source() {
+        // No source at all → error.
+        assert!(CliArgs::try_parse_from(["tinct"]).is_err());
 
-    #[test]
-    fn test_log_level_variants() {
-        let _ = tinct::LogLevel::Quiet;
-        let _ = tinct::LogLevel::Normal;
-        let _ = tinct::LogLevel::Verbose;
+        // Two sources → error (mutually exclusive).
+        assert!(CliArgs::try_parse_from(["tinct", "--seed", "#fff", "--theme", "x"]).is_err());
+
+        // Exactly one → ok.
+        assert!(CliArgs::try_parse_from(["tinct", "--seed", "#fff"]).is_ok());
+        assert!(CliArgs::try_parse_from(["tinct", "-t", "mytheme"]).is_ok());
+        assert!(CliArgs::try_parse_from(["tinct", "--image", "wall.png"]).is_ok());
     }
 }

@@ -1,3 +1,10 @@
+//! Color model.
+//!
+//! A lean RGB + alpha value ([`Color`]) with on-demand format conversions,
+//! plus the built-in [`ColorFilter`] transformations used by templates.
+
+use crate::core::Error;
+
 /// RGB components as (r, g, b)
 pub type Rgb = (u8, u8, u8);
 
@@ -116,12 +123,20 @@ impl Color {
 
     /// Hex string e.g. "#FF5722"
     pub fn hex(&self) -> String {
-        rgb_to_hex(self.r as f64, self.g as f64, self.b as f64)
+        format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
     }
 
     /// 8-digit hex with alpha e.g. "#FF572280"
+    ///
+    /// Alpha is clamped to `0.0..=1.0` first; a NaN alpha is serialised as `00`
+    /// rather than being allowed to wrap through the float-to-int cast.
     pub fn hex8(&self) -> String {
-        let a = (self.alpha * 255.0).round() as u8;
+        let alpha = if self.alpha.is_nan() {
+            0.0
+        } else {
+            self.alpha.clamp(0.0, 1.0)
+        };
+        let a = (alpha * 255.0).round() as u8;
         format!("#{:02X}{:02X}{:02X}{:02X}", self.r, self.g, self.b, a)
     }
 
@@ -152,8 +167,8 @@ impl Color {
     pub fn hsl_str(&self) -> String {
         let (h, s, l) = self.hsl();
         let h_i = h.round() as u32 % 360;
-        let s_i = (s * 100.0).round().clamp(0.0, 100.0) as u32;
-        let l_i = (l * 100.0).round().clamp(0.0, 100.0) as u32;
+        let s_i = s.round().clamp(0.0, 100.0) as u32;
+        let l_i = l.round().clamp(0.0, 100.0) as u32;
         format!("hsl({}, {}%, {}%)", h_i, s_i, l_i)
     }
 
@@ -161,12 +176,12 @@ impl Color {
     pub fn hsla_str(&self) -> String {
         let (h, s, l) = self.hsl();
         let h_i = h.round() as u32 % 360;
-        let s_i = (s * 100.0).round().clamp(0.0, 100.0) as u32;
-        let l_i = (l * 100.0).round().clamp(0.0, 100.0) as u32;
+        let s_i = s.round().clamp(0.0, 100.0) as u32;
+        let l_i = l.round().clamp(0.0, 100.0) as u32;
         format!("hsla({}, {}%, {}%, {:.1})", h_i, s_i, l_i, self.alpha)
     }
 
-    /// HSL tuple (h: 0–360, s: 0–1, l: 0–1)
+    /// HSL tuple (h: 0–360, s: 0–100, l: 0–100)
     pub fn hsl(&self) -> Hsl {
         rgb_to_hsl(self.r as f64, self.g as f64, self.b as f64)
     }
@@ -176,63 +191,73 @@ impl Color {
         self.hsl().0
     }
 
-    /// Saturation 0–1
+    /// Saturation 0–100
     pub fn saturation(&self) -> f64 {
         self.hsl().1
     }
 
-    /// Lightness 0–1
+    /// Lightness 0–100
     pub fn lightness(&self) -> f64 {
         self.hsl().2
     }
 
-    /// Create from hex string (#RRGGBB or #RRGGBBAA)
-    pub fn from_hex(hex: &str) -> Result<Self, String> {
+    /// Create from a hex string (`#RRGGBB` or `#RRGGBBAA`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Color`] when the input is not ASCII or is not a
+    /// 6- or 8-digit hex color.
+    pub fn from_hex(hex: &str) -> crate::core::Result<Self> {
         let hex_stripped = hex.trim_start_matches('#');
+        if !hex_stripped.is_ascii() {
+            return Err(Error::Color(format!("invalid hex color: {hex}")));
+        }
         if hex_stripped.len() == 8 {
             let r = u8::from_str_radix(&hex_stripped[0..2], 16)
-                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+                .map_err(|_| Error::Color(format!("invalid hex color format: {hex_stripped}")))?;
             let g = u8::from_str_radix(&hex_stripped[2..4], 16)
-                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+                .map_err(|_| Error::Color(format!("invalid hex color format: {hex_stripped}")))?;
             let b = u8::from_str_radix(&hex_stripped[4..6], 16)
-                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+                .map_err(|_| Error::Color(format!("invalid hex color format: {hex_stripped}")))?;
             let a = u8::from_str_radix(&hex_stripped[6..8], 16)
-                .map_err(|_| format!("Invalid hex color format: {}", hex_stripped))?;
+                .map_err(|_| Error::Color(format!("invalid hex color format: {hex_stripped}")))?;
             Ok(Self::new(r, g, b, a as f64 / 255.0))
         } else if hex_stripped.len() == 6 {
             let (r, g, b) = hex_to_rgb(hex)?;
             Ok(Self::new(r, g, b, 1.0))
         } else {
-            Err(format!("Invalid hex color format: {}", hex))
+            Err(Error::Color(format!("invalid hex color format: {hex}")))
         }
     }
 
-    /// Apply a color filter (lighten/darken/saturate/desaturate) and return new Color
+    /// Apply a color filter (lighten/darken/saturate/desaturate) and return new Color.
+    ///
+    /// Filtering happens in the perceptually uniform HCT space (the same space
+    /// Material Design 3 uses): `lighten`/`darken` shift tone, `saturate`/
+    /// `desaturate` shift chroma. This keeps results visually even, unlike HSL
+    /// where equal lightness steps are perceptually uneven.
     pub fn apply_filter(&self, filter: &ColorFilter) -> Self {
-        let (h, s, l) = self.hsl();
-        match filter {
-            ColorFilter::Lighten(amount) => {
-                let new_l = (l + amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, s, new_l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::Darken(amount) => {
-                let new_l = (l - amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, s, new_l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::Saturate(amount) => {
-                let new_s = (s + amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::Desaturate(amount) => {
-                let new_s = (s - amount).clamp(0.0, 100.0);
-                let (nr, ng, nb) = hsl_to_rgb(h, new_s, l);
-                Self::new(nr, ng, nb, self.alpha)
-            }
-            ColorFilter::SetAlpha(a) => Self::new(self.r, self.g, self.b, a.clamp(0.0, 1.0)),
+        if let ColorFilter::SetAlpha(a) = filter {
+            return Self::new(self.r, self.g, self.b, a.clamp(0.0, 1.0));
         }
+
+        let argb = material_colors::color::Argb::from_u32(
+            0xFF000000 | ((self.r as u32) << 16) | ((self.g as u32) << 8) | (self.b as u32),
+        );
+        let hct = material_colors::hct::Hct::new(argb);
+        let (hue, chroma, tone) = (hct.get_hue(), hct.get_chroma(), hct.get_tone());
+
+        let (hue, chroma, tone) = match filter {
+            ColorFilter::Lighten(amount) => (hue, chroma, (tone + amount).clamp(0.0, 100.0)),
+            ColorFilter::Darken(amount) => (hue, chroma, (tone - amount).clamp(0.0, 100.0)),
+            ColorFilter::Saturate(amount) => (hue, (chroma + amount).clamp(0.0, 120.0), tone),
+            ColorFilter::Desaturate(amount) => (hue, (chroma - amount).clamp(0.0, 120.0), tone),
+            ColorFilter::SetAlpha(_) => unreachable!("handled above"),
+        };
+
+        let filtered: material_colors::color::Argb =
+            material_colors::hct::Hct::from(hue, chroma, tone).into();
+        Self::new(filtered.red, filtered.green, filtered.blue, self.alpha)
     }
 
     /// Format this color according to a ColorProperty
@@ -284,39 +309,37 @@ pub fn estimate_hct(r: u8, g: u8, b: u8) -> (f64, f64) {
     (hct.get_hue(), hct.get_chroma())
 }
 
-/// Clamp value between min and max
-pub fn clamp<T: PartialOrd + Copy>(n: T, minn: T, maxn: T) -> T {
-    if n < minn {
-        minn
-    } else if n > maxn {
-        maxn
-    } else {
-        n
-    }
-}
-
 /// Convert RGB to hex string
 pub fn rgb_to_hex(r: f64, g: f64, b: f64) -> String {
-    let r_byte = (clamp(r, 0.0, 255.0)).round() as u8;
-    let g_byte = (clamp(g, 0.0, 255.0)).round() as u8;
-    let b_byte = (clamp(b, 0.0, 255.0)).round() as u8;
+    let r_byte = (r.clamp(0.0, 255.0)).round() as u8;
+    let g_byte = (g.clamp(0.0, 255.0)).round() as u8;
+    let b_byte = (b.clamp(0.0, 255.0)).round() as u8;
     format!("#{:02X}{:02X}{:02X}", r_byte, g_byte, b_byte)
 }
 
 /// Convert hex string to RGB tuple
-pub fn hex_to_rgb(hex: &str) -> Result<Rgb, String> {
+///
+/// # Errors
+///
+/// Returns [`Error::Color`] when the input is not ASCII or is not a
+/// 6-digit hex color.
+pub fn hex_to_rgb(hex: &str) -> crate::core::Result<Rgb> {
     let hex_stripped = hex.trim_start_matches('#');
 
     if hex_stripped.len() != 6 {
-        return Err("Invalid hex color format".to_string());
+        return Err(Error::Color("invalid hex color format".to_string()));
+    }
+
+    if !hex_stripped.is_ascii() {
+        return Err(Error::Color(format!("invalid hex color: {hex}")));
     }
 
     let r = u8::from_str_radix(&hex_stripped[0..2], 16)
-        .map_err(|_| format!("Invalid hex color: {}", hex))?;
+        .map_err(|_| Error::Color(format!("invalid hex color: {hex}")))?;
     let g = u8::from_str_radix(&hex_stripped[2..4], 16)
-        .map_err(|_| format!("Invalid hex color: {}", hex))?;
+        .map_err(|_| Error::Color(format!("invalid hex color: {hex}")))?;
     let b = u8::from_str_radix(&hex_stripped[4..6], 16)
-        .map_err(|_| format!("Invalid hex color: {}", hex))?;
+        .map_err(|_| Error::Color(format!("invalid hex color: {hex}")))?;
 
     Ok((r, g, b))
 }
@@ -333,7 +356,7 @@ pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     let h = if max == min {
         0.0
     } else if max == r {
-        60.0 * (((g - b) / (max - min)) % 6.0)
+        60.0 * (((g - b) / (max - min)).rem_euclid(6.0))
     } else if max == g {
         60.0 * (((b - r) / (max - min)) + 2.0)
     } else {
@@ -351,9 +374,9 @@ pub fn rgb_to_hsl(r: f64, g: f64, b: f64) -> Hsl {
     };
 
     (
-        clamp(h, 0.0, 360.0),
-        clamp(s * 100.0, 0.0, 100.0),
-        clamp(l * 100.0, 0.0, 100.0),
+        h.clamp(0.0, 360.0),
+        (s * 100.0).clamp(0.0, 100.0),
+        (l * 100.0).clamp(0.0, 100.0),
     )
 }
 
@@ -388,7 +411,11 @@ pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> Rgb {
 }
 
 /// Determine if a color is light or dark based on relative luminance
-pub fn is_light_color(hex: &str) -> Result<bool, String> {
+///
+/// # Errors
+///
+/// Returns [`Error::Color`] when `hex` is not a valid color.
+pub fn is_light_color(hex: &str) -> crate::core::Result<bool> {
     let (r, g, b) = hex_to_rgb(hex)?;
     let luminance = calculate_relative_luminance(r, g, b);
     Ok(luminance > 0.1791)
@@ -420,7 +447,11 @@ pub fn calculate_relative_luminance(r: u8, g: u8, b: u8) -> f64 {
 }
 
 /// Calculate contrast ratio between two colors
-pub fn calculate_contrast_ratio(color1: &str, color2: &str) -> Result<f64, String> {
+///
+/// # Errors
+///
+/// Returns [`Error::Color`] when either input is not a valid color.
+pub fn calculate_contrast_ratio(color1: &str, color2: &str) -> crate::core::Result<f64> {
     let (r1, g1, b1) = hex_to_rgb(color1)?;
     let (r2, g2, b2) = hex_to_rgb(color2)?;
 
@@ -435,33 +466,45 @@ pub fn calculate_contrast_ratio(color1: &str, color2: &str) -> Result<f64, Strin
 
 /// Check if two colors meet WCAG contrast requirements
 /// Returns true if contrast ratio meets or exceeds the threshold
+///
+/// # Errors
+///
+/// Returns [`Error::Color`] when either input is not a valid color.
 pub fn meets_contrast_requirement(
     color1: &str,
     color2: &str,
     threshold: f64,
-) -> Result<bool, String> {
+) -> crate::core::Result<bool> {
     let ratio = calculate_contrast_ratio(color1, color2)?;
     Ok(ratio >= threshold)
 }
 
 /// Get contrast rating based on WCAG guidelines
 /// Returns: "AAA" (>=7.0), "AA" (>=4.5), "AA Large" (>=3.0), or "Fail"
-pub fn get_contrast_rating(color1: &str, color2: &str) -> Result<String, String> {
+///
+/// # Errors
+///
+/// Returns [`Error::Color`] when either input is not a valid color.
+pub fn get_contrast_rating(color1: &str, color2: &str) -> crate::core::Result<&'static str> {
     let ratio = calculate_contrast_ratio(color1, color2)?;
 
     if ratio >= 7.0 {
-        Ok("AAA".to_string())
+        Ok("AAA")
     } else if ratio >= 4.5 {
-        Ok("AA".to_string())
+        Ok("AA")
     } else if ratio >= 3.0 {
-        Ok("AA Large".to_string())
+        Ok("AA Large")
     } else {
-        Ok("Fail".to_string())
+        Ok("Fail")
     }
 }
 
 /// Generate appropriate text color for a given background
-pub fn generate_on_color(base: &str) -> Result<String, String> {
+///
+/// # Errors
+///
+/// Returns [`Error::Color`] when `base` is not a valid color.
+pub fn generate_on_color(base: &str) -> crate::core::Result<String> {
     let light = is_light_color(base)?;
 
     if light {
@@ -477,36 +520,42 @@ pub fn generate_on_color(base: &str) -> Result<String, String> {
     }
 }
 
+impl std::str::FromStr for Color {
+    type Err = Error;
+
+    /// Parse a color from a hex string, delegating to [`Color::from_hex`].
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Color::from_hex(s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_hex_to_rgb() {
-        let (r, g, b) = hex_to_rgb("#ffffff").unwrap();
-        assert_eq!(r, 255);
-        assert_eq!(g, 255);
-        assert_eq!(b, 255);
+    fn test_hex_to_rgb_and_back() {
+        assert_eq!(hex_to_rgb("#ffffff").unwrap(), (255, 255, 255));
+        assert_eq!(hex_to_rgb("#000000").unwrap(), (0, 0, 0));
 
-        let (r, g, b) = hex_to_rgb("#000000").unwrap();
-        assert_eq!(r, 0);
-        assert_eq!(g, 0);
-        assert_eq!(b, 0);
-    }
-
-    #[test]
-    fn test_rgb_to_hex() {
-        let hex = rgb_to_hex(255.0, 255.0, 255.0);
-        assert_eq!(hex, "#FFFFFF");
-
-        let hex = rgb_to_hex(0.0, 0.0, 0.0);
-        assert_eq!(hex, "#000000");
+        assert_eq!(rgb_to_hex(255.0, 255.0, 255.0), "#FFFFFF");
+        assert_eq!(rgb_to_hex(0.0, 0.0, 0.0), "#000000");
     }
 
     #[test]
     fn test_rgb_to_hsl() {
         let (h, s, l) = rgb_to_hsl(255.0, 0.0, 0.0);
         assert!((h - 0.0).abs() < 0.1);
+        assert!((s - 100.0).abs() < 0.1);
+        assert!((l - 50.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_rgb_to_hsl_magenta_has_positive_hue() {
+        // Regression: the red sector used `% 6.0`, so when max == r and g < b
+        // the hue went negative and was clamped to 0. Magenta must report 300.
+        let (h, s, l) = rgb_to_hsl(255.0, 0.0, 255.0);
+        assert!((h - 300.0).abs() < 0.1, "magenta hue was {h}");
         assert!((s - 100.0).abs() < 0.1);
         assert!((l - 50.0).abs() < 0.1);
     }
@@ -577,15 +626,14 @@ mod tests {
     }
 
     #[test]
-    fn test_estimate_chroma() {
-        let chroma = estimate_chroma(255, 0, 0);
-        assert!(chroma > 0.0);
-    }
-
-    #[test]
-    fn test_estimate_hue() {
+    fn test_estimate_hue_and_chroma() {
+        // Pure red: both estimates agree it is a vivid, roughly hue-0 colour.
         let hue = estimate_hue(255, 0, 0);
         assert!((0.0..=360.0).contains(&hue));
+        assert!(
+            estimate_chroma(255, 0, 0) > 45.0,
+            "pure red must register as strongly chromatic"
+        );
     }
 
     #[test]
@@ -602,6 +650,15 @@ mod tests {
     }
 
     #[test]
+    fn test_from_hex_rejects_non_ascii_without_panicking() {
+        // `é` is two UTF-8 bytes, so these strings are 6 and 8 bytes long and
+        // used to slip past the length check and panic while byte-slicing.
+        assert!(Color::from_hex("ééé").is_err());
+        assert!(Color::from_hex("#éééé").is_err());
+        assert!(hex_to_rgb("ééé").is_err());
+    }
+
+    #[test]
     fn test_color_formats() {
         let c = Color::new(255, 87, 34, 1.0);
         assert_eq!(c.hex(), "#FF5722");
@@ -613,18 +670,40 @@ mod tests {
     }
 
     #[test]
-    fn test_color_lighten() {
-        use crate::color::ColorFilter;
-        let c = Color::new(200, 200, 200, 1.0);
-        let lit = c.apply_filter(&ColorFilter::Lighten(15.0));
-        assert!(lit.lightness() > c.lightness());
+    fn test_hsl_str_uses_css_units() {
+        // Regression: saturation/lightness must be 0–100 in the output, not 0–10000.
+        let c = Color::new(255, 87, 34, 1.0);
+        assert_eq!(c.hsl_str(), "hsl(14, 100%, 57%)");
+        assert_eq!(c.hsla_str(), "hsla(14, 100%, 57%, 1.0)");
     }
 
     #[test]
-    fn test_color_darken() {
-        use crate::color::ColorFilter;
-        let c = Color::new(50, 50, 50, 1.0);
-        let d = c.apply_filter(&ColorFilter::Darken(15.0));
-        assert!(d.lightness() < c.lightness());
+    fn test_filter_lighten_shifts_tone_not_hue() {
+        let c = Color::new(103, 80, 164, 1.0);
+        let lighter = c.apply_filter(&ColorFilter::Lighten(10.0));
+        assert!(
+            calculate_relative_luminance(lighter.r, lighter.g, lighter.b)
+                > calculate_relative_luminance(c.r, c.g, c.b)
+        );
+        assert!(
+            (estimate_hue(c.r, c.g, c.b) - estimate_hue(lighter.r, lighter.g, lighter.b)).abs()
+                < 5.0
+        );
+    }
+
+    #[test]
+    fn test_filter_desaturate_reduces_chroma() {
+        let c = Color::new(103, 80, 164, 1.0);
+        let muted = c.apply_filter(&ColorFilter::Desaturate(30.0));
+        assert!(estimate_chroma(muted.r, muted.g, muted.b) < estimate_chroma(c.r, c.g, c.b));
+    }
+
+    #[test]
+    fn test_color_lighten_and_darken() {
+        let light = Color::new(200, 200, 200, 1.0);
+        assert!(light.apply_filter(&ColorFilter::Lighten(15.0)).lightness() > light.lightness());
+
+        let dark = Color::new(50, 50, 50, 1.0);
+        assert!(dark.apply_filter(&ColorFilter::Darken(15.0)).lightness() < dark.lightness());
     }
 }
